@@ -123,6 +123,7 @@ MiMo issues two key formats that pair with different host families. They are **n
 For Token Plan, the user's assigned cluster is shown on their Subscription page (`platform.xiaomimimo.com/#/console/plan-manage`) — the platform pins each plan to one cluster. Don't guess; ask the user, or read `manifest.llm.base_url` from the preset.
 
 ```bash
+# Note: bare URL is informational; real endpoint is /v1/chat/completions
 # Inspect the key prefix
 case "$MIMO_API_KEY" in
   sk-*) export MIMO_BASE_URL="https://api.xiaomimimo.com" ;;

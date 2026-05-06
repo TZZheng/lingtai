@@ -80,6 +80,7 @@ Token-plan keys have prefix `sk-cp-…`. Pay-as-you-go keys (`sk-…` without `c
 MiniMax runs two non-interchangeable ecosystems. The CLI defaults to **international** (`api.minimax.io`); for a mainland China key, override:
 
 ```bash
+# TODO: verify endpoint — api.minimaxi.com 404s, no clearly-correct API host found yet (2026-05-05)
 export MINIMAX_BASE_URL=https://api.minimaxi.com   # mainland
 # (leave unset for international — that's the default)
 ```
