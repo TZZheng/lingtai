@@ -46,6 +46,7 @@ description: >
     - Citations into the `lingtai-kernel` repo are NOT used — that is a
       separate tree with its own anatomy. Cross-repo references are
       narrative only ("the kernel writes this file; we read it").
+version: 0.1.0
 ---
 
 # LingTai (Go) Anatomy — the Convention

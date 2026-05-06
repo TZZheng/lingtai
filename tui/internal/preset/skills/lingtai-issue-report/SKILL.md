@@ -77,10 +77,10 @@ verbatim error messages, status codes, or contradictory text.>
 
 Send via:
 ```
-mail(action="send", address=<parent_or_human_address>, subject="[Issue Report] ...", message=<body>)
+imap(action="send", address=<parent_or_human_address>, subject="[Issue Report] ...", message=<body>)
 ```
 
-If you have multiple addressees (parent + human), send the same content twice — `mail` doesn't multicast.
+If you have multiple addressees (parent + human), send the same content twice — `imap` doesn't multicast.
 
 ## Filing Path — Detect `gh` First
 
