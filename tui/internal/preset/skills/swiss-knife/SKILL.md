@@ -1,12 +1,14 @@
 ---
 name: swiss-knife
 description: >
-  Umbrella skill that bundles small, useful utility skills. Each sub-skill is
-  self-contained with its own scripts and assets. The umbrella introduces each
-  sub-skill with a one-liner — read the sub-skill's SKILL.md for full details.
-  Start here when the human asks about any utility; this file routes you to the
-  right sub-skill.
-version: 1.0.0
+  Umbrella skill for small, focused CLI tools and integrations. Sub-skills:
+  (1) claude-code — multi-turn Claude Code CLI with persistent sessions via
+  --session-id/--resume. Supports parallel sessions, model switching
+  (haiku/sonnet/opus), budget control, and tool permission management.
+  Use for delegating coding tasks, code review, iterative development;
+  (2) token-usage — token usage tracking and cost reporting.
+  Each sub-skill is independent — read only the one you need.
+version: 1.3.0
 tags: [utilities, umbrella, toolkit]
 ---
 
