@@ -702,7 +702,7 @@ func libraryDefault() map[string]interface{} {
 }
 
 func minimaxPreset() Preset {
-	mm := map[string]interface{}{"provider": "minimax", "api_key_env": "MINIMAX_API_KEY"}
+	mm := map[string]interface{}{"provider": "minimax"}
 	return Preset{
 		Name:        "minimax",
 		Description: PresetDescription{Summary: "MiniMax M2.7 — full multimodal capabilities"},
@@ -723,7 +723,7 @@ func minimaxPreset() Preset {
 }
 
 func zhipuPreset() Preset {
-	zp := map[string]interface{}{"provider": "zhipu", "api_key_env": "ZHIPU_API_KEY"}
+	zp := map[string]interface{}{"provider": "zhipu"}
 	return Preset{
 		Name:        "zhipu",
 		Description: PresetDescription{Summary: "Zhipu GLM Coding Plan — OpenAI-compatible"},
@@ -752,9 +752,8 @@ func mimoPreset() Preset {
 	// v2-flash), only v2.5 supports vision; pro/flash will 400 on image input.
 	// Vision uses the first-class MiMoVisionService (kernel: services/vision/mimo.py).
 	mp := map[string]interface{}{
-		"provider":    "mimo",
-		"api_key_env": "XIAOMI_API_KEY",
-		"model":       "mimo-v2.5",
+		"provider": "mimo",
+		"model":    "mimo-v2.5",
 	}
 	return Preset{
 		Name:        "mimo",
@@ -1268,9 +1267,7 @@ func SyncCapabilityAPIKeyEnv(manifest map[string]interface{}) {
 		if capProvider != llmProvider {
 			continue
 		}
-		if capKeyEnv, _ := capMap["api_key_env"].(string); capKeyEnv != "" && capKeyEnv != llmKeyEnv {
-			capMap["api_key_env"] = llmKeyEnv
-		}
+		capMap["api_key_env"] = llmKeyEnv
 	}
 }
 
