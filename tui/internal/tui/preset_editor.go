@@ -1182,7 +1182,7 @@ func (m PresetEditorModel) renderForm(width, height int) string {
 	rows = append(rows, "")
 	// Mandatory capabilities — always included, not toggleable.
 	rows = append(rows, m.sectionHeader(i18n.T("preset_editor.section_mandatory")))
-	mandatoryCaps := []string{"email", "psyche", "codex", "library"}
+	mandatoryCaps := []string{"email", "psyche", "soul", "system", "codex", "library"}
 	for _, capName := range mandatoryCaps {
 		rows = append(rows, m.mandatoryCapRow(capName, width-4))
 	}
