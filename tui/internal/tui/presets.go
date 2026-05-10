@@ -7,10 +7,11 @@ type UsePresetMsg struct {
 
 // AllCapabilities is the list of all available capability names.
 // email and psyche are kernel intrinsics (always loaded), not capabilities.
+// codex and library are mandatory — always injected at save time, not shown as toggleable.
 var AllCapabilities = []string{
-	"file", "bash", "web_search", "codex",
+	"file", "bash", "web_search",
 	"vision",
-	"avatar", "daemon", "library",
+	"avatar", "daemon",
 }
 
 // AllAddons is the list of available addon names.

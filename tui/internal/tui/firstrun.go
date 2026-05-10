@@ -3335,6 +3335,15 @@ func (m *FirstRunModel) applyCapSelections() {
 			delete(caps, name)
 		}
 	}
+	// Codex and library are mandatory — always present regardless of user toggles.
+	if _, exists := caps["codex"]; !exists {
+		caps["codex"] = map[string]interface{}{}
+	}
+	if _, exists := caps["library"]; !exists {
+		caps["library"] = map[string]interface{}{
+			"paths": []interface{}{"../.library_shared", "~/.lingtai-tui/utilities"},
+		}
+	}
 }
 
 // enterAgentNameDir initialises all fields and transitions to stepAgentNameDir.
