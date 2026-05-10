@@ -47,7 +47,7 @@ Tell the human upfront: "If you would like to jump to any lesson, just let me kn
   - Signal files (.sleep, .suspend, .interrupt, .prompt)
 - Invite the human to try **/kanban** to see the dashboard.
 
-## Lesson 4: How Agents Are Born — init.json and `lingtai run`
+## Lesson 4: How Agents Are Born — init.json and `lingtai-agent run`
 
 ### Part 1: init.json
 
@@ -59,7 +59,7 @@ Key patterns to explain:
 - `addons` connects to external messaging services.
 - `env_file` for secrets.
 
-### Part 2: `lingtai run`
+### Part 2: `lingtai-agent run`
 
 Explain the boot sequence: read init.json → load env → resolve venv → build Agent → clean stale signals → install signal handlers → start in ASLEEP state → `agent.start()` blocks on shutdown.
 
@@ -75,7 +75,7 @@ Explain: **lingtai-tui is a Go frontend, not the agent.** It creates agents (wri
 
 Draw the architecture diagram (TUI ↔ filesystem ↔ agent process).
 
-Explain: **you do not need the TUI to run an agent.** A valid init.json + `lingtai run` is sufficient.
+Explain: **you do not need the TUI to run an agent.** A valid init.json + `lingtai-agent run` is sufficient.
 
 Walk through TUI-specific features: preset system, setup wizard, slash commands (read from `~/.lingtai-tui/commands.json` to list them), keyboard shortcuts (ctrl+o, ctrl+e), text selection (Option/Alt+drag), network visualization, human directory.
 

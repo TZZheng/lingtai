@@ -159,19 +159,19 @@ func ensureVenv(globalDir string, quiet bool, progress ProgressFunc) error {
 		return fmt.Errorf("lingtai installed but import failed — check for missing dependencies: %w", err)
 	}
 
-	// Step 4: symlink lingtai CLI into ~/.local/bin so it's on PATH
+	// Step 4: symlink lingtai-agent CLI into ~/.local/bin so it's on PATH
 	linkLingtaiCLI(venvPath)
 
 	return nil
 }
 
-// linkLingtaiCLI creates a symlink to the venv's lingtai entry point
+// linkLingtaiCLI creates a symlink to the venv's lingtai-agent entry point
 // in a directory that's already on PATH. Tries brew prefix first (macOS),
 // falls back to ~/.local/bin. Silently does nothing on error (best-effort).
 func linkLingtaiCLI(venvPath string) {
-	src := filepath.Join(venvPath, "bin", "lingtai")
+	src := filepath.Join(venvPath, "bin", "lingtai-agent")
 	if runtime.GOOS == "windows" {
-		src = filepath.Join(venvPath, "Scripts", "lingtai.exe")
+		src = filepath.Join(venvPath, "Scripts", "lingtai-agent.exe")
 	}
 	if _, err := os.Stat(src); err != nil {
 		return
@@ -182,7 +182,7 @@ func linkLingtaiCLI(venvPath string) {
 		return
 	}
 
-	dst := filepath.Join(binDir, "lingtai")
+	dst := filepath.Join(binDir, "lingtai-agent")
 	if runtime.GOOS == "windows" {
 		dst += ".exe"
 	}

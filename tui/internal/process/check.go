@@ -7,7 +7,8 @@ import (
 )
 
 // IsAgentRunning returns true if any `python -m lingtai run <agentDir>`
-// process exists on this machine. Independent of `.agent.heartbeat`: even
+// (or `lingtai-agent run <agentDir>`) process exists on this machine.
+// Independent of `.agent.heartbeat`: even
 // when the heartbeat file is missing or stale (a previous agent mid-teardown,
 // a crashed process, an old kernel version that unlinked the file early),
 // the lingering Python interpreter is still visible in `ps` and we can

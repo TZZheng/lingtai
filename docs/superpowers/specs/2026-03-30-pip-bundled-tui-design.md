@@ -203,7 +203,7 @@ Called from `main.go` startup, after `NeedsVenv` check, before launching agents.
 - `lingtai-kernel` remains a separate PyPI package
 - All runtime behavior (venv isolation, agent processes, filesystem protocol)
 - The TUI's own behavior, commands, and views
-- `lingtai run` Python CLI
+- `lingtai-agent run` Python CLI
 - The TUI Go source code in `tui/`
 - PyPI distribution of the Python `lingtai` package (pure Python, no binary)
 

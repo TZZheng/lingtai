@@ -79,7 +79,7 @@ The override needs to happen **before** `GenerateInitJSONWithOpts` is called —
 - Secretary recipe content (greet.md, covenant.md, skills)
 - Secretary agent lifecycle
 - `/secretary` TUI command
-- `lingtai run --recipe` kernel command
+- `lingtai-agent run --recipe` kernel command
 - Profile.md / journal.md consumption
 
 ## Verification

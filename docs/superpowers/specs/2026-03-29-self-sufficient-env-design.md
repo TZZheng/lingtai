@@ -9,7 +9,7 @@ Agents depend on the TUI injecting API keys via environment variables at process
 
 This breaks when the agent is not launched by the TUI:
 - **Self-refresh**: the deferred relaunch subprocess has no TUI to inject keys
-- **Terminal launch**: `lingtai run <dir>` from a shell has no keys
+- **Terminal launch**: `lingtai-agent run <dir>` from a shell has no keys
 - **Avatars**: spawned agents may lack keys if parent doesn't propagate env
 
 The agent is not self-sufficient. It cannot restart itself.
@@ -70,7 +70,7 @@ This catches misconfigured agents at boot, not at first LLM call.
 
 ## What This Achieves
 
-- Agent is fully self-sufficient: `lingtai run <dir>` works from anywhere
+- Agent is fully self-sufficient: `lingtai-agent run <dir>` works from anywhere
 - Refresh works: deferred relaunch needs no env inheritance
 - Avatars work: they inherit `env_file` from parent init.json
 - Validation catches misconfigured agents before they crash

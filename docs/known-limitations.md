@@ -36,7 +36,7 @@ If you already deleted directories without suspending:
 
 ```bash
 # Find orphaned lingtai processes
-ps aux | grep "lingtai run"
+ps aux | grep "lingtai-agent run"
 
 # Kill them
 kill <pid>

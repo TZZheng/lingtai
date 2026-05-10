@@ -62,7 +62,7 @@ See `RELEASING.md` for the full process. Key points:
 
 Go + Bubble Tea terminal interface. Key facts:
 
-- Binary name: `lingtai-tui` (never `lingtai` — that is the Python agent CLI)
+- Binary name: `lingtai-tui` (never `lingtai-agent` — that is the Python agent CLI)
 - Launches agents via `python -m lingtai run <dir>` subprocess
 - Communicates with running agents via filesystem only: reads `.lingtai/` metadata, heartbeat files, and signal files inside each agent working directory
 - Agent discovery uses `lingtai_kernel.handshake` conventions (`is_agent`, `is_alive` checks on working directories)
@@ -179,7 +179,7 @@ Adding a new i18n key means updating **all three** of `tui/i18n/en.json`, `tui/i
 
 ### TUI binary
 
-The TUI binary is `lingtai-tui`, **never** `lingtai`. `lingtai` is the Python agent CLI (installed by the kernel into the TUI's runtime venv at `~/.lingtai-tui/runtime/venv/bin/lingtai`). Build the TUI to `tui/bin/lingtai-tui`; never to `tui/bin/lingtai`.
+The TUI binary is `lingtai-tui`, **never** `lingtai-agent`. `lingtai-agent` is the Python agent CLI (installed by the kernel into the TUI's runtime venv at `~/.lingtai-tui/runtime/venv/bin/lingtai-agent`). Build the TUI to `tui/bin/lingtai-tui`; never to `tui/bin/lingtai-agent`.
 
 ### Agent venv
 
