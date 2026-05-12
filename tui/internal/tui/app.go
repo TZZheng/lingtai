@@ -813,21 +813,49 @@ func (a *App) hardRefresh() error {
 	return hardRefreshDir(a.lingtaiCmd, a.orchDir)
 }
 
-// hardRefreshDir suspends the agent in the given directory and relaunches it.
-// Returns the error from process.LaunchAgent if the relaunch fails. The
-// suspend/wait/unsuspend dance always runs to completion regardless of the
-// final launch outcome — only the launch error itself is propagated.
+// hardRefreshDir force-restarts the agent in the given directory. It is the
+// escape hatch behind `/refresh`: rather than refusing when an interpreter is
+// still alive, it escalates through suspend → lock-clear poll → SIGTERM/SIGKILL
+// → stale-state cleanup → ForceLaunchAgent. Returns the launch error if the
+// final relaunch fails; the kill/cleanup steps are best-effort and swallowed.
 //
-// /refresh also rewrites manifest.preset.active back to manifest.preset.default
-// so the agent comes back up on its declared default preset rather than
-// whatever it had swapped to at runtime. This is the documented escape hatch
-// when the active preset is misbehaving (rate-limited, broken adapter, etc.).
+// Sequence:
+//  1. Touch `.suspend` so a cooperative agent exits cleanly.
+//  2. Wait for `.agent.lock` to free (up to 60s, then forced).
+//  3. If `ps` still shows `lingtai run <dir>`, SIGTERM (then SIGKILL) those
+//     PIDs — this is what makes /refresh actually forceful rather than a
+//     polite request.
+//  4. Sweep stale handshake files (.agent.lock, .refresh, .refresh.taken,
+//     .suspend) so the fresh interpreter doesn't immediately re-suspend or
+//     stall on a leftover lock.
+//  5. Reset manifest.preset.active to manifest.preset.default — documented
+//     escape hatch when the active preset is misbehaving (rate-limited,
+//     broken adapter, etc.).
+//  6. ForceLaunchAgent (bypassing the duplicate-protection gate; we've
+//     already verified the agent dir is clear above).
 func hardRefreshDir(lingtaiCmd, dir string) error {
 	suspendFile := filepath.Join(dir, ".suspend")
 	os.WriteFile(suspendFile, []byte(""), 0o644)
 	waitForLockClear(dir)
+	// Escalation: if the agent ignored .suspend (deadlocked, slow shutdown,
+	// detached child), kill the lingering interpreter so LaunchAgent's
+	// duplicate-protection gate doesn't refuse the relaunch.
+	if process.IsAgentRunning(dir) {
+		_ = process.TerminateAgentProcesses(dir)
+	}
+	// Clear lingering handshake files. waitForLockClear may have force-removed
+	// .agent.lock; the others (.refresh/.refresh.taken/.suspend) get removed
+	// here so the new interpreter doesn't immediately observe a stale signal.
+	os.Remove(filepath.Join(dir, ".agent.lock"))
+	os.Remove(filepath.Join(dir, ".refresh"))
+	os.Remove(filepath.Join(dir, ".refresh.taken"))
+	os.Remove(suspendFile)
 	resetActivePresetToDefault(dir)
-	_, err := process.LaunchAgent(lingtaiCmd, dir)
+	_, err := process.ForceLaunchAgent(lingtaiCmd, dir)
+	// Defensive: ForceLaunchAgent → launchAgentUnsafe calls fs.CleanSignals
+	// internally, but a fresh .suspend written by another path between our
+	// remove() above and the relaunch would put the new process to sleep.
+	// Removing again here is cheap and idempotent.
 	os.Remove(suspendFile)
 	return err
 }

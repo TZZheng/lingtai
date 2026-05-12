@@ -111,6 +111,20 @@ func LaunchAgent(lingtaiCmd, agentDir string) (*exec.Cmd, error) {
 	if IsAgentRunning(agentDir) {
 		return nil, ErrAgentAlreadyRunning
 	}
+	return launchAgentUnsafe(lingtaiCmd, agentDir)
+}
+
+// ForceLaunchAgent launches an agent without consulting IsAgentRunning. It
+// exists for /refresh, which has already done the work of terminating any
+// lingering interpreter and explicitly wants to bypass duplicate-launch
+// protection. Non-refresh callers must keep using LaunchAgent — the gate in
+// LaunchAgent is the only thing preventing two interpreters from racing on
+// the same agent dir during the suspend→relaunch window.
+func ForceLaunchAgent(lingtaiCmd, agentDir string) (*exec.Cmd, error) {
+	return launchAgentUnsafe(lingtaiCmd, agentDir)
+}
+
+func launchAgentUnsafe(lingtaiCmd, agentDir string) (*exec.Cmd, error) {
 	fs.CleanSignals(agentDir)
 	python := resolvePython(agentDir, lingtaiCmd)
 
