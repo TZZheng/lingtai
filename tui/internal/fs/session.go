@@ -63,7 +63,6 @@ type SessionCache struct {
 	soulFlowOff int64           // byte offset in soul_flow.jsonl (voice index source)
 	projectPath string          // absolute path of the project directory (parent of .lingtai/)
 	lastHour    time.Time       // hour (truncated) of the most recent entry
-	briefBase   string          // base dir for brief output (default: ~/.lingtai-tui)
 	rebuilding  bool            // true during RebuildFromSources — suppress file writes
 
 	// soulVoices indexes voices by fire_id, populated by tailing
@@ -88,11 +87,9 @@ func NewSessionCache(humanDir string, projectPath string) *SessionCache {
 	os.MkdirAll(logsDir, 0o755)
 	path := filepath.Join(logsDir, "session.jsonl")
 
-	home, _ := os.UserHomeDir()
 	sc := &SessionCache{
 		path:        path,
 		projectPath: projectPath,
-		briefBase:   filepath.Join(home, ".lingtai-tui"),
 		soulVoices:  make(map[string][]soulVoiceRecord),
 	}
 	return sc
@@ -134,13 +131,6 @@ func (sc *SessionCache) RebuildFromSources(cache MailCache, humanAddr, orchDir, 
 		sc.soulFlowOff = fileSize(filepath.Join(orchDir, "logs", "soul_flow.jsonl"))
 	}
 
-	// Regenerate history markdown files for the secretary.
-	if sc.projectPath != "" {
-		hash := ProjectHash(sc.projectPath)
-		histDir := briefHistoryDir(sc.briefBase, hash)
-		DumpAllHours(sc.entries, histDir)
-	}
-
 	// Set lastHour from the final entry.
 	if len(sc.entries) > 0 {
 		if t, err := time.Parse(time.RFC3339Nano, sc.entries[len(sc.entries)-1].Ts); err == nil {
@@ -179,23 +169,10 @@ func (sc *SessionCache) append(entries ...SessionEntry) {
 
 	sc.entries = append(sc.entries, entries...)
 
-	// During RebuildFromSources, skip file writes and hour dumps —
+	// During RebuildFromSources, skip file writes —
 	// we'll write the sorted result in one shot at the end.
 	if sc.rebuilding {
 		return
-	}
-
-	// Check for hour boundary crossings.
-	for _, e := range entries {
-		t := ParseSessionTs(e.Ts)
-		if t.IsZero() {
-			continue
-		}
-		entryHour := t.Truncate(time.Hour)
-		if !sc.lastHour.IsZero() && entryHour.After(sc.lastHour) {
-			sc.dumpHours(sc.lastHour, entryHour)
-		}
-		sc.lastHour = entryHour
 	}
 
 	// Append to file.
@@ -208,38 +185,6 @@ func (sc *SessionCache) append(entries ...SessionEntry) {
 	enc.SetEscapeHTML(false)
 	for _, e := range entries {
 		_ = enc.Encode(e)
-	}
-}
-
-// dumpHours dumps all completed hours from fromHour up to (but not including) toHour.
-// Capped at 24 hours to avoid pathological dumps when the TUI resumes after a long gap
-// (e.g., upgrading from a version without the dump feature).
-func (sc *SessionCache) dumpHours(fromHour, toHour time.Time) {
-	if sc.projectPath == "" {
-		return
-	}
-	hash := ProjectHash(sc.projectPath)
-	histDir := briefHistoryDir(sc.briefBase, hash)
-
-	// Cap: only dump the most recent 24 hours to avoid spike on long gaps.
-	earliest := toHour.Add(-24 * time.Hour)
-	if fromHour.Before(earliest) {
-		fromHour = earliest
-	}
-
-	for h := fromHour; h.Before(toHour); h = h.Add(time.Hour) {
-		// Collect entries for this hour.
-		var hourEntries []SessionEntry
-		for _, e := range sc.entries {
-			t, err := time.Parse(time.RFC3339, e.Ts)
-			if err != nil {
-				continue
-			}
-			if t.Truncate(time.Hour).Equal(h) {
-				hourEntries = append(hourEntries, e)
-			}
-		}
-		dumpCompletedHour(hourEntries, h, histDir)
 	}
 }
 

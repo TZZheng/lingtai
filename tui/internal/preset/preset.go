@@ -1210,7 +1210,6 @@ type AgentOpts struct {
 	CovenantFile   string   // path to covenant file
 	PrincipleFile  string   // path to principle file
 	ProceduresFile string   // path to procedures file
-	BriefFile      string   // path to brief file (externally maintained by secretary)
 	SoulFile       string   // path to soul flow file
 	CommentFile    string   // path to comment file (optional)
 	Addons         []string // addon names to auto-populate in init.json (e.g. ["imap", "telegram"])
@@ -1548,12 +1547,6 @@ func GenerateInitJSONWithOpts(p Preset, agentName, dirName, lingtaiDir, globalDi
 	// Comment file — only if user specified one
 	if opts.CommentFile != "" {
 		initJSON["comment_file"] = opts.CommentFile
-	}
-
-	// Brief file — externally maintained by the secretary agent.
-	// Only set for admin agents (karma=true); avatars don't need it.
-	if opts.BriefFile != "" && opts.Karma {
-		initJSON["brief_file"] = opts.BriefFile
 	}
 
 	data, err := json.MarshalIndent(initJSON, "", "  ")

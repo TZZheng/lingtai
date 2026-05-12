@@ -22,9 +22,8 @@ import (
 
 // FirstRunDoneMsg is emitted when first-run flow completes.
 type FirstRunDoneMsg struct {
-	OrchDir         string // full path to orchestrator directory
-	OrchName        string // agent name
-	LaunchSecretary bool   // true if secretary agent should be launched
+	OrchDir  string // full path to orchestrator directory
+	OrchName string // agent name
 }
 
 // SetupSavedMsg is emitted when /setup rewrites the current agent's init.json.
@@ -274,10 +273,6 @@ type FirstRunModel struct {
 	pendingRecipeName string
 	pendingCustomDir  string
 	swapConfirmIdx    int // 0=swap, 1=fresh, 2=cancel
-
-	// Secretary toggle on recipe page (default: true)
-	secretaryEnabled   bool // whether to launch secretary agent
-	secretarySetupDone bool // true after secretary init.json is written
 }
 
 func NewFirstRunModel(baseDir, globalDir string, hasPresets bool, preselectedRecipe string) FirstRunModel {
@@ -386,8 +381,7 @@ func NewFirstRunModel(baseDir, globalDir string, hasPresets bool, preselectedRec
 		principleInput:    prini,
 		soulFlowInput:     sfli,
 		commentInput:      comi,
-		nirvanaIdx:        1,    // default false (1=false)
-		secretaryEnabled:  true, // default: launch secretary
+		nirvanaIdx:        1, // default false (1=false)
 		progressCh:        make(chan string, 4),
 		recipeCustomInput: rci,
 		preselectedRecipe: preselectedRecipe,
@@ -1767,21 +1761,13 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 			if m.setupMode {
 				minIdx = -1 // allow "keep current" at index -1
 			}
-			secretaryIdx := m.recipeMaxIdx() + 1
-			recipeBackIdx := secretaryIdx + 1
+			recipeBackIdx := m.recipeMaxIdx() + 1
 			recipeLastIdx := recipeBackIdx
 			// recipeDoNext encapsulates the save-and-advance logic
 			// triggered by Enter on a recipe row.
 			recipeDoNext := func() (FirstRunModel, tea.Cmd) {
 				if m.recipeIdx == -1 {
 					return m.performSetupSaveOnly()
-				}
-				if m.recipeIdx == secretaryIdx {
-					// Cursor is on the secretary toggle row — Next
-					// advances using whatever recipe was previously
-					// highlighted; if none was, refuse politely.
-					m.message = i18n.T("firstrun.recipe.pick_one")
-					return m, nil
 				}
 				recipeName := m.recipeIdxToName(m.recipeIdx)
 				customDir := ""
@@ -1836,8 +1822,7 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 				m.recipeCustomInput.Blur()
 				return m, nil
 			case "ctrl+o":
-				if m.recipeIdx == secretaryIdx || m.recipeIdx == -1 ||
-					m.recipeIdx == recipeBackIdx {
+				if m.recipeIdx == -1 || m.recipeIdx == recipeBackIdx {
 					return m, nil
 				}
 				recipeDir := m.resolveCurrentRecipeDir()
@@ -1864,19 +1849,7 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 					m.message = ""
 					return m, nil
 				}
-				// Row: secretary toggle (space-style) or pick-and-save.
-				if m.recipeIdx == secretaryIdx {
-					m.secretaryEnabled = !m.secretaryEnabled
-					return m, nil
-				}
 				return recipeDoNext()
-			case " ":
-				// Space toggles the secretary checkbox; on a recipe row
-				// it's a no-op (Enter is the activation key now).
-				if m.recipeIdx == secretaryIdx {
-					m.secretaryEnabled = !m.secretaryEnabled
-				}
-				return m, nil
 
 			default:
 				if m.recipeIdxToName(m.recipeIdx) == preset.RecipeCustom { // custom selected -- forward to input
@@ -3949,29 +3922,11 @@ func (m FirstRunModel) viewRecipe() string {
 		}
 	}
 
-	// Secretary toggle
-	secretaryIdx := m.recipeMaxIdx() + 1
-	leftBlock.WriteString("\n  " + StyleFaint.Render("────") + "\n")
-	{
-		cursor := "  "
-		style := lipgloss.NewStyle().Foreground(ColorText)
-		if secretaryIdx == m.recipeIdx {
-			cursor = "> "
-			style = lipgloss.NewStyle().Bold(true).Foreground(ColorAccent)
-		}
-		check := "☐"
-		if m.secretaryEnabled {
-			check = "☑"
-		}
-		leftBlock.WriteString(cursor + style.Render(check+" Secretary agent") + "\n")
-		leftBlock.WriteString("    " + StyleFaint.Render("Background agent that maintains session briefs") + "\n")
-	}
-
 	b.WriteString(leftBlock.String())
 
-	// Footer button: Back at secretaryIdx+1. There is no Next — Enter on
-	// a recipe row already saves and finishes.
-	recipeBackIdx := secretaryIdx + 1
+	// Footer button: Back. There is no Next — Enter on a recipe row already
+	// saves and finishes.
+	recipeBackIdx := m.recipeMaxIdx() + 1
 	var recipeFocused wizardFooterButton
 	if m.recipeIdx == recipeBackIdx {
 		recipeFocused = wizardFooterBack
@@ -4043,7 +3998,6 @@ func (m FirstRunModel) performSetupSaveOnly() (FirstRunModel, tea.Cmd) {
 		m.pendingAgentOpts.ProceduresFile = proceduresPath
 	}
 
-	m.pendingAgentOpts.BriefFile = fs.BriefFilePath(m.globalDir, projectRoot)
 	// /setup updates the default preset only — running agents keep their
 	// active preset until the next AED fallback or revert_preset call.
 	m.pendingAgentOpts.PreserveActivePreset = m.setupMode
@@ -4104,8 +4058,6 @@ func (m FirstRunModel) performRecipeSave(recipeName, customDir string) (FirstRun
 		opts.ProceduresFile = proceduresPath
 	}
 
-	// Set brief file path for admin agents — the secretary maintains this file
-	opts.BriefFile = fs.BriefFilePath(m.globalDir, projectRoot)
 	// /setup: update default preset only, leave the running agent's active alone.
 	opts.PreserveActivePreset = m.setupMode
 
@@ -4147,25 +4099,12 @@ func (m FirstRunModel) performRecipeSave(recipeName, customDir string) (FirstRun
 		m.message = ""
 		return m, m.runRehydratePropagation()
 	}
-	// Setup secretary if enabled (orchDir already declared above)
-	launchSecretary := m.secretaryEnabled
-	if launchSecretary {
-		if err := setupSecretary(m.baseDir, m.globalDir, dirName); err != nil {
-			m.message = i18n.TF("firstrun.created", m.agentName) + fmt.Sprintf("\n  Secretary setup failed: %v", err)
-			launchSecretary = false
-		} else {
-			m.secretarySetupDone = true
-			m.message = i18n.TF("firstrun.created", m.agentName)
-		}
-	} else {
-		m.message = i18n.TF("firstrun.created", m.agentName)
-	}
+	m.message = i18n.TF("firstrun.created", m.agentName)
 	m.step = stepLaunching
 	return m, func() tea.Msg {
 		return FirstRunDoneMsg{
-			OrchDir:         orchDir,
-			OrchName:        m.agentName,
-			LaunchSecretary: launchSecretary && m.secretarySetupDone,
+			OrchDir:  orchDir,
+			OrchName: m.agentName,
 		}
 	}
 }

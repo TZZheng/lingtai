@@ -22,7 +22,7 @@ This folder is the self-contained Go module for the `lingtai-tui` terminal UI bi
 - **`exec_windows.go`** — `syscallExec` (windows): equivalent (process replacement differs on Windows).
 - **`Makefile:1-23`** — build, dev (fast local), cross-compile (darwin/linux × arm64/amd64), clean. Version stamp via `-ldflags "-X main.version=$(VERSION)"` where `VERSION` is `git describe --tags --always`.
 - **`i18n/i18n.go:10`** — `//go:embed en.json zh.json wen.json`. The only embed target in the root `tui/` package; all other embeds are in `internal/preset/`.
-- **`tui/internal/`** — all substantive packages (tui screens, preset engine, migration system, filesystem readers, process launcher, postman, timemachine, secretary, lock shims).
+- **`tui/internal/`** — all substantive packages (tui screens, preset engine, migration system, filesystem readers, process launcher, postman, timemachine, lock shims).
 
 ## Connections
 
@@ -46,7 +46,6 @@ This folder is the self-contained Go module for the `lingtai-tui` terminal UI bi
   - `tui/internal/process/` — subprocess launcher
   - `tui/internal/postman/` — UDP cross-internet mail relay
   - `tui/internal/timemachine/` — git-backed history daemon
-  - `tui/internal/secretary/` — assistant subsystem
   - `tui/i18n/` — en/zh/wen locale tables
   - `tui/scripts/` — build helpers
 - **Build output:** `tui/bin/lingtai-tui` (single binary)

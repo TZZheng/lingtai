@@ -35,7 +35,6 @@ The repo root holds two binary trees plus shared infrastructure. Each binary is 
 | `tui/internal/process/` | — | Subprocess launcher (`launcher.go`). Spawns `python -m lingtai run <dir>` with the right venv, log redirection, and PID tracking. |
 | `tui/internal/postman/` | — | UDP/IPv6 cross-internet agent mesh (邮差). Standalone subcommand `lingtai-tui postman`. See `docs/plans/` for design. |
 | `tui/internal/timemachine/` | — | Git-backed history daemon for the `human/` directory. Runs as `lingtai-tui timemachine <dir>` subcommand; commits topology snapshots so `/viz` can replay history. |
-| `tui/internal/secretary/` | — | Assistant subsystem; embeds asset bundles for the secretary screen. |
 | `tui/i18n/` | — | en/zh/wen JSON tables. **Three locales always** — adding a key requires updating all three. Missing keys render as the raw key string. |
 | `tui/scripts/` | — | Build helper scripts (cross-compile, asset bundling). |
 | `tui/packages/` | — | Vendored or generated dependency artefacts. |

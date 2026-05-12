@@ -56,9 +56,8 @@ The TUI's read-only window into an agent working directory (`<project>/.lingtai/
 | `NewSessionCache` | `tui/internal/fs/session.go:65` | creates cache, calls `RebuildFromSources` after construction |
 | `RebuildFromSources` | `tui/internal/fs/session.go:84` | full ingest from mail cache + events.jsonl + soul_inquiry.jsonl + soul_flow.jsonl |
 | `Refresh` | `tui/internal/fs/session.go:666` | incremental poll of all three sources |
-| **session_dump.go** | | |
-| `ProjectHash(projectPath)` | `tui/internal/fs/session_dump.go:15` | SHA-256 first 12 hex chars |
-| `DumpAllHours` | `tui/internal/fs/session_dump.go:118` | groups entries by hour, writes `~/.lingtai-tui/brief/projects/<hash>/history/` |
+| **project_hash.go** | | |
+| `ProjectHash(projectPath)` | `tui/internal/fs/project_hash.go:9` | SHA-256 first 12 hex chars — used as the registry key for each project |
 | **contacts.go** | | |
 | `ReadContacts(dir)` | `tui/internal/fs/contacts.go:15` | reads `mailbox/contacts.json` → `[]ContactEdge` |
 | **types.go** | | |
@@ -86,7 +85,6 @@ The TUI's read-only window into an agent working directory (`<project>/.lingtai/
 
 - **Reads (never writes)**: `.agent.json`, `.agent.heartbeat`, `.status.json`, `mailbox/inbox/*`, `mailbox/sent/*`, `logs/token_ledger.jsonl`, `logs/events.jsonl`, `logs/soul_inquiry.jsonl`, `logs/soul_flow.jsonl`, `delegates/ledger.jsonl`, `mailbox/contacts.json`.
 - **Writes**: signal files (`.sleep`, `.suspend`, `.interrupt`, `.prompt`, `.inquiry`), human `mailbox/outbox/*`, human `.agent.json` location field.
-- **Produces**: `~/.lingtai-tui/brief/projects/<hash>/history/YYYY-MM-DD-HH.md` — secretary dump files via `DumpAllHours`.
 
 ## Notes
 

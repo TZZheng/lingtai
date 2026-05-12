@@ -38,7 +38,6 @@ func DetectOrchestrators(baseDir string) []string {
 // its LLM config, capabilities, and runtime settings (soul delay, stamina,
 // context limit, molt pressure) to every other agent in the .lingtai/
 // network. Admin privileges and addons are stripped from non-orchestrators.
-// The secretary agent keeps its own soul delay (9999999).
 // Skips directories that are not agents (no init.json) and "human".
 func PropagateOrchestratorConfig(baseDir, orchDir string) error {
 	orchInitPath := filepath.Join(orchDir, "init.json")
@@ -105,8 +104,8 @@ func PropagateOrchestratorConfig(baseDir, orchDir string) error {
 		} else {
 			delete(manifest, "capabilities")
 		}
-		// Propagate runtime settings (secretary keeps its own config)
-		if entry.Name() != "secretary" {
+		// Propagate runtime settings
+		{
 			if orchSoul != nil {
 				soulCopy := make(map[string]interface{}, len(orchSoul))
 				for k, v := range orchSoul {

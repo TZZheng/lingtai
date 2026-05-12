@@ -2,7 +2,7 @@
 
 > **Maintenance:** see the `lingtai-tui-anatomy` skill. **Coding agents** update this file in the same commit as code changes.
 
-HTTP server for `lingtai-portal`: serves the embedded React SPA on `/` and a JSON REST API on `/api/*`. Manages a live topology tape (3-second snapshots appended as JSONL), compressed hourly replay caches, and on-the-fly reconstruction from source events.
+HTTP server for `lingtai-portal`: serves the embedded React SPA on `/` and a JSON REST API on `/api/*`. Manages a live topology tape (3-second snapshots appended as JSONL during recording; reconstructed tapes use activity-driven sampling on the same 3s grid), compressed hourly replay caches, and on-the-fly reconstruction from source events.
 
 ## Components
 
@@ -28,13 +28,14 @@ HTTP server for `lingtai-portal`: serves the embedded React SPA on `/` and a JSO
 - **`replay.go:18-56`** — Wire types: `ReplayChunk` (delta-encoded hour range), `ReplayFrame` (keyframe or delta), `FrameDelta` (only-changed fields), `ChunkInfo` (manifest entry), `ReplayManifest` (tape bounds + chunk list).
 - **`replay.go:60-87`** — `deltaEncode(frames, keyframeInterval)`. Converts `[]TapeFrame` into a `ReplayChunk` with full keyframes every N frames and `FrameDelta` in between.
 - **`replay.go:91-178`** — `computeDelta(prev, curr)`. Field-by-field diff of two `Network` values: nodes (with `__REMOVED__` tombstones), avatar/contact/mail edges (keyed by identifier pairs), and stats. Returns nil if nothing changed.
-- **`replay.go:220-320`** — `buildManifest(topologyPath, replayDir)`. Fast path: reads cached `manifest.json`, scans only new JSONL frames after the last completed chunk, caches newly-completed hours as `.json.gz`. O(new_frames).
-- **`replay.go:355-423`** — `fullCompile(topologyPath, replayDir)`. Slow path: full re-scan of `topology.jsonl`, rebuilds all hourly caches. O(all_frames).
-- **`replay.go:425-458`** — `writeChunkCache` / `readChunkCache`. Gzip-compressed JSON encode/decode of `ReplayChunk` to/from `<hourMs>.json.gz`.
-- **`replay.go:460-500`** — `loadChunk(replayDir, topologyPath, hourStart)`. Tries cached `.json.gz` first; falls back to scanning JSONL for that hour's frames if cache missing.
-- **`replay.go:504-527`** — `NewManifestHandler`. `GET /api/topology/manifest` — calls `buildManifest`, returns chunk index.
-- **`replay.go:532-614`** — `NewRebuildHandler`. `POST /api/topology/rebuild` — reconstructs the full tape from `fs.ReconstructTape`, replaces `topology.jsonl` with the last frame, rebuilds all hourly caches.
-- **`replay.go:617-655`** — `NewChunkHandler`. `GET /api/topology/chunk?start=<hourMs>` — serves one delta-encoded chunk. Supports `Accept-Encoding: gzip` for transparent compression.
+- **`replay.go:220-338`** — `buildManifest(topologyPath, replayDir)`. Fast path: reads cached `manifest.json`, scans only new JSONL frames after the last completed chunk, caches newly-completed hours as `.json.gz`. O(new_frames). `manifest.TapeStart` is the first real frame timestamp (preferred from the cached manifest, then `firstFrameForChunk`, then the bucket floor as last-resort) — NOT `chunks[0].Start`, which is the hour-bucket floor and would render as ~55min of empty scrubber padding.
+- **`replay.go:340-375`** — `firstFrameForChunk(info, replayDir, topologyPath)`. Returns the earliest frame timestamp in a chunk, reading `<hourMs>.json.gz` first and falling back to a JSONL scan within the chunk's hour window. Used by `buildManifest` when no cached `TapeStart` is available.
+- **`replay.go:407-475`** — `fullCompile(topologyPath, replayDir)`. Slow path: full re-scan of `topology.jsonl`, rebuilds all hourly caches. O(all_frames).
+- **`replay.go:477-510`** — `writeChunkCache` / `readChunkCache`. Gzip-compressed JSON encode/decode of `ReplayChunk` to/from `<hourMs>.json.gz`.
+- **`replay.go:512-552`** — `loadChunk(replayDir, topologyPath, hourStart)`. Tries cached `.json.gz` first; falls back to scanning JSONL for that hour's frames if cache missing.
+- **`replay.go:556-579`** — `NewManifestHandler`. `GET /api/topology/manifest` — calls `buildManifest`, returns chunk index.
+- **`replay.go:584-668`** — `NewRebuildHandler`. `POST /api/topology/rebuild` — reconstructs the full tape from `fs.ReconstructTape`, replaces `topology.jsonl` with the last frame, rebuilds all hourly caches. `manifest.TapeStart` is set to `frames[0].T` (the real first frame timestamp), not `chunks[0].Start`.
+- **`replay.go:671-709`** — `NewChunkHandler`. `GET /api/topology/chunk?start=<hourMs>` — serves one delta-encoded chunk. Supports `Accept-Encoding: gzip` for transparent compression.
 
 ## Connections
 

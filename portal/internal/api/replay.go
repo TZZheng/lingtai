@@ -305,8 +305,23 @@ func buildManifest(topologyPath, replayDir string) (ReplayManifest, error) {
 
 	sort.Slice(chunks, func(i, j int) bool { return chunks[i].Start < chunks[j].Start })
 
+	// TapeStart is the first real frame timestamp, NOT chunks[0].Start (which
+	// is the hour-bucket floor). Prefer the cached value (written correctly by
+	// NewRebuildHandler / earlier buildManifest runs); otherwise peek the
+	// earliest chunk's first frame from disk or JSONL.
+	tapeStart := int64(0)
+	if hasCached && cached.TapeStart > 0 {
+		tapeStart = cached.TapeStart
+	}
+	if tapeStart == 0 {
+		tapeStart = firstFrameForChunk(chunks[0], replayDir, topologyPath)
+	}
+	if tapeStart == 0 {
+		tapeStart = chunks[0].Start
+	}
+
 	manifest := ReplayManifest{
-		TapeStart: chunks[0].Start,
+		TapeStart: tapeStart,
 		TapeEnd:   chunks[len(chunks)-1].End,
 		Chunks:    chunks,
 	}
@@ -317,6 +332,43 @@ func buildManifest(topologyPath, replayDir string) (ReplayManifest, error) {
 	}
 
 	return manifest, nil
+}
+
+// firstFrameForChunk returns the timestamp of the earliest frame in a chunk,
+// preferring the cached .json.gz and falling back to a JSONL scan. Returns 0
+// if no frame can be located.
+func firstFrameForChunk(info ChunkInfo, replayDir, topologyPath string) int64 {
+	cachePath := filepath.Join(replayDir, strconv.FormatInt(info.Start, 10)+".json.gz")
+	if chunk, err := readChunkCache(cachePath); err == nil && len(chunk.Frames) > 0 {
+		return chunk.Frames[0].T
+	}
+	// Fallback: scan JSONL for the first frame in this chunk's hour window.
+	f, err := os.Open(topologyPath)
+	if err != nil {
+		return 0
+	}
+	defer f.Close()
+	hourEnd := info.Start + hourMs
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var fr fs.TapeFrame
+		if err := json.Unmarshal([]byte(line), &fr); err != nil {
+			continue
+		}
+		if fr.T < info.Start {
+			continue
+		}
+		if fr.T >= hourEnd {
+			break
+		}
+		return fr.T
+	}
+	return 0
 }
 
 // scanJSONLFrom reads topology.jsonl and returns frames with T >= fromMs.
@@ -594,9 +646,11 @@ func NewRebuildHandler(baseDir string) http.HandlerFunc {
 		os.WriteFile(topologyPath, append(line, '\n'), 0o644)
 		TopologyMu.Unlock()
 
-		// Write manifest
+		// Write manifest. TapeStart is the first real frame timestamp, NOT the
+		// first chunk's hour-bucket floor — otherwise the scrubber shows ~55min
+		// of empty padding before the first event ("orphan first hour").
 		manifest := ReplayManifest{
-			TapeStart: chunks[0].Start,
+			TapeStart: frames[0].T,
 			TapeEnd:   chunks[len(chunks)-1].End,
 			Chunks:    chunks,
 		}

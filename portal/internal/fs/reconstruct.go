@@ -71,14 +71,18 @@ func ReconstructTape(baseDir string) ([]TapeFrame, error) {
 		}
 	}
 
-	// 4. Determine time range
+	// 4. Determine time range.
+	// minTs uses ALL events so an agent visible from heartbeats appears at its
+	// real first-seen time. maxTs uses only mutation-causing events (state
+	// changes + mail), so heartbeats during long-idle tails don't push the
+	// timeline up to "now" with nothing happening.
 	minTs := math.MaxFloat64
 	maxTs := 0.0
 	for _, e := range allEvents {
 		if e.Ts < minTs {
 			minTs = e.Ts
 		}
-		if e.Ts > maxTs {
+		if e.Type == "agent_state" && e.Ts > maxTs {
 			maxTs = e.Ts
 		}
 	}
@@ -94,6 +98,11 @@ func ReconstructTape(baseDir string) ([]TapeFrame, error) {
 	// No events and no mail → no frames
 	if minTs == math.MaxFloat64 {
 		return nil, nil
+	}
+	// No mutation-causing events at all → use minTs so we still emit at least
+	// one frame (initial visibility snapshot).
+	if maxTs == 0.0 {
+		maxTs = minTs
 	}
 
 	// Sort events by timestamp for replay
@@ -152,13 +161,79 @@ func ReconstructTape(baseDir string) ([]TapeFrame, error) {
 		contactEdges[i].Target = RelativizeAddress(contactEdges[i].Target, baseDir)
 	}
 
-	// 5. Build frames at 3-second intervals
+	// 5. Build frames using activity-driven sampling.
+	//
+	// Sample points (snapped to a 3s grid for cache friendliness):
+	//   - The first frame (startMs aligned).
+	//   - Every agent_state event timestamp.
+	//   - Every mail timestamp.
+	//   - Every firstEventTs (so an agent appears the moment it becomes visible,
+	//     even if its first event is a heartbeat).
+	//   - One "heartbeat" sample per maxGapMs during long idle stretches.
+	//   - The final frame (endMs aligned, +1 interval if needed).
+	//
+	// This produces O(events + mail + duration/maxGapMs) frames instead of
+	// O(duration/3s). For a 2-week-old project with a few hundred events that
+	// drops frame count by roughly 100x.
 	const intervalMs int64 = 3000
+	const maxGapMs int64 = 60 * 1000 // emit at least one frame per minute
 	startMs := int64(minTs * 1000)
 	endMs := int64(maxTs * 1000)
 
-	// Align start to interval boundary (floor)
+	// Align start down (floor) and end up (ceil) so the final frame's
+	// effective time is at or after the latest mutation event. Snapping the
+	// end down can place all events into a single bucket whose tSec is
+	// earlier than the actual event timestamps, leaving mail unprocessed.
 	startMs = (startMs / intervalMs) * intervalMs
+	endMs = ((endMs + intervalMs - 1) / intervalMs) * intervalMs
+	if endMs < startMs {
+		endMs = startMs
+	}
+
+	// Build the sorted set of activity-driven sample timestamps. Each
+	// interesting event is sampled at the next 3s tick (ceil) so the sample
+	// occurs strictly at-or-after the event, ensuring the event-cursor
+	// advances when we visit that sample.
+	sampleSet := make(map[int64]struct{})
+	snapUp := func(tMs int64) int64 { return ((tMs + intervalMs - 1) / intervalMs) * intervalMs }
+	snapDown := func(tMs int64) int64 { return (tMs / intervalMs) * intervalMs }
+	sampleSet[startMs] = struct{}{}
+	sampleSet[endMs] = struct{}{}
+	for _, e := range allEvents {
+		if e.Type == "agent_state" {
+			sampleSet[snapUp(int64(e.Ts*1000))] = struct{}{}
+		}
+	}
+	for _, m := range allMail {
+		sampleSet[snapUp(int64(m.ts*1000))] = struct{}{}
+	}
+	for _, ft := range firstEventTs {
+		sampleSet[snapUp(int64(ft*1000))] = struct{}{}
+	}
+	// Add heartbeat samples during long gaps so the scrubber feels alive.
+	sorted := make([]int64, 0, len(sampleSet))
+	for t := range sampleSet {
+		if t < startMs || t > endMs {
+			continue
+		}
+		sorted = append(sorted, t)
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	if len(sorted) == 0 || sorted[0] != startMs {
+		sorted = append([]int64{startMs}, sorted...)
+	}
+	gapFilled := make([]int64, 0, len(sorted))
+	for i, t := range sorted {
+		gapFilled = append(gapFilled, t)
+		if i+1 >= len(sorted) {
+			continue
+		}
+		next := sorted[i+1]
+		for h := t + maxGapMs; h < next; h += maxGapMs {
+			gapFilled = append(gapFilled, snapDown(h))
+		}
+	}
+	sorted = gapFilled
 
 	type edgeKey struct{ sender, recipient string }
 	type edgeCounts struct{ direct, cc, bcc int }
@@ -187,7 +262,7 @@ func ReconstructTape(baseDir string) ([]TapeFrame, error) {
 		return c
 	}
 
-	for t := startMs; t <= endMs; t += intervalMs {
+	for _, t := range sorted {
 		tSec := float64(t) / 1000.0
 
 		// Advance events up to this time

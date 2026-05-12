@@ -8,7 +8,7 @@ import (
 )
 
 // CurrentVersion is the latest migration version compiled into this binary.
-const CurrentVersion = 34
+const CurrentVersion = 35
 
 type metaFile struct {
 	Version int `json:"version"`
@@ -57,6 +57,7 @@ var migrations = []Migration{
 	{Version: 32, Name: "cleanup-codex-oauth", Fn: func(_ string) error { return nil }},                   // TUI-only: renames saved/codex_oauth.json to codex.json
 	{Version: 33, Name: "strip-codex-api-key-env", Fn: func(_ string) error { return nil }},               // TUI-only: strips auto-stamped CODEX_N_API_KEY from saved codex presets
 	{Version: 34, Name: "library-skills-caps", Fn: func(_ string) error { return nil }},                   // TUI-only: rewrites codex/library capability keys to library/skills
+	{Version: 35, Name: "remove-brief", Fn: migrateRemoveBrief},                                           // shared: strips brief.md + brief_file/brief keys after secretary removal
 }
 
 // StampCurrent writes meta.json at CurrentVersion without running any

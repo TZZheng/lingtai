@@ -130,10 +130,12 @@ func TestReconstructTape_Basic(t *testing.T) {
 		t.Errorf("first frame T=%v is too early (t0=%v)", firstT, t0)
 	}
 
-	// Last frame t should be >= t1
+	// Last frame must cover the last mutation-causing event (mail at t0+2s).
+	// Heartbeats no longer extend the tape — they are visibility signals only,
+	// so the tail clamps to the latest agent_state event or mail timestamp.
 	lastT := time.UnixMilli(frames[len(frames)-1].T)
-	if lastT.Before(t1.Add(-3 * time.Second)) {
-		t.Errorf("last frame T=%v is too early (t1=%v)", lastT, t1)
+	if lastT.Before(emailTime.Add(-3 * time.Second)) {
+		t.Errorf("last frame T=%v is too early (emailTime=%v)", lastT, emailTime)
 	}
 
 	// All frames must have non-nil arrays

@@ -365,7 +365,6 @@ lingtai/                          # This repo — Go frontends
 │   ├── internal/tui/             # Bubble Tea models (mail, palette, firstrun, ...)
 │   ├── internal/preset/          # Recipes, presets, procedures, library, covenant
 │   ├── internal/fs/              # Filesystem ops (mail cache, agent discovery)
-│   ├── internal/secretary/       # Secretary agent (道童) embedded assets
 │   ├── i18n/                     # Translations (en.json, zh.json, wen.json)
 │   └── Makefile
 ├── portal/                       # Web portal (Go + embedded frontend)

@@ -58,9 +58,9 @@ The portal's read-focused window into a `.lingtai/` project directory. Same shap
 
 ### Topology Reconstruction (`reconstruct.go`) — **portal-specific**
 - `TapeFrame` struct (`reconstruct.go:14-18`) — timestamped `Network` snapshot.
-- `ReconstructTape(baseDir)` (`reconstruct.go:36-279`) — the portal's defining capability: reads all agents' `logs/events.jsonl` and mailbox contents, replays them chronologically, and produces a sequence of `TapeFrame` snapshots at 3-second intervals. Agents appear when their first event fires; mail accumulates frame-by-frame; avatar/contact edges are static pre-read. This is what drives the replay timeline — the TUI has no equivalent.
-- `readEventsJSONL(agentDir)` (`reconstruct.go:281-308`) — parses `events.jsonl`, filters to `agent_state`, `heartbeat_start`, `refresh_start`.
-- `mailTimestamp(msg)` (`reconstruct.go:310-326`) — extracts best timestamp (SentAt → ReceivedAt) as unix seconds.
+- `ReconstructTape(baseDir)` (`reconstruct.go:39-354`) — the portal's defining capability: reads all agents' `logs/events.jsonl` and mailbox contents, replays them chronologically, and produces a sequence of `TapeFrame` snapshots using activity-driven sampling on a 3s grid. Frames are emitted at each `agent_state` event, each mail timestamp, each agent's first-seen time, and at least once per 60s during quiet stretches. `maxTs` clamps to the latest mutation-causing event (state change or mail) — heartbeats during idle tails don't extend the tape. Agents appear when their first event fires; mail accumulates frame-by-frame; avatar/contact edges are static pre-read. This is what drives the replay timeline — the TUI has no equivalent.
+- `readEventsJSONL(agentDir)` (`reconstruct.go:358-383`) — parses `events.jsonl`, filters to `agent_state`, `heartbeat_start`, `refresh_start`.
+- `mailTimestamp(msg)` (`reconstruct.go:385-401`) — extracts best timestamp (SentAt → ReceivedAt) as unix seconds.
 
 ### Signal (`signal.go`)
 - Signal constants (`signal.go:11-15`) — `.sleep`, `.suspend`, `.interrupt`.
@@ -93,7 +93,7 @@ All state is read from the project's `.lingtai/` directory. The portal only writ
 
 ## Notes
 
-- **`reconstruct.go` is the portal-specific addition.** The TUI shows live topology; the portal reconstructs historical topology tapes from `events.jsonl` + mailbox data. The reconstruction replays agent states chronologically at 3-second intervals, with agents appearing when their first event fires and mail accumulating cumulatively. This is the data source for the `/replay` endpoint.
+- **`reconstruct.go` is the portal-specific addition.** The TUI shows live topology; the portal reconstructs historical topology tapes from `events.jsonl` + mailbox data. The reconstruction replays agent states chronologically using activity-driven sampling on a 3s grid (a frame per `agent_state` event, per mail message, per agent's first-seen time, plus one heartbeat per 60s during quiet stretches) — not a dense uniform grid, so reconstruction stays O(events) rather than O(duration/3s). Agents appear when their first event fires and mail accumulates cumulatively. This is the data source for the `/replay` endpoint.
 - **Mailbox id shape.** `WriteMail` allocates short, human-scannable ids of the form `YYYYMMDDTHHMMSS-xxxx` (20 chars, UTC, 4 hex chars of UUID4 entropy) via `newMailboxID`. This matches the kernel's `_new_mailbox_id` in `lingtai-kernel/src/lingtai_kernel/intrinsics/email/primitives.py` and the TUI's mirror in `tui/internal/fs/mail.go`, so directory names, `id`, and `_mailbox_id` look identical regardless of which side wrote the message. `prepareMailDirs` uses `os.Mkdir` (not `MkdirAll`) on each leaf so same-second collisions in any target folder surface as `fs.ErrExist` and trigger up to 8 regenerations without overwriting existing mail.
 - **`MailCache`** tracks already-loaded messages via mailbox-id directory names, enabling incremental refreshes without re-reading the entire mailbox. It is immutable by convention — `Refresh()` returns a new cache rather than mutating the receiver, so it's safe to call from a goroutine.
 - **`IsAlive`** uses a 2-second threshold. A stale heartbeat forces state to `SUSPENDED` in `BuildNetwork`.
