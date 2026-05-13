@@ -9,7 +9,7 @@ tags: [media-creation, music, journal, on-demand]
 
 A reusable workflow for composing one music track per project journal entry. Use this when the user asks for music tied to what they've been working on — "make a track for today's journal", "give me a bossa nova for last week", "the journal mentioned X — try a piece in style Y".
 
-This skill assumes you already have file/bash/library capabilities. It does **not** install or configure any media provider — it discovers what's available in your library and composes via whichever skill matches the user's saved presets.
+This skill assumes you already have file/bash/skills capabilities. It does **not** install or configure any media provider — it discovers what is available in your skills catalog and composes via whichever skill matches the user's saved presets.
 
 ## When to load this skill
 
@@ -23,12 +23,12 @@ If the request is ambiguous (which journal? which genre? which project?), **ask 
 
 Before composing, you need to know what providers you can actually reach. Run this the first time the user asks for music in a session, and re-run when the request would use a media path you haven't tried this session.
 
-**Step A — enumerate available media-creation skills.** Look in your library catalog for skills tagged `media-creation`. If your catalog only shows `name` + `description`, the description still mentions "media-creation" for tagged skills — grep that.
+**Step A — enumerate available media-creation skills.** Look in your skills catalog for skills tagged `media-creation`. If your catalog only shows `name` + `description`, the description still mentions "media-creation" for tagged skills — grep that.
 
-If you want the canonical list, walk your library Tier-1 paths:
+If you want the canonical list, walk the configured skills paths shown by the skills catalog:
 
 ```bash
-for path in <Tier-1 library paths from your library() info>; do
+for path in <skills paths from skills(action="info")>; do
   for skill in "$path"/*/SKILL.md; do
     [ -f "$skill" ] || continue
     grep -l -E '(^|, )media-creation(,|]| )' "$skill" 2>/dev/null
@@ -89,7 +89,7 @@ The user may request anything outside this palette — Ravel, Coltrane, City Pop
 
 2. **Read the journal.** Project journals live at `~/.lingtai-tui/brief/projects/<hash>/journal.md`. The `brief.md` / `profile.md` files in the same tree give you context on the user. If the user points at a specific date or hour, also consult the matching `history/<YYYY-MM-DD-HH>.md`. Distill: what did the user do? What was the emotional arc? What instrumentation, tempo, key, mood would honor this session?
 
-3. **Load the chosen media-creation skill** via `library()`. Follow its preflight and `curl` whatever live docs it points to so you have the current API schema. The skill knows: where the key lives, which region/host to use, which model to call, parameter shape, expected response shape, how long to wait.
+3. **Load the chosen media-creation skill** by reading its `SKILL.md` from the skills catalog. Follow its preflight and `curl` whatever live docs it points to so you have the current API schema. The skill knows: where the key lives, which region/host to use, which model to call, parameter shape, expected response shape, how long to wait.
 
 4. **Compose the prompt.** Translate the journal's mood into a music-generation prompt: genre, instruments, tempo, key, mood adjectives, optional structure (intro / verse / breakdown / outro), reference artists if useful. Keep it under whatever the API limit is per the live docs.
 

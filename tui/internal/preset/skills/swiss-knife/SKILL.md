@@ -45,7 +45,7 @@ To add a new utility to the swiss-knife:
 2. Add a `SKILL.md` with frontmatter (`name`, `description`, `version`) and full usage instructions
 3. Add any scripts/assets in a `scripts/` subfolder
 4. Update the table above with a one-liner
-5. Refresh the library: `library(action='refresh')` or `system(action='refresh')`
+5. Refresh the skills catalog: `skills(action='info')` or `system(action='refresh')`
 
 ## Design Philosophy
 

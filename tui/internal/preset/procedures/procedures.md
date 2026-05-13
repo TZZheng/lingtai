@@ -60,7 +60,7 @@ Mail the parent at their address (in your `admin` block or the briefing that spa
 
 Molt is yours to perform. The covenant teaches the philosophy (§V); this is the recipe.
 
-**Molt is an easy, simple task. Do it regularly if you'd like to.** Save anything you need to pad, lingtai, codex, and library beforehand, then molt. No need to wait for the context window to fill up — molting early saves a good amount of tokens. But be careful with your memory management — keep good notes in the stores so you don't lose your way across molts.
+**Molt is an easy, simple task. Do it regularly if you'd like to.** Save anything you need to pad, lingtai, knowledge, and skills beforehand, then molt. No need to wait for the context window to fill up — molting early saves a good amount of tokens. But be careful with your memory management — keep good notes in the stores so you don't lose your way across molts.
 
 **The four stores are the real persistence. The summary is the briefing on top of them.** If you molt without tending the stores, the next you wakes with only the briefing — no character evolution, no pad state, no new codex truths, no new skills. Tend the stores *first*, every time.
 
@@ -71,7 +71,7 @@ Molt is yours to perform. The covenant teaches the philosophy (§V); this is the
 - `lingtai` — `psyche(lingtai, update, content=<full identity>)`. **This is crucial — `lingtai` defines who you are.** Each update is a full rewrite, so include your whole identity, not just the delta. Carry forward who you have become.
 - `pad` — your living index of what you're working on. Edit it to reflect your current goal and the references that point at where the substance lives. **See "Tending the Pad" below for the full practice.** Use `psyche(pad, append, ...)` to pin file contents as read-only reference alongside your notes — it's a file-loading tool, not an incremental jotting tool.
 - `codex` — `codex(submit, title=..., summary=..., content=...)` for any verifiable truth, key finding, or decision worth keeping forever. One distinct fact per entry; the store is permanent but bounded.
-- `library` — write `.library/custom/<name>/SKILL.md` (with YAML frontmatter: `name`, `description`, `version`) for any reusable procedure the next you (or a peer) might need, then call `system({"action": "refresh"})` to re-scan the catalog. Share via `../.library_shared/<name>/` if broadly useful. See the `skill-manual` skill for authoring conventions.
+- `skills` — write `.library/custom/<name>/SKILL.md` (with YAML frontmatter: `name`, `description`, `version`) for any reusable procedure the next you (or a peer) might need, then call `system({"action": "refresh"})` to re-scan the catalog. Share via `../.library_shared/<name>/` if broadly useful. See the `skill-manual` skill for authoring conventions.
 
 These four happen *before* the molt call. They are not optional. Without them, the molt sheds everything.
 
@@ -88,7 +88,7 @@ The `summary` is the only *conversation-layer* thing the next you will see. Aim 
 - **What remains** — pending items, blockers, open questions
 - **Who to contact** — collaborators, who is waiting on what
 - **Which codex entries matter** — IDs the next you should load via `codex(read, ...)`
-- **Which skills to load** — `library` SKILL.md paths the next task will need
+- **Which skills to load** — `skills` SKILL.md paths the next task will need
 - **Anything else worth carrying forward** — insights, gotchas, things you'd hate to rediscover
 
 The summary is not a recap of conversation. It is your charge to the self that comes after you — anchored in the four stores, which are already waiting in the fresh session.
@@ -109,7 +109,7 @@ If you wake up after a *system-performed* molt (you ignored the warnings), there
 
 1. `email(check)` — see what arrived while you were under pressure or down
 2. `codex(filter, pattern=...)` — browse your knowledge archive for what you were working on
-3. `library(action="info")` — confirm which skills you have
+3. `skills(action="info")` — confirm which skills you have
 4. `bash({"command": "tail -n 200 logs/events.jsonl | grep ..."})` — surgical reads of the activity log if needed
 
 Reconstruct your situation from these sources. Next time, act on the first warning — Level 1 is the easy molt.
@@ -129,13 +129,13 @@ Pad is your **living index** of what you're working on right now. It is not a sk
 - **Timestamps** — always include when each entry was last updated (e.g., `2026-05-07T13:41 PDT`). After a refresh or molt, timestamps prevent old information from being mistaken for new. Without them, you cannot distinguish "information from the previous session" from "information from this session."
 - **Self-references — pointers to where the substance lives.** This is the heart of progressive disclosure. Don't inline content; *point at it*:
   - **codex IDs** you've consulted or submitted (`codex_a3f1...`)
-  - **library SKILL.md paths** you've loaded (`.library/intrinsic/lingtai-anatomy/SKILL.md`)
+  - **skills SKILL.md paths** you've loaded (`.library/intrinsic/lingtai-anatomy/SKILL.md`)
   - **email message IDs** of load-bearing conversations (the threads that define the work)
   - **file paths** under your workdir that matter (drafts, exports, configs)
   - **URLs** you're tracking (issues, PRs, docs, datasets)
 - **Collaborators** — who you're working with, who's waiting on what, who you've delegated to.
 
-**What does NOT belong in pad:** large blobs of inlined text, full file contents, transcripts, raw data, anything you would normally put in codex (verifiable facts) or library (reusable procedures). If you find yourself pasting a long passage into pad, stop — submit it to codex and *point at* the codex ID instead. If you find yourself documenting a procedure, stop — write a SKILL.md and *point at* its path instead. Pad indexes the depths; it does not become them.
+**What does NOT belong in pad:** large blobs of inlined text, full file contents, transcripts, raw data, anything you would normally put in knowledge (verifiable facts) or skills (reusable procedures). If you find yourself pasting a long passage into pad, stop — write it as knowledge and *point at* the KNOWLEDGE.md path instead. If you find yourself documenting a procedure, stop — write a SKILL.md and *point at* its path instead. Pad indexes the depths; it does not become them.
 
 **When to update pad.** Update pad whenever the index meaningfully changes:
 

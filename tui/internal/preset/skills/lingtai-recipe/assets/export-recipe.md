@@ -87,7 +87,7 @@ Store the result. All paths use `$HOME/lingtai-agora/recipes/` as the base. **No
 
 1. Read the applied-recipe state for context only: `ls -la .lingtai/.tui-asset/` and look at `.recipe/` (directory — the snapshot of the currently-applied recipe) or `.recipe` (JSON file — UI picker state). The directory snapshot is what the agents were initially shaped by; it tells you the starting point, not the destination. If the project also has its own `.recipe/` at the project root, that's the same content — see "First: which 'recipe' does the human mean?" above.
 2. Read the orchestrator's comment from `.lingtai/.tui-asset/.recipe/comment/comment.md` (or the locale variant) — that's the behavioral DNA the current network is running under. Treat it as a *baseline*; what you ship in Step 2c will refine, extend, or partially replace it based on how the network actually evolved.
-3. List libraries currently registered: `cat .lingtai/<orchestrator>/init.json | python3 -c "import json,sys; m=json.load(sys.stdin); print(m['manifest']['capabilities']['library']['paths'])"`
+3. List libraries currently registered: `cat .lingtai/<orchestrator>/init.json | python3 -c "import json,sys; m=json.load(sys.stdin); print(m['manifest']['capabilities']['skills']['paths'])"`
 4. Scan the network structure: `ls .lingtai/*/.agent.json 2>/dev/null | head` and read a couple to see agent names and roles.
 5. Skim recent mail for tone and delegation patterns: `ls -t .lingtai/<orchestrator>/mailbox/sent/ | head -20`. The actual delegation, the actual tone, the actual workflow — this trumps anything the seeding recipe says.
 

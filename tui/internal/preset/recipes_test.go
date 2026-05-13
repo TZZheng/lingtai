@@ -63,10 +63,10 @@ func TestRecipeDir(t *testing.T) {
 	if err := Bootstrap(globalDir); err != nil {
 		t.Fatalf("Bootstrap err = %v", err)
 	}
-	got := RecipeDir(globalDir, "greeter")
-	want := filepath.Join(globalDir, "recipes", "recommended", "greeter")
+	got := RecipeDir(globalDir, "adaptive")
+	want := filepath.Join(globalDir, "recipes", "recommended", "adaptive")
 	if got != want {
-		t.Errorf("RecipeDir(greeter) = %q, want %q", got, want)
+		t.Errorf("RecipeDir(adaptive) = %q, want %q", got, want)
 	}
 	got = RecipeDir(globalDir, "tutorial")
 	want = filepath.Join(globalDir, "recipes", "examples", "tutorial")
@@ -90,21 +90,21 @@ func TestScanCategory(t *testing.T) {
 	}
 	found := false
 	for _, r := range recipes {
-		if r.ID == "greeter" {
+		if r.ID == "adaptive" {
 			found = true
 			if r.Info.Name == "" {
-				t.Errorf("greeter recipe has empty name")
+				t.Errorf("adaptive recipe has empty name")
 			}
 			if r.Dir == "" {
-				t.Errorf("greeter recipe has empty dir")
+				t.Errorf("adaptive recipe has empty dir")
 			}
-			if r.Info.ID != "greeter" {
-				t.Errorf("greeter info.ID = %q, want %q", r.Info.ID, "greeter")
+			if r.Info.ID != "adaptive" {
+				t.Errorf("adaptive info.ID = %q, want %q", r.Info.ID, "adaptive")
 			}
 		}
 	}
 	if !found {
-		t.Errorf("ScanCategory(recommended) did not find greeter")
+		t.Errorf("ScanCategory(recommended) did not find adaptive")
 	}
 }
 
@@ -121,7 +121,7 @@ func TestScanCategory_Intrinsic(t *testing.T) {
 	for _, r := range recipes {
 		ids[r.ID] = true
 	}
-	for _, want := range []string{"adaptive", "plain"} {
+	for _, want := range []string{"greeter", "plain"} {
 		if !ids[want] {
 			t.Errorf("ScanCategory(intrinsic) missing %q", want)
 		}
@@ -143,14 +143,14 @@ func TestScanCategory_NoLangFilter(t *testing.T) {
 			ids[r.ID] = true
 		}
 		// Same recipe IDs regardless of lang — no more -zh / -wen suffixes.
-		if !ids["adaptive"] {
-			t.Errorf("ScanCategory(intrinsic, %q) missing adaptive", lang)
+		if !ids["greeter"] {
+			t.Errorf("ScanCategory(intrinsic, %q) missing greeter", lang)
 		}
 		if !ids["plain"] {
 			t.Errorf("ScanCategory(intrinsic, %q) missing plain", lang)
 		}
 		for id := range ids {
-			if id == "adaptive-zh" || id == "adaptive-wen" || id == "plain-zh" || id == "plain-wen" {
+			if id == "greeter-zh" || id == "greeter-wen" || id == "plain-zh" || id == "plain-wen" {
 				t.Errorf("ScanCategory(intrinsic, %q) returned legacy-suffix ID %q", lang, id)
 			}
 		}

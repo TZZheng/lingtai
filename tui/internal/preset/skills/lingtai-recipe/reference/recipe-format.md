@@ -212,7 +212,7 @@ Injected into the orchestrator's system prompt on every turn. The persistent pla
 **Rules:**
 - **No placeholders** — this is static text, validated.
 - Keep it focused — every token counts because it's on every turn.
-- Reference skills by name if the recipe ships a library, and tell the agent to **invoke** them (e.g. `library invoke <name>`), not just that they exist.
+- Reference skills by name if the recipe ships a library, and tell the agent to **load/read** them from the skills catalog (e.g. `skills({"action":"info"})` then `read` the relevant `SKILL.md`), not just that they exist.
 - Use second-person address ("You are X. You should do Y.") — this is a system-prompt-like instruction, not narration.
 - If the recipe expects the agent to wait for a cue before doing something high-stakes (a live demo, a destructive operation), say so explicitly: "DO NOT begin X until the human says 'go'."
 
@@ -221,7 +221,7 @@ Injected into the orchestrator's system prompt on every turn. The persistent pla
 **Good comment.md (clear instructions):**
 ```
 You are the main orchestrator for the PKU demo. Your first
-action when waking is `library invoke lingtai-demo-pku` —
+action when waking is to load the `lingtai-demo-pku` skill from the skills catalog —
 that loads the full performance script. Do not begin the
 demo proper until the human gives an explicit cue ("开始",
 "go", or similar). Until then, send a brief readiness

@@ -182,7 +182,7 @@ CustomAgent(Agent)     — 汝之领域逻辑
 <td>
 
 `psyche` — 心印（进化之身份）
-`library` — 藏经（知识归档）
+`knowledge` — 藏识（长期知识归档）
 `email` — 书信（完整信箱）
 
 </td>

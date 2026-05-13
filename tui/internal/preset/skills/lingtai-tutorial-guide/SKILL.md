@@ -144,7 +144,7 @@ This is the most important concept in the entire tutorial.
 
 **The molt ritual:**
 
-1. Tend the four durable stores (identity, pad, codex, library).
+1. Tend the four durable stores (identity, pad, knowledge, skills).
 2. Write a "charge" — a briefing to the next self covering: what you're working on, what's done, what remains, who to contact, which codex entries to load, which skills to invoke.
 3. Trigger the molt. The conversation vanishes; the charge becomes the first thing the new self sees.
 
@@ -195,10 +195,10 @@ Keyboard shortcuts: explain ctrl+o (three verbose modes: off → verbose → ext
 
 ## Lesson 11: Addons — External Connections
 
-**Discover available addons dynamically** — use `library({"action": "info"})` to get a full catalog of available skills, then look for addon setup skills following the naming pattern `lingtai-*-setup`. List whatever you find and ask the human which ones interest them.
+**Discover available addons dynamically** — use `skills({"action": "info"})` to get a full catalog of available skills, then look for addon setup skills following the naming pattern `lingtai-*-setup`. List whatever you find and ask the human which ones interest them.
 
 For each addon the human wants to set up:
-1. Use `library()` to find and read the setup skill's SKILL.md
+1. Use `skills()` to find and read the setup skill's SKILL.md
 2. Follow its instructions exactly — do not hardcode setup steps
 
 Key concepts to teach:

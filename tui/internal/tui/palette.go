@@ -62,7 +62,6 @@ func DefaultCommands() []Command {
 		{Name: "skills", Description: "palette.skills", Detail: "cmd.skills"},
 		{Name: "knowledge", Description: "palette.knowledge", Detail: "cmd.knowledge"},
 		{Name: "insights", Description: "palette.insights", Detail: "cmd.insights"},
-		{Name: "library", Description: "palette.library", Detail: "cmd.library"},
 		{Name: "system", Description: "palette.system", Detail: "cmd.system"},
 		{Name: "mailbox", Description: "palette.mailbox", Detail: "cmd.mailbox"},
 		{Name: "presets", Description: "palette.presets", Detail: "cmd.presets"},

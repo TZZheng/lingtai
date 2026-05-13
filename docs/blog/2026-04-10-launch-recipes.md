@@ -25,7 +25,7 @@ my-recipe/
   recipe.json             # name and description
   greet.md                # first message to new users
   comment.md              # persistent behavioral instructions
-  skills/                 # capabilities that travel with the recipe
+  <library_name>/          # optional skill library sibling declared in recipe.json
     research-guide/
       en/
         SKILL.md
@@ -41,7 +41,7 @@ Three layers, each doing something different:
 
 **`comment.md`** is the ongoing playbook. It's injected into the orchestrator's system prompt on every turn. Not a one-time greeting — a permanent behavioral constraint. "Walk users through these topics in order." "Delegate citation questions to citation-agent." "Be patient." This is where the culture lives.
 
-**`skills/`** is the capability layer. Skills are markdown files (SKILL.md) that agents load on demand. A research recipe might ship skills for structured note-taking, citation management, and literature review. A coding recipe might ship skills for PR workflow and TDD. The skills travel with the recipe — symlinked into `.lingtai/.skills/` automatically on TUI startup.
+**A recipe skill library** is the capability layer. Skills are markdown files (SKILL.md) that agents load on demand. A research recipe might ship skills for structured note-taking, citation management, and literature review. A coding recipe might ship skills for PR workflow and TDD. The skills travel with the recipe as a sibling library folder and are registered into each agent's `skills.paths` during recipe apply.
 
 ## Five bundled recipes
 
@@ -83,14 +83,14 @@ The most interesting part of the recipe system is skills. Before recipes could c
 
 Now, `comment.md` can be short: "You have recipe skills available — consult them when appropriate." The heavy content moves to skills that agents load on demand. A 90-line adaptive discovery playbook becomes a 20-line comment plus two focused skills.
 
-Recipe skills are symlinked, not copied. The TUI creates symlinks from `.lingtai/.skills/` to the recipe's skill directories on every startup. This means:
+Recipe skills are registered through `skills.paths`. The TUI copies the recipe's sibling skill library into the project and appends its relative path to each agent's init.json during recipe apply. This means:
 
 - **Single source of truth.** The recipe directory is the canonical location. No sync drift.
 - **All recipes' skills coexist.** Switching recipes only changes greet and comment — skills from all recipes remain available. You don't lose capabilities by changing your greeting.
 - **Collision detection.** If two recipes ship a skill with the same name, the first one wins and a warning is printed. Bundled recipes always take priority.
 - **Stale cleanup.** Broken symlinks (from deleted recipe directories) are automatically pruned on startup.
 
-The naming convention is `<recipe>-<skill>[-<lang>]`. A skill called `research-guide` from a recipe called `openclaw` in English becomes `.lingtai/.skills/openclaw-research-guide-en/` — a symlink pointing to the recipe's `skills/research-guide/en/` directory.
+The naming convention is `<recipe>-<skill>[-<lang>]`. A skill called `research-guide` from a recipe library becomes `<library_name>/research-guide/SKILL.md` and is discovered through the skills catalog.
 
 ## i18n
 

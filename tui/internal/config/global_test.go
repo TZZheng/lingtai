@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -105,4 +107,24 @@ func TestLoadConfig_LegacyMigrationPreservesNewEntry(t *testing.T) {
 	}
 }
 
+func TestDefaultTUIConfig_DisablesInsights(t *testing.T) {
+	cfg := DefaultTUIConfig()
+	if cfg.Insights {
+		t.Fatal("DefaultTUIConfig().Insights = true, want false")
+	}
+}
 
+func TestLoadTUIConfig_MissingOrAbsentInsightsDisablesInsights(t *testing.T) {
+	dir := t.TempDir()
+	if cfg := LoadTUIConfig(dir); cfg.Insights {
+		t.Fatal("missing tui_config.json enabled insights; want false")
+	}
+
+	payload := []byte(`{"language":"en","mail_page_size":100}`)
+	if err := os.WriteFile(filepath.Join(dir, "tui_config.json"), payload, 0o644); err != nil {
+		t.Fatalf("write tui_config.json: %v", err)
+	}
+	if cfg := LoadTUIConfig(dir); cfg.Insights {
+		t.Fatal("tui_config.json without insights enabled insights; want false")
+	}
+}

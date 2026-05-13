@@ -23,7 +23,7 @@ HTTP server for `lingtai-portal`: serves the embedded React SPA on `/` and a JSO
 - **`handlers.go:93-136`** — `AppendTopology(path, network)` / `AppendTopologyAt`. Writes one JSONL line `{"t":<unix_ms>,"net":<network>}`. Normalises nil slices to `[]`. Opens the file with `O_APPEND`; creates parent dirs on first write.
 - **`handlers.go:140-159`** — `NewProgressHandler(baseDir)`. `GET /api/topology/progress` — reads `reconstruct.progress` (`"N/M"` format), returns `{"current":N,"total":M}` or `{}`.
 
-### Replay (`replay.go`, 655 lines)
+### Replay (`replay.go`, 709 lines)
 
 - **`replay.go:18-56`** — Wire types: `ReplayChunk` (delta-encoded hour range), `ReplayFrame` (keyframe or delta), `FrameDelta` (only-changed fields), `ChunkInfo` (manifest entry), `ReplayManifest` (tape bounds + chunk list).
 - **`replay.go:60-87`** — `deltaEncode(frames, keyframeInterval)`. Converts `[]TapeFrame` into a `ReplayChunk` with full keyframes every N frames and `FrameDelta` in between.
@@ -47,7 +47,7 @@ HTTP server for `lingtai-portal`: serves the embedded React SPA on `/` and a JSO
 ## Composition
 
 - **Parent:** `portal/internal/`. Sibling packages: `fs/`, `migrate/`.
-- **Files:** `server.go` (~204 lines), `handlers.go` (~175 lines), `replay.go` (~655 lines), plus `*_test.go` files.
+- **Files:** `server.go` (~204 lines), `handlers.go` (~175 lines), `replay.go` (~709 lines), plus `*_test.go` files.
 - **No sub-packages.** All API logic is in this flat package.
 
 ## State

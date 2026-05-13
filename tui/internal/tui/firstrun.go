@@ -68,7 +68,7 @@ const (
 	stepCapabilities
 	stepAgentPresets // pick default + multi-toggle allowed
 	stepAgentNameDir
-	stepRecipe            // picks one of 5 recipes (greeter, plain, adaptive, tutorial, custom)
+	stepRecipe            // picks a bundled/agora/custom recipe (adaptive, greeter, plain, tutorial, custom)
 	stepRecipeSwapConfirm // mid-life only — confirms recipe change (Task 9 wires this)
 	stepPropagate         // rehydration only — runs after orchestrator save, before launch
 	stepLaunching
