@@ -57,7 +57,7 @@ The orchestrator hand-codes only in narrow cases: emergency hotfixes when daemon
 
 Before planning any broad LingTai dev work, run — or dispatch — an org-wide **portfolio sweep**:
 
-- Use the `lingtai-repo-watch` skill, or a read-only `gh` org sweep across `Lingtai-AI/*`, to enumerate open issues and PRs.
+- Run a read-only `gh` org sweep across `Lingtai-AI/*` to enumerate open issues and PRs.
 - Summarize: stale items, unreviewed PRs, items relevant to the planned work, and items that conflict with what you are about to do.
 - Let the current PR/issue surface guide which pieces to pick up, defer, or coordinate around.
 - Keep the sweep **read-only**. It informs planning; it does not file new issues or comment on PRs as a side effect.
