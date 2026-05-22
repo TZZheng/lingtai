@@ -246,6 +246,44 @@ func (m *MailModel) syncViewportHeight() bool {
 	return true
 }
 
+func (m *MailModel) inputRegionBounds() (start, end int) {
+	if !m.ready {
+		return -1, -1
+	}
+	paletteLines := 0
+	if m.input.IsPaletteActive() {
+		paletteLines = m.palette.LineCount()
+	}
+	topBannerLines := 0
+	if m.hasMoreOlder() {
+		topBannerLines = 1
+	}
+	bottomBannerLines := 0
+	if m.loadedExtra > 0 {
+		bottomBannerLines = 1
+	}
+	start = 2 + topBannerLines + m.viewport.Height() + bottomBannerLines + 1 + paletteLines
+	end = start + m.input.LineCount() + 1 // input rows plus border line
+	return start, end
+}
+
+func (m *MailModel) mouseInInputRegion(msg tea.MouseWheelMsg) bool {
+	start, end := m.inputRegionBounds()
+	return start >= 0 && msg.Y >= start && msg.Y < end
+}
+
+func (m *MailModel) scrollInputByWheel(msg tea.MouseWheelMsg) bool {
+	switch msg.Button {
+	case tea.MouseWheelUp:
+		m.input.PageUp()
+		return true
+	case tea.MouseWheelDown:
+		m.input.PageDown()
+		return true
+	}
+	return false
+}
+
 // bannerLineCount returns the total lines reserved for top and bottom banners.
 func (m *MailModel) bannerLineCount() int {
 	n := 0
@@ -477,7 +515,11 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.MouseWheelMsg:
-		// Forward scroll wheel events to viewport
+		if m.ready && m.mouseInInputRegion(msg) && m.scrollInputByWheel(msg) {
+			m.syncViewportHeight()
+			return m, nil
+		}
+		// Forward scroll wheel events outside the input box to the chat viewport.
 		if m.ready {
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
@@ -623,10 +665,13 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 
 	case EditorDoneMsg:
 		m.pendingMessage = msg.Text
-		firstLine := strings.SplitAfterN(msg.Text, "\n", 2)[0]
-		m.input.SetValue(firstLine)
-		// Refresh viewport after external editor
-		return m, m.refreshMail
+		m.input.SetValue(msg.Text)
+		m.syncViewportHeight()
+		m.maybeShowEditorHint()
+		// Refresh viewport and force a full repaint after the terminal returns from
+		// the external editor; editors such as vim can leave the alt screen visually
+		// stale until Bubble Tea draws a clean frame.
+		return m, tea.Batch(m.refreshMail, tea.ClearScreen)
 
 	case PaletteSelectMsg:
 		m.input.Reset()
@@ -753,6 +798,12 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			return m, nil
 
 		case "pgup", "pgdown":
+			if msg.String() == "pgup" && m.input.PageUp() {
+				return m, nil
+			}
+			if msg.String() == "pgdown" && m.input.PageDown() {
+				return m, nil
+			}
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
 			return m, cmd
