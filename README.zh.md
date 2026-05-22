@@ -17,6 +17,7 @@
 [![License](https://img.shields.io/github/license/Lingtai-AI/lingtai?color=%237dab8f)](LICENSE)
 [![Kernel](https://img.shields.io/badge/内核-lingtai--kernel-%237dab8f)](https://github.com/Lingtai-AI/lingtai-kernel)
 [![Blog](https://img.shields.io/badge/博客-lingtai.ai-%23d4a853)](https://lingtai.ai)
+[![Discord](https://img.shields.io/badge/discord-加入-%235865F2?logo=discord&logoColor=white)](https://discord.gg/cMchjXpg)
 
 </div>
 
