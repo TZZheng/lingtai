@@ -21,6 +21,8 @@ type OpenEditorMsg struct {
 	Text string
 }
 
+const defaultInputMaxHeight = 6
+
 // InputModel wraps a textarea with slash-command palette detection.
 // Enter sends the message (via SendMsg). Ctrl+J inserts a newline.
 type InputModel struct {
@@ -48,7 +50,7 @@ func NewInputModel(humanDir string) InputModel {
 	// Let the textarea soft-wrap and auto-grow instead of inserting hard newlines.
 	ti.DynamicHeight = true
 	ti.MinHeight = 1
-	ti.MaxHeight = 6
+	ti.MaxHeight = defaultInputMaxHeight
 
 	m := InputModel{
 		textarea:   ti,
@@ -251,6 +253,21 @@ func (m *InputModel) SetWidth(w int) {
 	if w > 10 {
 		m.textarea.SetWidth(w - 10)
 	}
+}
+
+func (m *InputModel) SetMaxHeight(h int) {
+	if h < m.textarea.MinHeight {
+		h = m.textarea.MinHeight
+	}
+	m.textarea.MaxHeight = h
+}
+
+func (m InputModel) MaxHeight() int {
+	return m.textarea.MaxHeight
+}
+
+func (m InputModel) AtMaxHeight() bool {
+	return m.textarea.Height() >= m.textarea.MaxHeight
 }
 
 func (m *InputModel) historyPath() string {

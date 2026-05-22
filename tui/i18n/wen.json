@@ -134,6 +134,7 @@
   "mail.cpr_all_with_failures": "已苏 %d 灵；%d 灵不就：%s",
   "mail.lang_moved": "器灵言已移至 /settings。请于彼处改之，后 /refresh。",
   "mail.launch_failed": "启灵失败：%s",
+  "mail.editor_hint": "输入框已满，按 ctrl+e 以 vim/编辑器续写。",
   "mail.no_messages": "暂无书信，候邮中...",
   "mail.load_more": "▲ 尚有 %d 旧书 — ctrl+u 载之",
   "mail.collapse": "▼ ctrl+d 收至近书",

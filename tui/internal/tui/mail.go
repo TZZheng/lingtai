@@ -21,6 +21,12 @@ import (
 // unlimitedPageSize is the effective page size when the user selects "unlimited".
 const unlimitedPageSize = 999999
 
+const (
+	mailInputMinMaxHeight    = 3
+	mailInputHardMaxHeight   = 14
+	mailInputViewportReserve = 8
+)
+
 // ChatMessage represents a single message in the chat stream.
 type ChatMessage struct {
 	From        string
@@ -104,45 +110,45 @@ var thinkingQuotesMap = map[string][]string{
 }
 
 type MailModel struct {
-	humanDir         string
-	humanAddr        string
-	orchestrator     string // 本我 directory path (full path under .lingtai/)
-	orchAddr         string // 本我 address (from .agent.json)
-	orchName         string // 本我 agent name (true name)
-	orchNickname     string // 本我 nickname (display name override)
-	baseDir          string // .lingtai/ directory
-	verbose          verboseLevel
-	messages         []ChatMessage // derived from cache on each refresh
-	cache            fs.MailCache  // incremental mail cache
-	pageSize         int           // max messages shown (from settings)
-	loadedExtra      int           // additional older messages loaded via ctrl+u
-	viewport         viewport.Model
-	input            InputModel
-	palette          PaletteModel
-	width            int
-	height           int
-	ready            bool
-	pollRate         time.Duration // refresh interval
-	orchAlive        bool
-	orchState        string    // agent state from .agent.json
-	statusFlash      string    // transient status message shown in status bar
-	statusExpiry     time.Time // when to clear the flash
-	lastInputLines   int
-	lastPaletteLines int
-	lastBannerLines  int
-	pendingMessage   string // full text from editor, sent on Enter
-	globalDir      string // ~/.lingtai-tui/
-	wasActive      bool   // true if previous refresh was ACTIVE
-	quoteIdx       int    // which quote to show (advances on each ACTIVE transition)
-	pulseTick      int    // pulse animation counter while ACTIVE
-	inquiryState   string    // "", "sent", "taken" — tracks /btw lifecycle
-	insightPending bool      // true when waiting for 5s insight delay
-	insightAt      time.Time // when to fire the auto-insight
-	dismissedInsights map[string]bool // dismissed insight timestamps
-	showEditorWarn  bool   // one-time vim warning overlay
-	editorWarnText  string // text to pass to editor after warning
-	insightsEnabled bool   // from settings — show insight events
-	sessionCache   *fs.SessionCache // append-only session log
+	humanDir          string
+	humanAddr         string
+	orchestrator      string // 本我 directory path (full path under .lingtai/)
+	orchAddr          string // 本我 address (from .agent.json)
+	orchName          string // 本我 agent name (true name)
+	orchNickname      string // 本我 nickname (display name override)
+	baseDir           string // .lingtai/ directory
+	verbose           verboseLevel
+	messages          []ChatMessage // derived from cache on each refresh
+	cache             fs.MailCache  // incremental mail cache
+	pageSize          int           // max messages shown (from settings)
+	loadedExtra       int           // additional older messages loaded via ctrl+u
+	viewport          viewport.Model
+	input             InputModel
+	palette           PaletteModel
+	width             int
+	height            int
+	ready             bool
+	pollRate          time.Duration // refresh interval
+	orchAlive         bool
+	orchState         string    // agent state from .agent.json
+	statusFlash       string    // transient status message shown in status bar
+	statusExpiry      time.Time // when to clear the flash
+	lastInputLines    int
+	lastPaletteLines  int
+	lastBannerLines   int
+	pendingMessage    string           // full text from editor, sent on Enter
+	globalDir         string           // ~/.lingtai-tui/
+	wasActive         bool             // true if previous refresh was ACTIVE
+	quoteIdx          int              // which quote to show (advances on each ACTIVE transition)
+	pulseTick         int              // pulse animation counter while ACTIVE
+	inquiryState      string           // "", "sent", "taken" — tracks /btw lifecycle
+	insightPending    bool             // true when waiting for 5s insight delay
+	insightAt         time.Time        // when to fire the auto-insight
+	dismissedInsights map[string]bool  // dismissed insight timestamps
+	showEditorWarn    bool             // one-time vim warning overlay
+	editorWarnText    string           // text to pass to editor after warning
+	insightsEnabled   bool             // from settings — show insight events
+	sessionCache      *fs.SessionCache // append-only session log
 }
 
 func NewMailModel(humanDir, humanAddr, baseDir, orchDir, orchName string, pageSize int, globalDir, lang string, insights bool) MailModel {
@@ -160,20 +166,20 @@ func NewMailModel(humanDir, humanAddr, baseDir, orchDir, orchName string, pageSi
 		pageSize = unlimitedPageSize
 	}
 	m := MailModel{
-		humanDir:     humanDir,
-		humanAddr:    humanAddr,
-		baseDir:      baseDir,
-		orchestrator: orchDir,
-		orchAddr:     orchAddr,
-		orchName:     orchName,
-		input:        input,
-		palette:      palette,
-		pollRate:     1 * time.Second,
-		cache:        fs.NewMailCache(humanDir),
-		pageSize:     pageSize,
-		globalDir:      globalDir,
+		humanDir:          humanDir,
+		humanAddr:         humanAddr,
+		baseDir:           baseDir,
+		orchestrator:      orchDir,
+		orchAddr:          orchAddr,
+		orchName:          orchName,
+		input:             input,
+		palette:           palette,
+		pollRate:          1 * time.Second,
+		cache:             fs.NewMailCache(humanDir),
+		pageSize:          pageSize,
+		globalDir:         globalDir,
 		quoteIdx:          -1,
-		insightsEnabled:    insights,
+		insightsEnabled:   insights,
 		dismissedInsights: make(map[string]bool),
 		sessionCache:      fs.NewSessionCache(humanDir, filepath.Dir(baseDir)),
 	}
@@ -186,12 +192,38 @@ func NewMailModel(humanDir, humanAddr, baseDir, orchDir, orchName string, pageSi
 	return m
 }
 
+func adaptiveInputMaxHeight(windowHeight int) int {
+	maxHeight := windowHeight / 3
+	if maxHeight < mailInputMinMaxHeight {
+		maxHeight = mailInputMinMaxHeight
+	}
+	if maxHeight > mailInputHardMaxHeight {
+		maxHeight = mailInputHardMaxHeight
+	}
+	if reserveCap := windowHeight - mailInputViewportReserve; reserveCap < maxHeight {
+		maxHeight = reserveCap
+	}
+	if maxHeight < 1 {
+		maxHeight = 1
+	}
+	return maxHeight
+}
+
+func (m *MailModel) updateInputMaxHeight() {
+	if m.height <= 0 {
+		m.input.SetMaxHeight(defaultInputMaxHeight)
+		return
+	}
+	m.input.SetMaxHeight(adaptiveInputMaxHeight(m.height))
+}
+
 // syncViewportHeight recalculates viewport height from current input/palette/banner size.
 // Returns true if the height actually changed.
 func (m *MailModel) syncViewportHeight() bool {
 	if !m.ready {
 		return false
 	}
+	m.updateInputMaxHeight()
 	inputLines := m.input.LineCount()
 	paletteLines := 0
 	if m.input.IsPaletteActive() {
@@ -457,6 +489,7 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.input.SetWidth(msg.Width)
+		m.updateInputMaxHeight()
 		if !m.ready {
 			inputLines := m.input.LineCount()
 			// sep(1) + input(N) + border(1) + status(1)
@@ -650,6 +683,7 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 				var cmd tea.Cmd
 				m.input, cmd = m.input.Update(msg)
 				m.syncViewportHeight()
+				m.maybeShowEditorHint()
 				// Extract filter from input (text after "/")
 				val := m.input.Value()
 				if len(val) > 1 {
@@ -730,6 +764,7 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		if m.syncViewportHeight() && m.viewport.AtBottom() {
 			m.viewport.GotoBottom()
 		}
+		m.maybeShowEditorHint()
 		// Check if slash was typed
 		if m.input.IsPaletteActive() {
 			val := m.input.Value()
@@ -742,9 +777,15 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		return m, cmd
 	}
 
-	// Forward all other messages (including textinput blink) to input
+	// Forward all other messages (including textarea paste and cursor blink) to input.
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
+	if _, ok := msg.(tea.PasteMsg); ok {
+		if m.syncViewportHeight() && m.viewport.AtBottom() {
+			m.viewport.GotoBottom()
+		}
+		m.maybeShowEditorHint()
+	}
 	if cmd != nil {
 		cmds = append(cmds, cmd)
 	}
@@ -999,6 +1040,13 @@ func (m MailModel) humanName() string {
 func (m *MailModel) AddSystemMessage(body string) {
 	m.statusFlash = body
 	m.statusExpiry = time.Now().Add(5 * time.Second)
+}
+
+func (m *MailModel) maybeShowEditorHint() {
+	if strings.TrimSpace(m.input.Value()) == "" || !m.input.AtMaxHeight() {
+		return
+	}
+	m.AddSystemMessage(i18n.T("mail.editor_hint"))
 }
 
 func fileExists(path string) bool {
