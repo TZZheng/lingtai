@@ -10,7 +10,7 @@ description: >
   part of LingTai, set up a dev environment, understand how the pieces fit
   together, develop a new MCP addon, or debug/troubleshoot a running agent.
   Do NOT use for using LingTai as an end user (use the tutorial-guide skill).
-version: 2.0.0
+version: 2.0.1
 tags: [python, golang, typescript, agent, architecture, contributing, reference, mcp, debug, troubleshoot, security]
 ---
 
@@ -155,6 +155,7 @@ The 4 first-party MCP addons are:
 5. **Three-locale rule.** Adding an i18n key means updating all three of `en.json`, `zh.json`, `wen.json` in both `tui/i18n/` and (where applicable) `portal/i18n/`.
 6. **Filesystem-only IPC.** Any new cross-process communication must follow the file-based pattern.
 7. **Skill authoring for reusable procedures.** If your change creates a reusable workflow, write it as a skill.
+8. **Every PR ships a human-facing HTML explainer by default.** Write a single self-contained `.html` (inline CSS, no remote assets) under `reports/` in the worktree and hand the human its absolute path *before* asking for review or merge. The only exception is a strictly one-line docs/chore PR with an explicit "no report needed" waiver from the human. See `reference/contributing.md` for the file naming and the required sections.
 
 For the full contributing guide (orchestrator/daemon discipline, portfolio sweep, build commands, gotchas, anatomy maintenance, migration contract): read `reference/contributing.md`.
 
