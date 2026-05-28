@@ -25,6 +25,7 @@ Delegate code work to [Claude Code](https://docs.anthropic.com/en/docs/claude-co
 
 ```bash
 env \
+  -u CLAUDE_CODE_OAUTH_TOKEN \
   -u ANTHROPIC_API_KEY \
   -u ANTHROPIC_AUTH_TOKEN \
   -u ANTHROPIC_BASE_URL \
@@ -35,7 +36,18 @@ env \
 
 This runs Claude Code in non-interactive mode (`-p` = print and exit), skipping permission checks for automation.
 
-> **Why the `env -u …` prefix?** If `ANTHROPIC_API_KEY` (or related `ANTHROPIC_*` variables) is set in the agent environment, the `claude` CLI **prefers the API-key billing path over the Claude Max subscription/OAuth token** — even when `CLAUDE_CODE_OAUTH_TOKEN` is also present. That path can fail with `Credit balance is too low` and bills the API key instead of using the subscription. Unsetting the variables for the child process forces Claude Code onto the OAuth/subscription path. If you've confirmed your environment has no `ANTHROPIC_*` overrides, you can drop the `env -u …` prefix; when in doubt, keep it. **Never echo the variable values while diagnosing — they are secrets.**
+### Weekly-limit smoke test
+
+If `claude` reports `You've hit your weekly limit` from inside LingTai but the human recently refreshed Claude Code OAuth credentials, first rule out a stale inherited env token before concluding the subscription is truly exhausted:
+
+```bash
+# Do not print token values. This only removes the stale override for the child.
+env -u CLAUDE_CODE_OAUTH_TOKEN claude -p 'Reply exactly OK' --allowedTools Read -c
+```
+
+If this succeeds while plain `claude -p ...` fails, use the sanitized `env -u ...` wrapper above (and prefer the daemon `claude-code` backend, which strips the override automatically).
+
+> **Why the `env -u …` prefix?** If `ANTHROPIC_API_KEY` (or related `ANTHROPIC_*` variables) is set in the agent environment, the `claude` CLI **prefers the API-key billing path over the Claude Max subscription/OAuth token**. That path can fail with `Credit balance is too low` and bills the API key instead of using the subscription. Separately, a stale inherited `CLAUDE_CODE_OAUTH_TOKEN` can override a refreshed `~/.claude/.credentials.json` and make Claude Code falsely report `You've hit your weekly limit`. Unsetting these variables for the child process forces Claude Code onto the current first-party OAuth/subscription credentials. If you've confirmed your environment has no auth overrides, you can drop the `env -u …` prefix; when in doubt, keep it. **Never echo the variable values while diagnosing — they are secrets.**
 
 ## CLI vs Daemon — Which to Use
 
