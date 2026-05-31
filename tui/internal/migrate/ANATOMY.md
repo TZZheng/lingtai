@@ -40,7 +40,7 @@ Each migration file exports one `func migrateXxx(lingtaiDir string) error`. m002
 
 - **Parent:** `tui/internal/` (no own anatomy)
 - **Subfolders:** none — flat package, one file per migration
-- **Siblings:** `tui/internal/preset/ANATOMY.md` — m029/m030 reference preset directory layout; `tui/internal/globalmigrate/` — per-machine analogue under `~/.lingtai-tui/`
+- **Siblings:** `tui/internal/preset/ANATOMY.md` — m029/m030 reference preset directory layout; `tui/internal/globalmigrate/` — per-machine analogue under `~/.lingtai-tui/`; `tui/internal/processscan/` — m036 reuses ps-based running-agent detection before attempting offline SQLite rebuilds
 
 ## State
 

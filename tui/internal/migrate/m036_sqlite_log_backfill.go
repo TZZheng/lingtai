@@ -16,6 +16,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/anthropics/lingtai-tui/internal/config"
+	"github.com/anthropics/lingtai-tui/internal/processscan"
 )
 
 // sqliteBackfillCandidate is a stopped agent whose historical JSONL event log
@@ -31,6 +32,10 @@ type sqliteBackfillCandidate struct {
 // migrateSQLiteLogBackfill is a one-time, optional command-line migration for
 // the kernel's derived SQLite event-log sidecar. JSONL remains the source of
 // truth, so declining or failing this migration must not prevent normal use.
+// Returning nil intentionally stamps the project migration version even when the
+// user declines, stdin is non-interactive, or the existing Python runtime cannot
+// inspect/rebuild: this is an offer-at-most-once startup prompt, not a recurring
+// health check. The manual rebuild hint below keeps the skipped path recoverable.
 func migrateSQLiteLogBackfill(lingtaiDir string) error {
 	if !sqliteHasAgentEvents(lingtaiDir) {
 		return nil
@@ -40,15 +45,14 @@ func migrateSQLiteLogBackfill(lingtaiDir string) error {
 		return nil
 	}
 	if config.NeedsVenv(globalDir) {
-		fmt.Println("Setting up Python environment for SQLite log backfill check...")
-	}
-	if _, err := config.EnsureRuntime(globalDir); err != nil {
-		fmt.Printf("warning: could not prepare Python runtime for SQLite log backfill: %v\n", err)
-		fmt.Println("Skipping this optional backfill; LingTai will continue to use JSONL logs normally.")
+		fmt.Println("SQLite log backfill migration: Python runtime is not ready yet; skipping optional historical backfill for this one-time migration.")
+		sqlitePrintManualBackfillHint()
 		return nil
 	}
 	python := config.LingtaiCmd(globalDir)
 	if !sqliteRuntimeSupportsLogCLI(python) {
+		fmt.Println("SQLite log backfill migration: installed Python runtime does not expose `lingtai log`; skipping optional historical backfill.")
+		sqlitePrintManualBackfillHint()
 		return nil
 	}
 
@@ -65,6 +69,7 @@ func migrateSQLiteLogBackfill(lingtaiDir string) error {
 	}
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		fmt.Printf("SQLite log backfill available for %d stopped agent(s), but stdin is not interactive; continuing without backfill.\n", len(candidates))
+		sqlitePrintManualBackfillHint()
 		return nil
 	}
 
@@ -93,6 +98,11 @@ func migrateSQLiteLogBackfill(lingtaiDir string) error {
 
 func sqliteRuntimeSupportsLogCLI(python string) bool {
 	return exec.Command(python, "-m", "lingtai", "log", "--help").Run() == nil
+}
+
+func sqlitePrintManualBackfillHint() {
+	fmt.Println("Skipping is safe and does not affect normal LingTai use: JSONL logs remain the source of truth, and new events still write to SQLite automatically.")
+	fmt.Println("You can backfill historical logs later with: lingtai-agent log rebuild <agent_dir>")
 }
 
 func sqliteHasAgentEvents(lingtaiDir string) bool {
@@ -163,7 +173,7 @@ func sqliteDiscoverBackfillCandidates(python, lingtaiDir string) ([]sqliteBackfi
 		if err != nil || info.Size() == 0 {
 			continue
 		}
-		if sqliteIsAgentRunning(agentDir) {
+		if processscan.IsAgentRunning(agentDir) {
 			skippedRunning++
 			continue
 		}
@@ -195,6 +205,8 @@ func sqliteNeedsBackfill(python, agentDir, eventsPath string) (bool, string) {
 		absEvents = eventsPath
 	}
 
+	// The `lingtai log query` CLI accepts a SQL string (not bound parameters), so
+	// quote the local resolved source path using SQLite's single-quote doubling.
 	sql := fmt.Sprintf("SELECT byte_offset, line_no FROM import_cursors WHERE source_file = '%s'", strings.ReplaceAll(absEvents, "'", "''"))
 	cmd := exec.Command(python, "-m", "lingtai", "log", "query", agentDir, sql)
 	out, err := cmd.Output()
@@ -212,28 +224,6 @@ func sqliteNeedsBackfill(python, agentDir, eventsPath string) (bool, string) {
 		return true, "backfill cursor is empty"
 	}
 	return false, ""
-}
-
-func sqliteIsAgentRunning(agentDir string) bool {
-	abs, err := filepath.Abs(agentDir)
-	if err != nil {
-		abs = agentDir
-	}
-	out, err := exec.Command("ps", "-eo", "pid=,command=").Output()
-	if err != nil {
-		return false
-	}
-	needle := "lingtai run " + abs
-	for _, line := range strings.Split(string(out), "\n") {
-		if !strings.Contains(line, "lingtai run") {
-			continue
-		}
-		trimmed := strings.TrimSpace(line)
-		if strings.Contains(trimmed, needle+" ") || strings.HasSuffix(trimmed, needle) {
-			return true
-		}
-	}
-	return false
 }
 
 type sqliteProgressLine struct {
