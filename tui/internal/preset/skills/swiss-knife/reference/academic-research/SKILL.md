@@ -85,6 +85,7 @@ I need astrophysics         → reference/api-nasa-ads.md
 I need high-energy physics  → reference/api-inspire-hep.md
 I need biomedical           → reference/api-europe-pmc.md or api-pubmed.md
 I need to write/compile a paper → reference/pipeline-latex-writing.md
+My empirical draft keeps getting reframed / reviewers "agree" → reference/anti-pattern-text-consistency-vs-data-correspondence.md
 I hit an API error          → reference/error-handling.md
 ```
 
@@ -125,6 +126,7 @@ Each card includes endpoint parameters, runnable code, response shape, rate limi
 - [publisher-page-extraction.md](reference/publisher-page-extraction.md) — Tier-5 manual escape hatch (Nature/APS/AIP/IOP/Cambridge → structured Markdown)
 - [libgen-fallback.md](reference/libgen-fallback.md) — Last-resort PDF source with legal/safety notes
 - [error-handling.md](reference/error-handling.md) — 429 backoff, 403 publisher blocks, timeout patterns
+- [anti-pattern-text-consistency-vs-data-correspondence.md](reference/anti-pattern-text-consistency-vs-data-correspondence.md) — empirical-writing failure mode: prose drifts from the data while reviewer rounds make it more polished. Trigger pattern, re-anchoring steps, detection checklist.
 
 ## Relationship to web-browsing
 
@@ -141,6 +143,7 @@ Each card includes endpoint parameters, runnable code, response shape, rate limi
 - **arXiv enforces HTTPS** — HTTP requests are 301-redirected automatically.
 - **Library Genesis legality varies by jurisdiction** — use is the user's responsibility. Pass `--no-libgen` to opt out.
 - **Publisher-page extraction (Tier 5)** uses Playwright + pandoc; first invocation installs `zhiping0913/Download_paper` from git. Requires Chromium (`playwright install chromium`) and pandoc on `$PATH`. See [reference/publisher-page-extraction.md](reference/publisher-page-extraction.md).
+- **Writing an empirical paper iteratively can drift from the data** — reviewer rounds make prose more polished and internally consistent without verifying it still matches the experiments on disk. Reviewer agreement is text-consistency evidence, not data-correspondence evidence. Anchor every claim to data files/runner code *before* writing, and re-derive (don't just rewrite) when feedback flags confusion. See [reference/anti-pattern-text-consistency-vs-data-correspondence.md](reference/anti-pattern-text-consistency-vs-data-correspondence.md).
 
 ---
 > **Found a bug or issue?** If you encounter any problems with this skill, load the `lingtai-issue-report` skill and follow its instructions to report it.

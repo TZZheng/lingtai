@@ -2,6 +2,17 @@
 
 > Academic paper writing workflow — project setup, compilation, bibliography, figures, debugging, and submission verification. This is a **workflow guide**, not a LaTeX syntax tutorial.
 
+> **Before you write (empirical papers): anchor prose to data first.** For any
+> paper that reports experiments, establish ground-truth correspondence *before*
+> drafting and *again* whenever you reframe a section — list the experiment
+> directories, inspect a real result file's shape, read the runner code, and keep
+> a claim → evidence map. Over many editing/reviewer rounds, prose tends to drift
+> from the data: it gets more polished and internally consistent while quietly
+> ceasing to describe what was actually run, and reviewer agreement won't catch it
+> (it measures text consistency, not data correspondence). When feedback flags a
+> section as confusing, re-derive from the data — don't just rewrite for internal
+> consistency. Full guard: [anti-pattern-text-consistency-vs-data-correspondence.md](anti-pattern-text-consistency-vs-data-correspondence.md).
+
 ---
 
 ## 1. Project Structure
@@ -347,6 +358,7 @@ aspell -t -c main.tex
 
 ## See Also
 
+- [anti-pattern-text-consistency-vs-data-correspondence.md](anti-pattern-text-consistency-vs-data-correspondence.md) — keep an iterated empirical draft anchored to the data; why reviewer agreement doesn't catch drift
 - [pipeline-citation-tracking.md](pipeline-citation-tracking.md) — BibTeX generation from academic APIs
 - [api-crossref.md](api-crossref.md) — BibTeX export via DOI
 - [api-nasa-ads.md](api-nasa-ads.md) — BibTeX export for astrophysics
