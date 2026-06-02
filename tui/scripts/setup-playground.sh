@@ -31,7 +31,7 @@ cat > "$ORCH_DIR/init.json" << INITEOF
     "language": "en",
     "llm": {
       "provider": "minimax",
-      "model": "MiniMax-M2.7-highspeed",
+      "model": "MiniMax-M3",
       "api_key": ${API_KEY:+\"$API_KEY\"}${API_KEY:-null},
       "api_key_env": "MINIMAX_API_KEY",
       "base_url": null

@@ -117,7 +117,16 @@ var capabilityProviderOptions = map[string][]string{
 // new flagship ships, add it (and remove deprecated entries — agents
 // will hit 4xx if they pick a retired model).
 var providerModels = map[string][]string{
-	"minimax":  {"MiniMax-M2.7-highspeed", "MiniMax-M2.7"},
+	// MiniMax: official supported LLM model IDs (API Overview), newest first.
+	// M3 is the current flagship/default; the older M2.x IDs remain supported
+	// and are kept as selectable fallbacks.
+	"minimax": {
+		"MiniMax-M3",
+		"MiniMax-M2.7", "MiniMax-M2.7-highspeed",
+		"MiniMax-M2.5", "MiniMax-M2.5-highspeed",
+		"MiniMax-M2.1", "MiniMax-M2.1-highspeed",
+		"MiniMax-M2",
+	},
 	"zhipu":    {"GLM-5.1", "GLM-5-Turbo", "GLM-4.7", "GLM-4.5-Air"},
 	"mimo":     {"mimo-v2.5", "mimo-v2.5-pro", "mimo-v2-flash"},
 	"deepseek": {"deepseek-v4-flash", "deepseek-v4-pro"},
@@ -138,9 +147,19 @@ var providerModels = map[string][]string{
 // the user isn't blocked from enabling it on a model the editor
 // doesn't catalog.
 var modelHasVision = map[string]bool{
-	// MiniMax: both M2.7 sizes accept images.
-	"MiniMax-M2.7-highspeed": true,
+	// MiniMax: keyed to the official supported LLM model IDs. Only the known
+	// multimodal entries auto-enable vision — M3 (current flagship) and the
+	// M2.7 variants, which prior code treated as image-capable. The older
+	// M2.5/M2.1/M2 IDs are marked false so the editor doesn't auto-enable
+	// vision for them when uncertain.
+	"MiniMax-M3":             true,
 	"MiniMax-M2.7":           true,
+	"MiniMax-M2.7-highspeed": true,
+	"MiniMax-M2.5":           false,
+	"MiniMax-M2.5-highspeed": false,
+	"MiniMax-M2.1":           false,
+	"MiniMax-M2.1-highspeed": false,
+	"MiniMax-M2":             false,
 	// Zhipu coding-plan models — current generation supports vision.
 	"GLM-5.1":     true,
 	"GLM-5-Turbo": true,
@@ -860,7 +879,7 @@ func (m *PresetEditorModel) cycleFocused(dir int) {
 		m.llmMap()["provider"] = newProvider
 		// Reset model to the new provider's first canonical entry when the
 		// current model isn't valid for the new provider. Without this, a
-		// minimax→zhipu switch leaves "MiniMax-M2.7-highspeed" in model
+		// minimax→zhipu switch leaves "MiniMax-M3" in model
 		// and validation passes silently while the kernel later 4xxs.
 		if models, ok := providerModels[newProvider]; ok && len(models) > 0 {
 			currentModel := asString(m.llmMap()["model"])

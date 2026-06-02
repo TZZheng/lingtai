@@ -755,10 +755,10 @@ func minimaxPreset() Preset {
 	}
 	return Preset{
 		Name:        "minimax",
-		Description: PresetDescription{Summary: "MiniMax M2.7 — full multimodal capabilities"},
+		Description: PresetDescription{Summary: "MiniMax M3 — full multimodal capabilities"},
 		Manifest: map[string]interface{}{
 			"llm": map[string]interface{}{
-				"provider": "minimax", "model": "MiniMax-M2.7-highspeed",
+				"provider": "minimax", "model": "MiniMax-M3",
 				"api_key": nil, "api_key_env": "MINIMAX_API_KEY",
 				"base_url": ProviderRegionURLs["minimax"][0].URL,
 			},

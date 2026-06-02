@@ -23,7 +23,7 @@ func testPresetEditorPreset() preset.Preset {
 		Manifest: map[string]interface{}{
 			"llm": map[string]interface{}{
 				"provider":    "minimax",
-				"model":       "MiniMax-M2.7",
+				"model":       "MiniMax-M3",
 				"api_compat":  "openai",
 				"base_url":    "https://api.minimax.io/v1",
 				"api_key_env": "MINIMAX_API_KEY",
