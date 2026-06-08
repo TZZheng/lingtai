@@ -5,7 +5,7 @@ description: >
   full-text PDFs, trace citations, write LaTeX manuscripts.
   **First action for any "get me this paper" request:**
   `python3 <skill-path>/scripts/fetch_paper.py <DOI|arXiv-ID|PMID>` — walks
-  arXiv → Unpaywall → Europe PMC → CORE → publisher-page extraction (Nature/APS/AIP/IOP/Cambridge)
+  arXiv → Unpaywall → Europe PMC → CORE → in-house publisher-page extraction (Nature/APS/AIP/IOP/Cambridge)
   → authorized institutional publisher → LibGen and saves the paper, metadata, and a resumable
   manifest under `papers/{slug}/`.
   Read the body when you need to escape the script: custom query shapes, citation networks,
@@ -41,12 +41,6 @@ python3 <skill-path>/scripts/fetch_paper.py 10.1038/nature12373 --dry-run
 
 # Skip LibGen (e.g. legal-sensitive environment)
 python3 <skill-path>/scripts/fetch_paper.py <id> --no-libgen
-
-# Skip the authorized-publisher probe (off-network / legal-sensitive)
-python3 <skill-path>/scripts/fetch_paper.py <id> --no-institutional
-
-# Most conservative: OA only, no institutional probe, no LibGen
-python3 <skill-path>/scripts/fetch_paper.py <id> --no-institutional --no-libgen
 ```
 
 **Output layout** (idempotent — re-runs skip entries with `status: ok`):
@@ -66,8 +60,8 @@ papers/{first-author-year-firstword}/
 | 2 | Unpaywall | Publisher-blessed gold/green OA |
 | 3 | Europe PMC | Biomedical full-text + PMC mirror |
 | 4 | CORE | Institutional repositories (needs `$CORE_API_KEY`) |
-| 5 | Publisher-page extract | Nature/APS/AIP/IOP/Cambridge → structured Markdown with LaTeX preserved (auto-installs [zhiping0913/Download_paper](https://github.com/zhiping0913/Download_paper) on first use) |
-| 5b | Authorized publisher | **Licensed/institutional access only** — official DOI landing page → same-host publisher PDF → `%PDF-` validation, full provenance. Recovers paywalled-but-subscribed papers without shadow libraries. Never bypasses paywalls or handles credentials. Opt out with `--no-institutional`. See [authorized-publisher-access.md](reference/authorized-publisher-access.md) |
+| 5 | Publisher-page extract | Nature/APS/AIP/IOP/Cambridge → in-house extractor (stdlib + `requests`, no third-party deps). Fetches the **already-accessible** official article / DOI landing page and parses `citation_*` metadata + the article body into structured Markdown. **No paywall/CAPTCHA bypass, no cookies/credentials** — official pages only. A login/paywall page is a clean miss; the ladder then falls through. Opt out with `--no-publisher-extract`. |
+| 5b | Authorized publisher | **Licensed/institutional access only** — official DOI landing page → same-host publisher PDF → `%PDF-` validation, full provenance. Recovers paywalled-but-subscribed papers without shadow libraries. Never bypasses paywalls or handles credentials. Opt out with `--no-institutional`. See [authorized-publisher-access.md](reference/authorized-publisher-access.md). |
 | 6 | LibGen | Last resort; opt out with `--no-libgen` |
 
 **Set `$LINGTAI_RESEARCH_EMAIL` to a real address** before first use — Unpaywall
@@ -88,7 +82,6 @@ I only have keywords        → reference/decision-tree.md → pick API by disci
 I need a citation network   → reference/api-semantic-scholar.md or api-openalex.md
 I need to override the PDF ladder → reference/pipeline-obtain-pdf.md
 Tier-5 publisher-extract failed and I want to retry it manually → reference/publisher-page-extraction.md
-Paper is paywalled but I'm on a licensed network → reference/authorized-publisher-access.md (Tier 5b)
 All OA chains failed        → reference/libgen-fallback.md (last resort)
 I need astrophysics         → reference/api-nasa-ads.md
 I need high-energy physics  → reference/api-inspire-hep.md
@@ -133,7 +126,6 @@ Each card includes endpoint parameters, runnable code, response shape, rate limi
 ### Standalone references
 
 - [publisher-page-extraction.md](reference/publisher-page-extraction.md) — Tier-5 manual escape hatch (Nature/APS/AIP/IOP/Cambridge → structured Markdown)
-- [authorized-publisher-access.md](reference/authorized-publisher-access.md) — Tier-5b authorized institutional publisher PDF access: official DOI landing → same-host PDF → validation, with hard policy boundaries (no paywall bypass, no credential/cookie handling)
 - [libgen-fallback.md](reference/libgen-fallback.md) — Last-resort PDF source with legal/safety notes
 - [error-handling.md](reference/error-handling.md) — 429 backoff, 403 publisher blocks, timeout patterns
 - [anti-pattern-text-consistency-vs-data-correspondence.md](reference/anti-pattern-text-consistency-vs-data-correspondence.md) — empirical-writing failure mode: prose drifts from the data while reviewer rounds make it more polished. Trigger pattern, re-anchoring steps, detection checklist.
@@ -151,9 +143,9 @@ Each card includes endpoint parameters, runnable code, response shape, rate limi
 - **Semantic Scholar free tier is very tight** (~100 reqs / 5 min). Request a key for any serious citation-network work.
 - **Google Scholar requires a stealth browser** (camoufox or playwright-stealth v2); legacy `playwright_stealth` API does not work.
 - **arXiv enforces HTTPS** — HTTP requests are 301-redirected automatically.
-- **Authorized-publisher tier (5b) only uses access you already have** — it follows the official DOI landing page and grabs a same-host publisher PDF, validating `%PDF-` bytes and Content-Type before saving. It never bypasses paywalls/CAPTCHAs and never reads, stores, or replays cookies/credentials; most institutional access is IP-based, so on a licensed network a plain HTTP GET just works. Off-network it harmlessly misses. Pass `--no-institutional` to disable in legal-sensitive environments. Cookies/auth headers are never written to provenance. See [reference/authorized-publisher-access.md](reference/authorized-publisher-access.md).
 - **Library Genesis legality varies by jurisdiction** — use is the user's responsibility. Pass `--no-libgen` to opt out.
-- **Publisher-page extraction (Tier 5)** uses Playwright + pandoc; first invocation installs `zhiping0913/Download_paper` from git. Requires Chromium (`playwright install chromium`) and pandoc on `$PATH`. See [reference/publisher-page-extraction.md](reference/publisher-page-extraction.md).
+- **Publisher-page extraction (Tier 5) is an in-house, self-contained extractor** — stdlib + `requests`, no third-party dependency and nothing to install (replaces the old broken `zhiping0913/Download_paper` path, issue #136). It fetches the already-accessible official article / DOI landing page and parses `citation_*` metadata + the article body into structured Markdown with a provenance/limitations footer. It performs **no paywall/CAPTCHA bypass and no cookie/credential handling** — official pages only. A login/paywall interstitial, an unsupported DOI prefix, or a page with too little readable text is a clean miss, and the ladder falls through. Skip the tier with `--no-publisher-extract`. The extraction is heuristic (equations/figures/tables may be lost), so treat the artifact as a convenience copy, not a typeset full text. See [reference/publisher-page-extraction.md](reference/publisher-page-extraction.md).
+- **Authorized-publisher tier (5b) only uses access you already have** — it follows the official DOI landing page and grabs a same-host publisher PDF, validating `%PDF-` bytes and Content-Type before saving. It never bypasses paywalls/CAPTCHAs and never reads, stores, or replays cookies/credentials; most institutional access is IP-based, so on a licensed network a plain HTTP GET may work. Off-network it harmlessly misses. Pass `--no-institutional` to disable in legal-sensitive environments. Cookies/auth headers are never written to provenance. See [reference/authorized-publisher-access.md](reference/authorized-publisher-access.md).
 - **Writing an empirical paper iteratively can drift from the data** — reviewer rounds make prose more polished and internally consistent without verifying it still matches the experiments on disk. Reviewer agreement is text-consistency evidence, not data-correspondence evidence. Anchor every claim to data files/runner code *before* writing, and re-derive (don't just rewrite) when feedback flags confusion. See [reference/anti-pattern-text-consistency-vs-data-correspondence.md](reference/anti-pattern-text-consistency-vs-data-correspondence.md).
 
 ---
