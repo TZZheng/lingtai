@@ -6,7 +6,8 @@ description: >
   **First action for any "get me this paper" request:**
   `python3 <skill-path>/scripts/fetch_paper.py <DOI|arXiv-ID|PMID>` — walks
   arXiv → Unpaywall → Europe PMC → CORE → in-house publisher-page extraction (Nature/APS/AIP/IOP/Cambridge)
-  → LibGen and saves the paper, metadata, and a resumable manifest under `papers/{slug}/`.
+  → authorized institutional publisher → LibGen and saves the paper, metadata, and a resumable
+  manifest under `papers/{slug}/`.
   Read the body when you need to escape the script: custom query shapes, citation networks,
   scholar analysis, LaTeX writing, or a tier-specific API call. Indexes 12 deep-dive API
   references and 6 pipeline workflows under `reference/`.
@@ -59,7 +60,8 @@ papers/{first-author-year-firstword}/
 | 2 | Unpaywall | Publisher-blessed gold/green OA |
 | 3 | Europe PMC | Biomedical full-text + PMC mirror |
 | 4 | CORE | Institutional repositories (needs `$CORE_API_KEY`) |
-| 5 | Publisher-page extract | Nature/APS/AIP/IOP/Cambridge → in-house extractor (stdlib + `requests`, no third-party deps). Fetches the **already-accessible** official article / DOI landing page and parses `citation_*` metadata + the article body into structured Markdown. **No paywall/CAPTCHA bypass, no cookies/credentials** — official pages only. A login/paywall page is a clean miss; the ladder then falls through to LibGen. Opt out with `--no-publisher-extract`. |
+| 5 | Publisher-page extract | Nature/APS/AIP/IOP/Cambridge → in-house extractor (stdlib + `requests`, no third-party deps). Fetches the **already-accessible** official article / DOI landing page and parses `citation_*` metadata + the article body into structured Markdown. **No paywall/CAPTCHA bypass, no cookies/credentials** — official pages only. A login/paywall page is a clean miss; the ladder then falls through. Opt out with `--no-publisher-extract`. |
+| 5b | Authorized publisher | **Licensed/institutional access only** — official DOI landing page → same-host publisher PDF → `%PDF-` validation, full provenance. Recovers paywalled-but-subscribed papers without shadow libraries. Never bypasses paywalls or handles credentials. Opt out with `--no-institutional`. See [authorized-publisher-access.md](reference/authorized-publisher-access.md). |
 | 6 | LibGen | Last resort; opt out with `--no-libgen` |
 
 **Set `$LINGTAI_RESEARCH_EMAIL` to a real address** before first use — Unpaywall
@@ -142,7 +144,8 @@ Each card includes endpoint parameters, runnable code, response shape, rate limi
 - **Google Scholar requires a stealth browser** (camoufox or playwright-stealth v2); legacy `playwright_stealth` API does not work.
 - **arXiv enforces HTTPS** — HTTP requests are 301-redirected automatically.
 - **Library Genesis legality varies by jurisdiction** — use is the user's responsibility. Pass `--no-libgen` to opt out.
-- **Publisher-page extraction (Tier 5) is an in-house, self-contained extractor** — stdlib + `requests`, no third-party dependency and nothing to install (replaces the old broken `zhiping0913/Download_paper` path, issue #136). It fetches the already-accessible official article / DOI landing page and parses `citation_*` metadata + the article body into structured Markdown with a provenance/limitations footer. It performs **no paywall/CAPTCHA bypass and no cookie/credential handling** — official pages only. A login/paywall interstitial, an unsupported DOI prefix, or a page with too little readable text is a clean miss, and the ladder falls through to LibGen. Skip the tier with `--no-publisher-extract`. The extraction is heuristic (equations/figures/tables may be lost), so treat the artifact as a convenience copy, not a typeset full text. See [reference/publisher-page-extraction.md](reference/publisher-page-extraction.md).
+- **Publisher-page extraction (Tier 5) is an in-house, self-contained extractor** — stdlib + `requests`, no third-party dependency and nothing to install (replaces the old broken `zhiping0913/Download_paper` path, issue #136). It fetches the already-accessible official article / DOI landing page and parses `citation_*` metadata + the article body into structured Markdown with a provenance/limitations footer. It performs **no paywall/CAPTCHA bypass and no cookie/credential handling** — official pages only. A login/paywall interstitial, an unsupported DOI prefix, or a page with too little readable text is a clean miss, and the ladder falls through. Skip the tier with `--no-publisher-extract`. The extraction is heuristic (equations/figures/tables may be lost), so treat the artifact as a convenience copy, not a typeset full text. See [reference/publisher-page-extraction.md](reference/publisher-page-extraction.md).
+- **Authorized-publisher tier (5b) only uses access you already have** — it follows the official DOI landing page and grabs a same-host publisher PDF, validating `%PDF-` bytes and Content-Type before saving. It never bypasses paywalls/CAPTCHAs and never reads, stores, or replays cookies/credentials; most institutional access is IP-based, so on a licensed network a plain HTTP GET may work. Off-network it harmlessly misses. Pass `--no-institutional` to disable in legal-sensitive environments. Cookies/auth headers are never written to provenance. See [reference/authorized-publisher-access.md](reference/authorized-publisher-access.md).
 - **Writing an empirical paper iteratively can drift from the data** — reviewer rounds make prose more polished and internally consistent without verifying it still matches the experiments on disk. Reviewer agreement is text-consistency evidence, not data-correspondence evidence. Anchor every claim to data files/runner code *before* writing, and re-derive (don't just rewrite) when feedback flags confusion. See [reference/anti-pattern-text-consistency-vs-data-correspondence.md](reference/anti-pattern-text-consistency-vs-data-correspondence.md).
 
 ---
