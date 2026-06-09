@@ -39,6 +39,7 @@ const (
 	appViewSystem
 	appViewPresets
 	appViewDaemons
+	appViewHelp
 )
 
 // App is the root Bubble Tea model. Routes between views via slash commands.
@@ -56,6 +57,7 @@ type App struct {
 	mailbox       MailboxModel
 	daemons       DaemonsModel
 	presetLibrary PresetLibraryModel
+	help          HelpModel
 	firstRun      FirstRunModel
 	addon         AddonModel
 	doctor        DoctorModel
@@ -228,6 +230,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.presetLibrary, cmd = a.presetLibrary.Update(msg)
 		case appViewDaemons:
 			a.daemons, cmd = a.daemons.Update(msg)
+		case appViewHelp:
+			a.help, cmd = a.help.Update(msg)
 		}
 		return a, cmd
 
@@ -842,6 +846,10 @@ func (a App) handlePaletteCommand(command, args string) (tea.Model, tea.Cmd) {
 			addMsg(i18n.T("mail.btw_usage"))
 		}
 		return a, nil
+	case "help":
+		a.currentView = appViewHelp
+		a.help = NewHelpModel()
+		return a, tea.Batch(a.help.Init(), a.sendSize())
 	case "quit":
 		return a, tea.Quit
 	}
@@ -1281,6 +1289,10 @@ func (a App) switchToView(viewName string) (tea.Model, tea.Cmd) {
 		a.firstRun = NewFirstRunModel(a.projectDir, a.globalDir, true, "")
 		a.firstRun.welcomeOnly = true
 		return a, tea.Batch(a.firstRun.Init(), a.sendSize())
+	case "help":
+		a.currentView = appViewHelp
+		a.help = NewHelpModel()
+		return a, tea.Batch(a.help.Init(), a.sendSize())
 	}
 	return a, nil
 }
@@ -1326,6 +1338,8 @@ func (a App) View() tea.View {
 		content = a.presetLibrary.View()
 	case appViewDaemons:
 		content = a.daemons.View()
+	case appViewHelp:
+		content = a.help.View()
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true

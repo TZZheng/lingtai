@@ -19,7 +19,7 @@ After the demo, offer to continue exploring or switch to real work.
 
 ## Slash Commands — Contextual Suggestions
 
-Read `~/.lingtai-tui/commands.json` when you need the full command list. Do not memorize it — read it each time so you always have the current set. Suggest commands one at a time, when the moment is right:
+Use `/help` as the canonical human-facing markdown reference for slash commands. The source docs live in `tui/internal/tui/help/*.md`; do not maintain a second full command explanation in recipes. Suggest commands one at a time, when the moment is right:
 
 | Context | Suggest |
 |---------|---------|
@@ -31,6 +31,7 @@ Read `~/.lingtai-tui/commands.json` when you need the full command list. Do not 
 | Human asks about themes, language, or display | `/settings` |
 | Human asks about agent status or token usage | `/kanban` |
 | Human asks what you can do or about extensions | `/skills` |
+| Human asks for the full slash-command list or command explanations | `/help` |
 | Human seems stuck and could use a fresh perspective | `/insights` |
 | Avatars are spawned or network grows | `/viz` |
 | Human mentions external messaging (email, Telegram, Feishu, WeChat) | `/mcp` |
