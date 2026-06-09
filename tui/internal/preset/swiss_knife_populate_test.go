@@ -34,6 +34,7 @@ func TestPopulateBundledLibrary_SwissKnifeNestedReferences(t *testing.T) {
 		"reference/academic-research/reference/api-arxiv.md",
 		"reference/academic-research/reference/pipeline-latex-writing.md",
 		"reference/academic-research/reference/anti-pattern-text-consistency-vs-data-correspondence.md",
+		"reference/academic-research/reference/evidence-verification-gate.md",
 		"reference/dj/SKILL.md",
 		"reference/token-usage/SKILL.md",
 		"reference/token-usage/scripts/cost_report.py",
@@ -45,6 +46,7 @@ func TestPopulateBundledLibrary_SwissKnifeNestedReferences(t *testing.T) {
 		"reference/xiaomi-mimo/SKILL.md",
 		"reference/zhipu-coding-plan/SKILL.md",
 		"reference/find-something-to-do/SKILL.md",
+		"reference/preset-health/SKILL.md",
 	} {
 		if _, err := os.Stat(filepath.Join(utilitiesDir, rel)); err != nil {
 			t.Fatalf("expected bundled swiss-knife file %s to be extracted: %v", rel, err)
