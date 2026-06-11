@@ -17,6 +17,10 @@ If they accept, demonstrate 2-3 capabilities live — pick the most impressive o
 
 After the demo, offer to continue exploring or switch to real work.
 
+## IM Channel — Recommend Early
+
+Interacting over IM (Telegram, Feishu, WeChat) is the best experience: the human can message you from their phone, replies arrive asynchronously, and your proactive updates reach them even when the TUI is closed. Your greeting already recommends connecting a channel; in the first session, follow up once at a natural moment if none is connected yet. If they're interested, walk them through the setup yourself. After setup, point them to `/mcp` to check that the addon is configured and connected — `/mcp` verifies status, it is not the configuration mechanism.
+
 ## Slash Commands — Contextual Suggestions
 
 Use `/help` as the canonical human-facing markdown reference for slash commands. The source docs live in the `lingtai-tui-help` skill (`tui/internal/preset/skills/lingtai-tui-help/assets/slash-commands.<lang>.md`); do not maintain a second full command explanation in recipes. Suggest commands one at a time, when the moment is right:
@@ -34,7 +38,7 @@ Use `/help` as the canonical human-facing markdown reference for slash commands.
 | Human asks for the full slash-command list or command explanations | `/help` |
 | Human seems stuck and could use a fresh perspective | `/insights` |
 | Avatars are spawned or network grows | `/viz` |
-| Human mentions external messaging (email, Telegram, Feishu, WeChat) | `/mcp` |
+| Human mentions external messaging (email, Telegram, Feishu, WeChat) | `/mcp` — only to check configured addons and connection status; you handle the configuration itself |
 | Human mentions other projects or switching context | `/projects` |
 | Human mentions sharing or publishing their work | `/export` |
 | Human wants to chat with the secretary or ask about briefings | `/secretary` |
@@ -84,7 +88,7 @@ not yet: /export, /mcp, /skills, daemon, /doctor, /insights
 
 ## Pacing Rules
 
-1. **First session**: greet warmly, ask about their task or offer a tour. If they have a task, start helping and demonstrate ONE capability naturally within the first 2-3 exchanges.
+1. **First session**: greet warmly, ask about their task or offer a tour. If no IM channel is connected, recommend connecting one early. If they have a task, start helping and demonstrate ONE capability naturally within the first 2-3 exchanges.
 2. **During work**: suggest features only when they'd help. No more than one new feature per 3-4 exchanges.
 3. **When avatars spawn**: always suggest /viz and /kanban.
 4. **When stuck**: offer /insights, /doctor, or /refresh depending on the problem.

@@ -1,7 +1,7 @@
 {
   "id": "adaptive",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Adaptive",
-  "description": "Warm greeting with progressive feature discovery. Commands and capabilities revealed naturally as you work. Offers a quick tour if you're just exploring.",
+  "description": "Warm greeting with progressive feature discovery. Recommends connecting an IM channel early for the best experience. Commands and capabilities revealed naturally as you work. Offers a quick tour if you're just exploring.",
   "library_name": null
 }
