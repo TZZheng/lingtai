@@ -25,9 +25,9 @@
 <body>
 <main>
   <div class="card">
-    <span class="pill">Issue #311 · TUI preset editor</span>
+    <span class="pill">Issue #311 · TUI preset editor · migration m037</span>
     <h1>Model switch no longer deletes <code>skills.paths</code> overrides</h1>
-    <p class="lede">Switching the model in the preset editor used to wholesale-replace <code>manifest.capabilities</code> with the target model's defaults, silently deleting <code>skills.paths</code> and every other non-model-dependent capability override. Now only the genuinely model-conditional capabilities (<code>web_search</code>, <code>vision</code>) are reset.</p>
+    <p class="lede">Switching the model in the preset editor used to wholesale-replace <code>manifest.capabilities</code> with the target model's defaults, silently deleting <code>skills.paths</code> and every other non-model-dependent capability override. Now only the genuinely model-conditional capabilities (<code>web_search</code>, <code>vision</code>) are reset. A one-time migration also repairs already-saved presets that were affected before the fix.</p>
 
     <h2>The bug</h2>
     <p><code>syncCapsToModel</code> in <code>tui/internal/tui/preset_editor.go</code> ran on every model change (provider cycle and model cycle) and did:</p>
@@ -58,22 +58,37 @@ for _, capName := range optionalCapabilities {
       <li>The existing guard is unchanged: free-text model ids not in the catalog (<code>modelHasVision</code>) leave capabilities completely alone.</li>
     </ul>
 
+    <h2>Migration for already-affected saved presets</h2>
+    <p>PR #312 also adds migration <code>m037 preset-skills-paths</code>. On next startup/upgrade, it scans global saved presets under <code>~/.lingtai-tui/presets/saved/</code> and silently restores the default skills path override when it is missing (including saved presets whose entire capabilities map is absent):</p>
+    <pre><code>"skills": {
+  "paths": ["../.library_shared", "~/.lingtai-tui/utilities"]
+}</code></pre>
+    <ul>
+      <li>Idempotent: existing <code>skills.paths</code> values are preserved exactly.</li>
+      <li>Conservative: built-in templates are not patched because they are regenerated and already carry the default paths.</li>
+      <li>Durable: the preset is patched instead of individual agent <code>init.json</code> files, because active presets rematerialize agent capabilities on refresh/boot.</li>
+      <li>Migration etiquette: TUI migration version bumps from 36 to 37, and the portal registry receives the matching no-op version entry to keep the shared meta version space aligned.</li>
+    </ul>
+
     <h2>Tests (written first, watched fail)</h2>
     <ul>
       <li><code>TestSyncCapsToModelPreservesNonOptionalCapabilities</code> — starts with <code>skills.paths</code> + <code>bash.yolo</code> + a non-default <code>web_search</code> backend + <code>vision</code>, switches to text-only <code>mimo-v2.5-pro</code>; asserts skills/bash survive intact, <code>web_search</code> resets to <code>duckduckgo</code>, <code>vision</code> drops. <strong>Failed before the fix</strong> ("model switch dropped skills capability").</li>
       <li><code>TestSyncCapsToModelAddsVisionAndKeepsSkillsOnVisionModel</code> — switches to vision-capable <code>mimo-v2.5</code>; asserts <code>vision: {provider: inherit}</code> appears and <code>skills.paths</code> survives. <strong>Failed before the fix.</strong></li>
       <li><code>TestSyncCapsToModelLeavesCapsAloneForUnknownModel</code> — pins the pre-existing free-text-model guard so the early return doesn't regress.</li>
+      <li><code>TestPatchPresetSkillsPathsMap*</code> and <code>TestPatchPresetSkillsPathsFileSkipsMalformedAndPatchesValid</code> — cover the migration's add-missing, missing-capabilities-map, add-paths-only, preserve-existing, and malformed-skip cases.</li>
     </ul>
 
     <h2>Files touched</h2>
     <ul>
       <li><code>tui/internal/tui/preset_editor.go</code> — <code>syncCapsToModel</code> body + doc comment (~10 lines).</li>
       <li><code>tui/internal/tui/preset_editor_test.go</code> — three regression tests.</li>
+      <li><code>tui/internal/migrate/m037_preset_skills_paths.go</code> and test — one-time saved-preset remediation.</li>
+      <li><code>tui/internal/migrate/migrate.go</code> / <code>portal/internal/migrate/migrate.go</code> — migration version 37 registry entries.</li>
     </ul>
     <p class="warn">ANATOMY.md was not touched: its <code>preset_editor.go</code> citation ranges were already approximate before this change, and no cited anchor moved.</p>
 
     <h2>Validation</h2>
-    <p class="ok"><code>cd tui &amp;&amp; go test ./internal/tui/</code> — full package passes. <code>go build ./...</code>, <code>go vet ./internal/tui/</code>, and <code>git diff --check</code> all clean. Red phase verified: both new preservation tests failed against the pre-fix code with the exact symptom from the issue.</p>
+    <p class="ok"><code>git diff --check HEAD</code>, focused <code>TestSyncCapsToModel...</code>, focused <code>TestPatchPresetSkillsPaths...</code>, full <code>go test ./internal/tui</code>, and combined <code>go test ./internal/preset ./internal/tui ./internal/migrate</code> all pass. Red phase verified: both new preservation tests failed against the pre-fix code with the exact symptom from the issue.</p>
   </div>
 </main>
 </body>
