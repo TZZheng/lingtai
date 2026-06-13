@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -309,5 +310,62 @@ func TestReadInitManifest_ErrorsWhenBothMissing(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := ReadInitManifest(dir); err == nil {
 		t.Error("expected error when neither artifact nor init.json exists")
+	}
+}
+
+func TestReadContextStatsCountsCurrentHistory(t *testing.T) {
+	dir := t.TempDir()
+	historyDir := filepath.Join(dir, "history")
+	if err := os.MkdirAll(historyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := strings.Join([]string{
+		`{"id":0,"role":"system","system":"prompt"}`,
+		`{"id":1,"role":"assistant","content":[{"type":"tool_call","name":"bash"},{"type":"tool_call","name":"read"}]}`,
+		`{"id":2,"role":"user","content":[{"type":"tool_result","name":"bash"},{"type":"tool_result","name":"read"}]}`,
+		`{"id":3,"role":"user","content":[{"type":"text","text":"operator input"}]}`,
+		`{"id":4,"role":"assistant","content":[{"type":"text","text":"diary output"}]}`,
+		`{"id":5,"role":"assistant","content":"legacy text output"}`,
+		`not-json`,
+		``,
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(historyDir, "chat_history.jsonl"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stats := ReadContextStats(dir)
+	if stats.Entries != 6 {
+		t.Fatalf("Entries = %d, want 6", stats.Entries)
+	}
+	if stats.SystemMessages != 1 || stats.AssistantMessages != 3 || stats.UserMessages != 2 {
+		t.Fatalf("message counts = system:%d assistant:%d user:%d", stats.SystemMessages, stats.AssistantMessages, stats.UserMessages)
+	}
+	if stats.TextInputs != 1 || stats.TextOutputs != 2 {
+		t.Fatalf("text counts = input:%d output:%d", stats.TextInputs, stats.TextOutputs)
+	}
+	if stats.ToolCalls != 2 || stats.ToolResults != 2 {
+		t.Fatalf("tool counts = calls:%d results:%d", stats.ToolCalls, stats.ToolResults)
+	}
+	if len(stats.ToolCounts) != 2 {
+		t.Fatalf("ToolCounts len = %d, want 2", len(stats.ToolCounts))
+	}
+	byName := map[string]ContextToolCount{}
+	for _, tc := range stats.ToolCounts {
+		byName[tc.Name] = tc
+	}
+	if byName["bash"].Calls != 1 || byName["bash"].Results != 1 {
+		t.Fatalf("bash counts = %+v", byName["bash"])
+	}
+	if byName["read"].Calls != 1 || byName["read"].Results != 1 {
+		t.Fatalf("read counts = %+v", byName["read"])
+	}
+}
+func TestReadContextStatsReturnsZeroWhenHistoryMissing(t *testing.T) {
+	stats := ReadContextStats(t.TempDir())
+	if stats.Entries != 0 {
+		t.Fatalf("Entries = %d, want 0 for missing history", stats.Entries)
+	}
+	if stats.ToolCalls != 0 || stats.ToolResults != 0 || len(stats.ToolCounts) != 0 {
+		t.Fatalf("expected zero tool stats for missing history, got %+v", stats)
 	}
 }

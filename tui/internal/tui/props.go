@@ -52,6 +52,7 @@ type PropsModel struct {
 	detailOpen         bool
 	detailByProvider   map[string]fs.TokenTotals
 	detailRecent       []fs.LedgerEntry
+	detailContextStats fs.ContextStats
 	detailDaemonCounts fs.DaemonCounts
 	detailMCPNames     []string
 }
@@ -207,7 +208,8 @@ func (m PropsModel) Update(msg tea.Msg) (PropsModel, tea.Cmd) {
 // opened so the user sees fresh numbers.
 func (m *PropsModel) loadDetail() {
 	ledgerPath := filepath.Join(m.selectedDir, "logs", "token_ledger.jsonl")
-	m.detailByProvider, m.detailRecent = fs.SumTokenLedgerByProvider(ledgerPath, 20)
+	m.detailByProvider, m.detailRecent = fs.SumTokenLedgerByProvider(ledgerPath, 40)
+	m.detailContextStats = fs.ReadContextStats(m.selectedDir)
 
 	// MCP names from init.json's mcp block.
 	m.detailMCPNames = nil
@@ -790,7 +792,34 @@ func (m PropsModel) renderDetail() string {
 		lines = append(lines, "")
 	}
 
-	// Recent activity — last 20 ledger entries, newest first.
+	// Current retained context statistics.
+	if m.detailContextStats.Entries > 0 {
+		stats := m.detailContextStats
+		lines = append(lines, "  "+sectionStyle.Render(i18n.T("props.detail_context_stats")))
+		lines = append(lines, "")
+		lines = append(lines, "    "+labelStyle.Render("entries:                  ")+
+			valueStyle.Render(fmt.Sprintf("%d", stats.Entries)))
+		lines = append(lines, "    "+labelStyle.Render("messages:                 ")+
+			valueStyle.Render(fmt.Sprintf("system:%d  assistant:%d  user:%d", stats.SystemMessages, stats.AssistantMessages, stats.UserMessages)))
+		lines = append(lines, "    "+labelStyle.Render("text input / output:      ")+
+			valueStyle.Render(fmt.Sprintf("%d / %d", stats.TextInputs, stats.TextOutputs)))
+		lines = append(lines, "    "+labelStyle.Render("tool calls / results:     ")+
+			valueStyle.Render(fmt.Sprintf("%d / %d", stats.ToolCalls, stats.ToolResults)))
+		if len(stats.ToolCounts) > 0 {
+			lines = append(lines, "")
+			lines = append(lines, "    "+labelStyle.Render("tools in context:"))
+			for _, tc := range stats.ToolCounts {
+				lines = append(lines, fmt.Sprintf("      %-14s calls:%s  results:%s",
+					valueStyle.Render(tc.Name),
+					formatComma(int64(tc.Calls)),
+					formatComma(int64(tc.Results)),
+				))
+			}
+		}
+		lines = append(lines, "")
+	}
+
+	// Recent activity — last 40 ledger entries, newest first.
 	if len(m.detailRecent) > 0 {
 		lines = append(lines, "  "+sectionStyle.Render(i18n.T("props.detail_recent_activity")))
 		lines = append(lines, "")

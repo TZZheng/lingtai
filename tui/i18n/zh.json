@@ -312,7 +312,7 @@
   "props.detail_tokens_by_provider": "按提供商统计的 token 使用",
   "props.detail_no_tokens": "尚未记录 token 使用。",
   "props.detail_totals": "总计",
-  "props.detail_recent_activity": "近期活动（最近 20 次调用）",
+  "props.detail_recent_activity": "近期活动（最近 40 次调用）",
   "props.detail_mcp": "MCP 服务器",
   "props.detail_daemons": "神识",
   "props.detail_daemons_running": "运行中",
@@ -608,5 +608,6 @@
   "mail.goal_failed": "发送 goal 引导通知失败：%s",
   "mail.goal_no_agent": "当前没有选中的 Agent，无法发送 goal 引导通知。",
   "palette.goal": "引导创建 goal",
-  "cmd.goal": "Goal 引导——发送 system notification，让当前 Agent 阅读 goal manual，引导人类明确 objective / criteria / reminder / 取消语义，并只在确认后创建 .notification/goal.json"
+  "cmd.goal": "Goal 引导——发送 system notification，让当前 Agent 阅读 goal manual，引导人类明确 objective / criteria / reminder / 取消语义，并只在确认后创建 .notification/goal.json",
+  "props.detail_context_stats": "当前上下文统计"
 }

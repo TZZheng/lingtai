@@ -13,16 +13,17 @@ The TUI's read-only window into an agent working directory (`<project>/.lingtai/
 | **agent.go** | | |
 | `ReadAgent(dir)` | `tui/internal/fs/agent.go:26` | reads `.agent.json` → `AgentNode` (address, name, state, is_human, capabilities, location) |
 | `ParseCapabilities(raw)` | `tui/internal/fs/agent.go:56` | handles `[]string` and `[["name", {}], ...]` tuple formats |
-| `CapabilitiesForDisplay(manifest)` | `tui/internal/fs/agent.go:93` | prepends intrinsic caps (`system, soul, email, psyche`) to manifest caps, deduped, for operator display (kanban/props) |
-| `ReadInitManifest(dir)` | `tui/internal/fs/agent.go:85` | reads `init.json`, extracts manifest, flattens `llm.*` and `soul.delay` |
-| `DiscoverAgents(baseDir)` | `tui/internal/fs/agent.go:151` | scans for all subdirectories with `.agent.json` |
-| `ReadStatus(dir)` | `tui/internal/fs/agent.go:193` | reads `.status.json` → `AgentStatus` (tokens, runtime) |
-| `AggregateTokens(dirs)` | `tui/internal/fs/agent.go:214` | sums `TokenTotals` across multiple agent ledgers |
-| `SumTokenLedger(path)` | `tui/internal/fs/agent.go:229` | sums a single `token_ledger.jsonl` → `TokenTotals` |
-| `SumTokenLedgerByProvider` | `tui/internal/fs/agent.go:280` | groups ledger entries by derived provider name + recent N entries |
-| `DeriveLedgerProvider` | `tui/internal/fs/agent.go:327` | maps endpoint host / model prefix → canonical provider name |
-| `WritePrompt` | `tui/internal/fs/agent.go:117` | writes `.prompt` signal file (TUI→agent injection) |
-| `WriteInquiry` | `tui/internal/fs/agent.go:124` | writes `.inquiry` signal file; no-op if `.inquiry` or `.inquiry.taken` exists |
+| `CapabilitiesForDisplay(manifest)` | `tui/internal/fs/agent.go:90` | prepends intrinsic caps (`system, soul, email, psyche`) to manifest caps, deduped, for operator display (kanban/props) |
+| `ReadInitManifest(dir)` | `tui/internal/fs/agent.go:112` | prefers `system/manifest.resolved.json`, falls back to `init.json`, and flattens `llm.*` + `soul.delay` |
+| `WritePrompt` | `tui/internal/fs/agent.go:205` | writes `.prompt` signal file (TUI→agent injection) |
+| `WriteInquiry` | `tui/internal/fs/agent.go:211` | writes `.inquiry` signal file; no-op if `.inquiry` or `.inquiry.taken` exists |
+| `DiscoverAgents(baseDir)` | `tui/internal/fs/agent.go:240` | scans for all subdirectories with `.agent.json` |
+| `ReadStatus(dir)` | `tui/internal/fs/agent.go:303` | reads `.status.json` → `AgentStatus` (tokens, runtime) |
+| `ReadContextStats(dir)` | `tui/internal/fs/agent.go:315` | summarizes retained `history/chat_history.jsonl`: entries, role counts, text input/output, tool calls/results, and per-tool distribution |
+| `AggregateTokens(dirs)` | `tui/internal/fs/agent.go:439` | sums `TokenTotals` across multiple agent ledgers |
+| `SumTokenLedger(path)` | `tui/internal/fs/agent.go:454` | sums a single `token_ledger.jsonl` → `TokenTotals` |
+| `SumTokenLedgerByProvider` | `tui/internal/fs/agent.go:499` | groups ledger entries by derived provider name + recent N entries |
+| `DeriveLedgerProvider` | `tui/internal/fs/agent.go:525` | maps endpoint host / model prefix → canonical provider name |
 | **heartbeat.go** | | |
 | `IsAlive(dir, thresholdSec)` | `tui/internal/fs/heartbeat.go:11` | reads `.agent.heartbeat` unix timestamp, returns `age < threshold` |
 | `IsAliveHuman()` | `tui/internal/fs/heartbeat.go:24` | always `true` |

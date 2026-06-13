@@ -317,7 +317,7 @@
   "props.detail_tokens_by_provider": "Token usage by provider",
   "props.detail_no_tokens": "No token usage recorded yet.",
   "props.detail_totals": "Totals",
-  "props.detail_recent_activity": "Recent activity (last 20 calls)",
+  "props.detail_recent_activity": "Recent activity (last 40 calls)",
   "props.detail_mcp": "MCP servers",
   "props.detail_daemons": "Daemons",
   "props.detail_daemons_running": "running",
@@ -608,5 +608,6 @@
   "mail.goal_failed": "Failed to send goal request notification: %s",
   "mail.goal_no_agent": "No current agent is selected; cannot send a goal request.",
   "palette.goal": "Guide goal creation",
-  "cmd.goal": "Goal guide — send a system notification asking the current agent to read the goal manual, guide the human through objective/criteria/reminder/cancellation semantics, and only create .notification/goal.json after confirmation"
+  "cmd.goal": "Goal guide — send a system notification asking the current agent to read the goal manual, guide the human through objective/criteria/reminder/cancellation semantics, and only create .notification/goal.json after confirmation",
+  "props.detail_context_stats": "Current context statistics"
 }
