@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -38,5 +41,68 @@ func TestPropsRenderDetailShowsDaemonCounts(t *testing.T) {
 	}
 	if !strings.Contains(detail, "total: 3") {
 		t.Fatalf("renderDetail missing total daemon count:\n%s", detail)
+	}
+}
+
+func TestPropsRenderDetailShowsContextStats(t *testing.T) {
+	m := PropsModel{
+		detailContextStats: fs.ContextStats{
+			Entries:           5,
+			SystemMessages:    1,
+			AssistantMessages: 2,
+			UserMessages:      2,
+			TextInputs:        1,
+			TextOutputs:       1,
+			ToolCalls:         2,
+			ToolResults:       2,
+			ToolCounts: []fs.ContextToolCount{
+				{Name: "bash", Calls: 2, Results: 1},
+				{Name: "read", Calls: 1, Results: 1},
+			},
+		},
+	}
+
+	detail := ansi.Strip(m.renderDetail())
+	for _, want := range []string{
+		"Current context statistics",
+		"entries:                  5",
+		"messages:                 system:1  assistant:2  user:2",
+		"text input / output:      1 / 1",
+		"tool calls / results:     2 / 2",
+		"tools in context:",
+		"bash",
+		"calls:2",
+		"results:1",
+	} {
+		if !strings.Contains(detail, want) {
+			t.Fatalf("renderDetail missing %q:\n%s", want, detail)
+		}
+	}
+}
+
+func TestPropsLoadDetailKeepsLastFortyLedgerEntries(t *testing.T) {
+	dir := t.TempDir()
+	logsDir := filepath.Join(dir, "logs")
+	if err := os.MkdirAll(logsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	for i := 0; i < 45; i++ {
+		lines = append(lines, fmt.Sprintf(`{"ts":"2026-06-13T03:%02d:00Z","input":%d,"output":1,"model":"m%d"}`, i, i+1, i))
+	}
+	if err := os.WriteFile(filepath.Join(logsDir, "token_ledger.jsonl"), []byte(strings.Join(lines, "\n")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := PropsModel{selectedDir: dir}
+	m.loadDetail()
+	if len(m.detailRecent) != 40 {
+		t.Fatalf("detailRecent len = %d, want 40", len(m.detailRecent))
+	}
+	if got := m.detailRecent[0].Model; got != "m44" {
+		t.Fatalf("newest recent model = %q, want m44", got)
+	}
+	if got := m.detailRecent[len(m.detailRecent)-1].Model; got != "m5" {
+		t.Fatalf("oldest retained recent model = %q, want m5", got)
 	}
 }

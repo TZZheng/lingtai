@@ -312,7 +312,7 @@
   "props.detail_tokens_by_provider": "诸厂之 token 用",
   "props.detail_no_tokens": "未尝有 token 之用。",
   "props.detail_totals": "总",
-  "props.detail_recent_activity": "近行（末二十召）",
+  "props.detail_recent_activity": "近行（末四十召）",
   "props.detail_mcp": "MCP 之器",
   "props.detail_daemons": "神识",
   "props.detail_daemons_running": "运行",
@@ -608,5 +608,6 @@
   "mail.goal_failed": "设愿之讯遣败：%s",
   "mail.goal_no_agent": "今无所择器灵，不可遣设愿之讯。",
   "palette.goal": "导立愿",
-  "cmd.goal": "导立愿——投 system notification，使当前器灵读 goal manual，导人明 objective / criteria / reminder / 取消之义，待确认后方写 .notification/goal.json"
+  "cmd.goal": "导立愿——投 system notification，使当前器灵读 goal manual，导人明 objective / criteria / reminder / 取消之义，待确认后方写 .notification/goal.json",
+  "props.detail_context_stats": "今识之计"
 }

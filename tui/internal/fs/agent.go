@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -277,6 +278,28 @@ type AgentStatus struct {
 	} `json:"runtime"`
 }
 
+// ContextToolCount is a stable per-tool summary from the current chat history.
+type ContextToolCount struct {
+	Name    string
+	Calls   int
+	Results int
+}
+
+// ContextStats summarizes the currently retained chat context from
+// history/chat_history.jsonl. It counts structural message/block types rather
+// than tokens; token budget remains in AgentStatus.Tokens.Context.
+type ContextStats struct {
+	Entries           int
+	SystemMessages    int
+	AssistantMessages int
+	UserMessages      int
+	TextInputs        int
+	TextOutputs       int
+	ToolCalls         int
+	ToolResults       int
+	ToolCounts        []ContextToolCount
+}
+
 // ReadStatus reads .status.json from an agent directory.
 // Returns zero struct if missing or unreadable.
 func ReadStatus(dir string) AgentStatus {
@@ -287,6 +310,121 @@ func ReadStatus(dir string) AgentStatus {
 	}
 	json.Unmarshal(data, &s)
 	return s
+}
+
+// ReadContextStats reads the agent's retained chat history and returns a
+// structural summary for diagnostics. Missing/unreadable/malformed rows are
+// treated as empty/partial data so the kanban detail view remains best-effort.
+func ReadContextStats(dir string) ContextStats {
+	var stats ContextStats
+	data, err := os.ReadFile(filepath.Join(dir, "history", "chat_history.jsonl"))
+	if err != nil {
+		return stats
+	}
+
+	callCounts := map[string]int{}
+	resultCounts := map[string]int{}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var entry struct {
+			Role    string          `json:"role"`
+			System  string          `json:"system"`
+			Content json.RawMessage `json:"content"`
+		}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+
+		stats.Entries++
+		switch entry.Role {
+		case "system":
+			stats.SystemMessages++
+		case "assistant":
+			stats.AssistantMessages++
+		case "user":
+			stats.UserMessages++
+		}
+
+		// Current kernel history stores text/tool blocks in content[]. Older or
+		// ad-hoc rows may store plain content strings; count those as text by
+		// role rather than dropping the whole row. The system prompt lives in the
+		// top-level `system` field and is counted as a system message, not as
+		// text input/output.
+		var blocks []json.RawMessage
+		if len(entry.Content) > 0 {
+			if err := json.Unmarshal(entry.Content, &blocks); err != nil {
+				var plain string
+				if err := json.Unmarshal(entry.Content, &plain); err == nil && plain != "" {
+					if entry.Role == "assistant" {
+						stats.TextOutputs++
+					} else if entry.Role != "system" {
+						stats.TextInputs++
+					}
+				}
+			}
+		}
+		for _, raw := range blocks {
+			var block struct {
+				Type string `json:"type"`
+				Name string `json:"name"`
+			}
+			if err := json.Unmarshal(raw, &block); err != nil {
+				continue
+			}
+			switch block.Type {
+			case "tool_call":
+				stats.ToolCalls++
+				name := block.Name
+				if name == "" {
+					name = "unknown"
+				}
+				callCounts[name]++
+			case "tool_result":
+				stats.ToolResults++
+				name := block.Name
+				if name == "" {
+					name = "unknown"
+				}
+				resultCounts[name]++
+			case "text":
+				if entry.Role == "assistant" {
+					stats.TextOutputs++
+				} else if entry.Role != "system" {
+					stats.TextInputs++
+				}
+			}
+		}
+	}
+
+	names := make([]string, 0, len(callCounts)+len(resultCounts))
+	seen := map[string]bool{}
+	for name := range callCounts {
+		names = append(names, name)
+		seen[name] = true
+	}
+	for name := range resultCounts {
+		if !seen[name] {
+			names = append(names, name)
+		}
+	}
+	sort.Slice(names, func(i, j int) bool {
+		ci, cj := callCounts[names[i]], callCounts[names[j]]
+		if ci != cj {
+			return ci > cj
+		}
+		return names[i] < names[j]
+	})
+	for _, name := range names {
+		stats.ToolCounts = append(stats.ToolCounts, ContextToolCount{
+			Name:    name,
+			Calls:   callCounts[name],
+			Results: resultCounts[name],
+		})
+	}
+	return stats
 }
 
 // TokenTotals holds summed token usage across multiple agents.
