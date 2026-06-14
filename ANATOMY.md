@@ -15,10 +15,10 @@ The repo root holds two binary trees plus shared infrastructure. Each binary is 
 - **`install.sh`** — One-command installer (`curl … | bash`). Builds both binaries from source and installs them into Homebrew's `bin` directory. Auto-detects CN-restricted networks and falls back to mirrors for Go modules / `npm` / Go checksum DB.
 - **`scripts/`** — Auxiliary Python utilities (image-to-blocks, Telegram chat dumper, tool description dumper, file-rename helper). NOT the runtime — these are dev-only tools.
 - **`examples/`** — Reference config files (`init.jsonc`, `bash_policy.json`, `imap.jsonc`, `telegram.jsonc`) for users wiring up their own agents.
-- **`docs/`** — User and developer docs (specs, plans, daily change log, screenshots, known limitations).
+- **`docs/`** — User and developer docs (specs, plans, daily change log, screenshots, known limitations). Includes the human-facing capability map / beginner manual; see `docs/ANATOMY.md`.
 - **`prompt/`** — Localised prompt fragments shared across the TUI/portal.
 - **`assets/`** — Static images (logos, screenshots) used by README and docs.
-- **`README.md` / `README.zh.md` / `README.wen.md`** — Tri-lingual project README.
+- **`README.md` / `README.zh.md` / `README.wen.md`** — Tri-lingual project README. These link to the human-facing beginner manual and animated explainer in `docs/`.
 - **`RELEASING.md`** — Release process: tag, GitHub release, Homebrew tap bump.
 - **`CLAUDE.md`** — Repo-specific Claude Code instructions (build commands, gotchas, sibling repos).
 
@@ -102,6 +102,7 @@ This repo depends on `lingtai-kernel` only at runtime (the Python agent it launc
 
 ## Notes
 
+- **Human-facing anatomy:** `docs/beginner-work-manual.zh.md` and `docs/beginner-work-manual-stick-figure.zh.html` are the user-facing capability map. Any change that adds/removes/renames user-visible capabilities, slash commands, setup/install flows, channel/addon surfaces, memory/molt behavior, daemon/avatar behavior, or safety boundaries must check and update those docs alongside README/help assets.
 - **Binary naming.** The TUI binary is `lingtai-tui`, never `lingtai`. `lingtai` is the Python agent CLI inside the runtime venv (`~/.lingtai-tui/runtime/venv/bin/lingtai`). Build to `tui/bin/lingtai-tui`; never `tui/bin/lingtai`.
 - **Bubble Tea v2 paste delivery.** Bubble Tea v2 splits keys (`tea.KeyPressMsg`) from clipboard pastes (`tea.PasteMsg`). Any `Update` dispatcher gating on `case tea.KeyPressMsg:` must also forward `tea.PasteMsg` to whichever text widget is focused — otherwise paste silently drops. For embedded sub-models hosted inside another model (e.g. `PresetEditorModel` inside `FirstRunModel`), the host's outer `default:` branch must forward paste msgs into the sub-model. Trace top-down to find missing layers; the symptom is "typing works, paste does nothing."
 - **`textarea` vs `textinput`.** For any paste-friendly field (API keys, base URLs), use `textarea` even when the content is conceptually one line. `textinput` drops characters on multi-byte / clipboard pastes. Always apply `themedTextareaStyles()` from the `tui` package — bare `textarea.New()` ships dark default cursor/focus colors that render as a black smear against the warm theme.
