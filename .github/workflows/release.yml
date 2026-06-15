@@ -51,27 +51,55 @@ jobs:
             depends_on "python@3.13" => :recommended
 
             def install
-              # Network mirror selection, in priority order:
+              # Network mirror selection. Go-module mirrors and the npm registry are
+              # configured independently — a Go proxy outage must not force an npm
+              # registry switch (and vice versa).
+              #
+              # Go modules:
               #   1. HOMEBREW_GOPROXY (explicit user override) — community convention,
               #      survives Homebrew's superenv scrub because of the HOMEBREW_ prefix.
               #   2. Auto-detect: probe a stable proxy.golang.org API endpoint with a
               #      3s timeout. If unreachable (typical on mainland China networks),
-              #      fall back to CN-accessible mirrors for Go modules, the Go checksum
-              #      database (sum.golang.google.cn is Google's own CN-reachable alias
-              #      of sum.golang.org, required for CN builds to succeed), and npm.
+              #      fall back to CN-accessible mirrors for Go modules and the Go
+              #      checksum database (sum.golang.google.cn is Google's own
+              #      CN-reachable alias of sum.golang.org, required for CN builds).
               #   3. Otherwise: leave ENV untouched — users elsewhere see no difference.
+              #
+              # npm registry:
+              #   1. HOMEBREW_NPM_CONFIG_REGISTRY (explicit user override) — same
+              #      HOMEBREW_ prefix trick so it survives the superenv scrub.
+              #   2. Auto-detect ONLY when the Go proxy was unreachable AND an npm
+              #      client probe to registry.npmmirror.com succeeds. Use npm (not curl)
+              #      so the probe exercises the same Node/npm TLS trust store that
+              #      `npm ci` will use; otherwise leave the npm registry on its default.
+              #   3. Otherwise: leave ENV untouched.
               if ENV["HOMEBREW_GOPROXY"]
                 ENV["GOPROXY"] = ENV["HOMEBREW_GOPROXY"]
+                go_proxy_reachable = true
               else
-                proxy_reachable = quiet_system(
+                go_proxy_reachable = quiet_system(
                   "curl", "-sSfL", "--max-time", "3", "-o", "/dev/null",
                   "https://proxy.golang.org/github.com/golang/go/@latest"
                 )
-                unless proxy_reachable
-                  opoo "proxy.golang.org unreachable; using China-friendly build mirrors."
-                  ENV["GOPROXY"]             = "https://goproxy.cn,direct"
-                  ENV["GOSUMDB"]             = "sum.golang.google.cn"
+                unless go_proxy_reachable
+                  opoo "proxy.golang.org unreachable; using China-friendly Go build mirrors."
+                  ENV["GOPROXY"] = "https://goproxy.cn,direct"
+                  ENV["GOSUMDB"] = "sum.golang.google.cn"
+                end
+              end
+
+              if ENV["HOMEBREW_NPM_CONFIG_REGISTRY"]
+                ENV["NPM_CONFIG_REGISTRY"] = ENV["HOMEBREW_NPM_CONFIG_REGISTRY"]
+              elsif !go_proxy_reachable
+                npmmirror_reachable = quiet_system(
+                  "npm", "ping", "--registry=https://registry.npmmirror.com",
+                  "--fetch-timeout=3000", "--fetch-retries=0"
+                )
+                if npmmirror_reachable
+                  opoo "Using China-friendly npm registry (registry.npmmirror.com)."
                   ENV["NPM_CONFIG_REGISTRY"] = "https://registry.npmmirror.com"
+                else
+                  opoo "registry.npmmirror.com failed npm's connectivity/TLS probe; leaving npm registry unchanged. Set HOMEBREW_NPM_CONFIG_REGISTRY to override."
                 end
               end
 
