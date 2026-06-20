@@ -460,6 +460,9 @@ func (m PropsModel) renderLeft(maxW int) string {
 				stateColor := StateColor(strings.ToUpper(val))
 				val = lipgloss.NewStyle().Foreground(stateColor).Render(val)
 			} else {
+				if isTimestampPropField(f.key) {
+					val = formatKanbanTimestamp(val)
+				}
 				val = valueStyle.Render(val)
 			}
 			lines = append(lines, "  "+labelStyle.Render(f.label+": ")+val)
@@ -667,7 +670,7 @@ func (m PropsModel) renderRight(maxW int) string {
 	lines = append(lines, "")
 
 	if m.adminStart != "" {
-		lines = append(lines, "  "+labelStyle.Render(i18n.T("props.network_created")+": ")+valueStyle.Render(m.adminStart))
+		lines = append(lines, "  "+labelStyle.Render(i18n.T("props.network_created")+": ")+valueStyle.Render(formatKanbanTimestamp(m.adminStart)))
 		if t, err := time.Parse(time.RFC3339, m.adminStart); err == nil {
 			uptime := time.Since(t)
 			lines = append(lines, "  "+labelStyle.Render(i18n.T("props.network_uptime")+": ")+valueStyle.Render(formatDuration(uptime)))
@@ -935,7 +938,7 @@ func (m PropsModel) renderMainCallRows() []string {
 	}
 
 	lines := []string{
-		"  " + labelStyle.Render(fmt.Sprintf("%-16s  %-10s  %-24s  %10s  %10s  %10s  %10s  %7s  %s",
+		"  " + labelStyle.Render(fmt.Sprintf("%-24s  %-10s  %-24s  %10s  %10s  %10s  %10s  %7s  %s",
 			"time", "provider", "model", "input", "output", "thinking", "cached", "cache%", "endpoint")),
 	}
 	for _, e := range m.detailRecent {
@@ -948,7 +951,7 @@ func (m PropsModel) renderMainCallRows() []string {
 		if endpoint == "" {
 			endpoint = "—"
 		}
-		line := fmt.Sprintf("  %-16s  %-10s  %-24s  %10s  %10s  %10s  %10s  %7s  %s",
+		line := fmt.Sprintf("  %-24s  %-10s  %-24s  %10s  %10s  %10s  %10s  %7s  %s",
 			shortTS(e.TS),
 			provider,
 			model,
@@ -977,7 +980,7 @@ func (m PropsModel) renderDaemonCallRows() []string {
 	}
 
 	lines := []string{
-		"  " + labelStyle.Render(fmt.Sprintf("%-16s  %-10s  %-24s  %-8s  %-10s  %-24s  %10s  %10s  %10s  %10s  %7s  %s",
+		"  " + labelStyle.Render(fmt.Sprintf("%-24s  %-10s  %-24s  %-8s  %-10s  %-24s  %10s  %10s  %10s  %10s  %7s  %s",
 			"time", "daemon", "run", "state", "provider", "model", "input", "output", "thinking", "cached", "cache%", "endpoint")),
 	}
 	for _, e := range m.detailDaemonRecent {
@@ -1002,7 +1005,7 @@ func (m PropsModel) renderDaemonCallRows() []string {
 		if state == "" {
 			state = "—"
 		}
-		line := fmt.Sprintf("  %-16s  %-10s  %-24s  %-8s  %-10s  %-24s  %10s  %10s  %10s  %10s  %7s  %s",
+		line := fmt.Sprintf("  %-24s  %-10s  %-24s  %-8s  %-10s  %-24s  %10s  %10s  %10s  %10s  %7s  %s",
 			shortTS(e.TS),
 			handle,
 			runID,
@@ -1028,13 +1031,45 @@ func formatCacheRate(cached, input int64) string {
 	return fmt.Sprintf("%.1f%%", 100.0*float64(cached)/float64(input))
 }
 
-// shortTS trims an ISO-8601 timestamp to minute precision (2026-04-30T03:14)
-// for compact display, leaving shorter/empty strings untouched.
-func shortTS(ts string) string {
-	if len(ts) > 16 {
-		return ts[:16]
+func isTimestampPropField(key string) bool {
+	switch key {
+	case "started_at", "created_at", "updated_at":
+		return true
+	default:
+		return strings.HasSuffix(key, "_at") || strings.Contains(key, "timestamp")
 	}
-	return ts
+}
+
+// formatKanbanTimestamp renders parseable timestamps in local time with an
+// explicit UTC offset marker (for example, 2026-06-19 20:14 U-7:00).
+// Non-parseable legacy strings keep the old compact trimming behavior.
+func formatKanbanTimestamp(ts string) string {
+	t, err := time.Parse(time.RFC3339Nano, ts)
+	if err != nil {
+		if len(ts) > 16 {
+			return ts[:16]
+		}
+		return ts
+	}
+	local := t.Local()
+	return local.Format("2006-01-02 15:04") + " " + utcOffsetLabel(local)
+}
+
+func utcOffsetLabel(t time.Time) string {
+	_, offset := t.Zone()
+	sign := "+"
+	if offset < 0 {
+		sign = "-"
+		offset = -offset
+	}
+	hours := offset / 3600
+	minutes := (offset % 3600) / 60
+	return fmt.Sprintf("U%s%d:%02d", sign, hours, minutes)
+}
+
+// shortTS renders token-ledger timestamps for compact /kanban tables.
+func shortTS(ts string) string {
+	return formatKanbanTimestamp(ts)
 }
 
 // renderShareBar returns a small unicode bar (filled + empty cells)

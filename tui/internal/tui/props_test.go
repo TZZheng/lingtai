@@ -6,11 +6,90 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/anthropics/lingtai-tui/i18n"
 	"github.com/anthropics/lingtai-tui/internal/fs"
 	"github.com/charmbracelet/x/ansi"
 )
+
+func TestKanbanTimestampRendersLocalOffset(t *testing.T) {
+	origLocal := time.Local
+	t.Cleanup(func() { time.Local = origLocal })
+	time.Local = time.FixedZone("test", -7*60*60)
+
+	got := formatKanbanTimestamp("2026-06-13T03:00:00Z")
+	want := "2026-06-12 20:00 U-7:00"
+	if got != want {
+		t.Fatalf("formatKanbanTimestamp() = %q, want %q", got, want)
+	}
+}
+
+func TestKanbanTimestampKeepsInvalidLegacyCompact(t *testing.T) {
+	got := formatKanbanTimestamp("2026-06-13T03:00:00-without-zone")
+	want := "2026-06-13T03:00"
+	if got != want {
+		t.Fatalf("formatKanbanTimestamp() = %q, want legacy compact %q", got, want)
+	}
+}
+
+func TestPropsRenderLeftShowsStartedAtLocalOffset(t *testing.T) {
+	origLocal := time.Local
+	t.Cleanup(func() { time.Local = origLocal })
+	time.Local = time.FixedZone("test", -7*60*60)
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".agent.json"), []byte(`{"agent_name":"mimo","started_at":"2026-06-13T03:00:00Z"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := PropsModel{selectedDir: dir}
+	left := ansi.Strip(m.renderLeft(80))
+	if !strings.Contains(left, "2026-06-12 20:00 U-7:00") {
+		t.Fatalf("renderLeft should render started_at in local time with offset:\n%s", left)
+	}
+	if strings.Contains(left, "2026-06-13T03:00:00Z") {
+		t.Fatalf("renderLeft should not show raw UTC started_at:\n%s", left)
+	}
+}
+
+func TestPropsRenderRightShowsNetworkCreatedLocalOffset(t *testing.T) {
+	origLocal := time.Local
+	t.Cleanup(func() { time.Local = origLocal })
+	time.Local = time.FixedZone("test", -7*60*60)
+
+	m := PropsModel{adminStart: "2026-06-13T03:00:00Z"}
+	right := ansi.Strip(m.renderRight(80))
+	if !strings.Contains(right, "2026-06-12 20:00 U-7:00") {
+		t.Fatalf("renderRight should render network_created in local time with offset:\n%s", right)
+	}
+	if strings.Contains(right, "2026-06-13T03:00:00Z") {
+		t.Fatalf("renderRight should not show raw UTC timestamp:\n%s", right)
+	}
+}
+
+func TestPropsRecentLanesShowLocalOffsetTimestamps(t *testing.T) {
+	origLocal := time.Local
+	t.Cleanup(func() { time.Local = origLocal })
+	time.Local = time.FixedZone("test", -7*60*60)
+
+	m := PropsModel{
+		width: 140,
+		detailRecent: []fs.LedgerEntry{
+			{TS: "2026-06-13T03:00:00Z", Input: 5, Output: 1, Cached: 2, Model: "glm-4.6", Endpoint: "https://z.ai"},
+		},
+		detailDaemonRecent: []fs.DaemonLedgerEntry{
+			{LedgerEntry: fs.LedgerEntry{TS: "2026-06-13T03:00:05Z", Input: 9, Cached: 3}, Handle: "em-1", State: "running"},
+		},
+	}
+	out := ansi.Strip(strings.Join(m.renderRecentCallLanes(), "\n"))
+	if strings.Count(out, "2026-06-12 20:00 U-7:00") != 2 {
+		t.Fatalf("recent lanes should render both main and daemon timestamps with local offset:\n%s", out)
+	}
+	if strings.Contains(out, "2026-06-13T03:00") {
+		t.Fatalf("recent lanes should not show raw/trimmed UTC timestamps:\n%s", out)
+	}
+}
 
 func TestPropsRenderRightShowsRunningDaemons(t *testing.T) {
 	m := PropsModel{
