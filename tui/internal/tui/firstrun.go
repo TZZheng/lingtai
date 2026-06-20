@@ -545,6 +545,9 @@ func NewSetupModeModel(baseDir, globalDir, orchDir, orchName string) FirstRunMod
 					// treating the whole file as the inner manifest.
 					inner = existing
 				}
+				if agentName, _ := inner["agent_name"].(string); agentName != "" {
+					m.setupOrchName = agentName
+				}
 				m.setupKeepPreset = preset.Preset{
 					Name:        "keep_current",
 					Description: preset.PresetDescription{Summary: i18n.T("setup.keep_current_preset")},
@@ -1852,6 +1855,7 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 						CovenantFile:   m.covenantInput.Value(),
 						PrincipleFile:  m.principleInput.Value(),
 						SoulFile:       m.soulFlowInput.Value(),
+						CommentFile:    m.commentInput.Value(),
 						AllowedPresets: m.allowedPresetRefs(),
 					}
 					var selectedAddons []string
@@ -1915,6 +1919,7 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 					CovenantFile:   m.covenantInput.Value(),
 					PrincipleFile:  m.principleInput.Value(),
 					SoulFile:       m.soulFlowInput.Value(),
+					CommentFile:    m.commentInput.Value(),
 					AllowedPresets: m.allowedPresetRefs(),
 					// CommentFile is set by stepRecipe from the chosen recipe
 				}
@@ -3775,7 +3780,9 @@ func (m *FirstRunModel) enterAgentNameDir(p preset.Preset) {
 			m.soulFlowInput.SetValue(s)
 			m.soulFlowDirty = true
 		}
-		if s, ok := m.setupKeepInitJSON["comment"].(string); ok {
+		if s, ok := m.setupKeepInitJSON["comment_file"].(string); ok && s != "" {
+			m.commentInput.SetValue(s)
+		} else if s, ok := m.setupKeepInitJSON["comment"].(string); ok {
 			m.commentInput.SetValue(s)
 		}
 	}
@@ -4328,7 +4335,7 @@ func (m FirstRunModel) performSetupSaveOnly() (FirstRunModel, tea.Cmd) {
 		lang = "en"
 	}
 	projectRoot := filepath.Dir(m.baseDir)
-	if commentPath := resolveRecipeComment(projectRoot, lang); commentPath != "" {
+	if commentPath := resolveRecipeComment(projectRoot, lang); m.pendingAgentOpts.CommentFile == "" && commentPath != "" {
 		m.pendingAgentOpts.CommentFile = commentPath
 	}
 	if covenantPath := resolveRecipeCovenant(projectRoot, lang); covenantPath != "" {

@@ -376,6 +376,71 @@ func TestSetupModeDefaultsToKeepCurrentPreset(t *testing.T) {
 	}
 }
 
+func TestSetupModePrefillsAgentNameAndCommentFile(t *testing.T) {
+	baseDir := t.TempDir()
+	globalDir := t.TempDir()
+	orchDir := filepath.Join(baseDir, "manager")
+	if err := os.MkdirAll(orchDir, 0o755); err != nil {
+		t.Fatalf("mkdir orchDir: %v", err)
+	}
+	commentPath := filepath.Join(t.TempDir(), "comment.md")
+	initJSON := map[string]interface{}{
+		"manifest": map[string]interface{}{
+			"agent_name": "岩",
+			"language":   "zh",
+		},
+		"comment_file": commentPath,
+		"comment":      "legacy-comment-should-not-win",
+	}
+	data, err := json.Marshal(initJSON)
+	if err != nil {
+		t.Fatalf("marshal init: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(orchDir, "init.json"), data, 0o644); err != nil {
+		t.Fatalf("write init: %v", err)
+	}
+
+	m := NewSetupModeModel(baseDir, globalDir, orchDir, "manager")
+	m.enterAgentNameDir(m.currentPreset())
+
+	if got := m.nameInput.Value(); got != "岩" {
+		t.Fatalf("setup agent name prefill = %q, want init.json manifest.agent_name", got)
+	}
+	if got := m.commentInput.Value(); got != commentPath {
+		t.Fatalf("setup comment prefill = %q, want comment_file %q", got, commentPath)
+	}
+}
+
+func TestSetupModePrefillsLegacyCommentWhenCommentFileMissing(t *testing.T) {
+	baseDir := t.TempDir()
+	globalDir := t.TempDir()
+	orchDir := filepath.Join(baseDir, "manager")
+	if err := os.MkdirAll(orchDir, 0o755); err != nil {
+		t.Fatalf("mkdir orchDir: %v", err)
+	}
+	initJSON := map[string]interface{}{
+		"manifest": map[string]interface{}{
+			"agent_name": "岩",
+			"language":   "zh",
+		},
+		"comment": "legacy-comment.md",
+	}
+	data, err := json.Marshal(initJSON)
+	if err != nil {
+		t.Fatalf("marshal init: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(orchDir, "init.json"), data, 0o644); err != nil {
+		t.Fatalf("write init: %v", err)
+	}
+
+	m := NewSetupModeModel(baseDir, globalDir, orchDir, "manager")
+	m.enterAgentNameDir(m.currentPreset())
+
+	if got := m.commentInput.Value(); got != "legacy-comment.md" {
+		t.Fatalf("setup legacy comment prefill = %q", got)
+	}
+}
+
 func TestSetupModeEnterOnKeepCurrentAdvancesToAgentPresets(t *testing.T) {
 	m := FirstRunModel{
 		setupMode: true,
