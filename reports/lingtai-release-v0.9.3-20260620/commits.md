@@ -1,0 +1,14 @@
+- `a0ace7b` feat(tui): split kanban recent call lanes
+- `ee799c0` fix(tui): exclude daemon rows from main token ledgers
+- `821a2c0` chore(stars): update daily star count
+- `58de436` docs: add runtime refresh verification lessons (#375)
+- `38c3495` Load notification view from sqlite log
+- `2439898` Merge pull request #376 from Lingtai-AI/feat/notification-sqlite-jit-20260619
+- `9da1d3d` Resolve migration version collision
+- `c16aede` Merge pull request #377 from Lingtai-AI/fix/migration-version-collision-20260620
+- `9f115d9` Improve notification block viewer UX
+- `bd6c732` Show persisted notification block snapshots (#379)
+- `05725c7` Show local timezone in kanban timestamps
+- `12aa315` Merge pull request #380 from Lingtai-AI/kanban-local-timezone-20260620
+- `9c264d0` Show timezone and CLI token usage in daemons view
+- `29d25fa` Merge pull request #381 from Lingtai-AI/daemons-local-timezone-token-usage-20260620

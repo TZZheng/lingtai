@@ -1,0 +1,94 @@
+== git diff --check ==
+== git status --short --branch ==
+## release/v0.9.3...origin/main
+?? reports/lingtai-release-v0.9.3-20260620/
+== tui: go test ./... ==
+ok  	github.com/anthropics/lingtai-tui	0.525s
+ok  	github.com/anthropics/lingtai-tui/i18n	0.706s
+ok  	github.com/anthropics/lingtai-tui/internal/config	1.112s
+ok  	github.com/anthropics/lingtai-tui/internal/fs	1.330s
+?   	github.com/anthropics/lingtai-tui/internal/globalmigrate	[no test files]
+ok  	github.com/anthropics/lingtai-tui/internal/headless	93.498s
+ok  	github.com/anthropics/lingtai-tui/internal/migrate	3.282s
+ok  	github.com/anthropics/lingtai-tui/internal/postman	2.284s
+ok  	github.com/anthropics/lingtai-tui/internal/preset	1.848s
+ok  	github.com/anthropics/lingtai-tui/internal/process	2.307s
+?   	github.com/anthropics/lingtai-tui/internal/processscan	[no test files]
+ok  	github.com/anthropics/lingtai-tui/internal/sqlitelog	2.096s
+ok  	github.com/anthropics/lingtai-tui/internal/timemachine	2.984s
+ok  	github.com/anthropics/lingtai-tui/internal/tui	9.685s
+== tui: make build ==
+go build -ldflags "-X main.version=v0.9.2-14-g29d25fa" -o bin/lingtai-tui .
+== portal/web: npm ci ==
+
+added 173 packages, and audited 174 packages in 2s
+
+49 packages are looking for funding
+  run `npm fund` for details
+
+4 vulnerabilities (1 low, 2 moderate, 1 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+npm warn allow-scripts 1 package has install scripts not yet covered by allowScripts:
+npm warn allow-scripts   fsevents@2.3.3 (install: (install scripts present))
+npm warn allow-scripts
+npm warn allow-scripts Run `npm approve-scripts --allow-scripts-pending` to review, or `npm approve-scripts <pkg>` to allow.
+== portal/web: npm run build ==
+
+> lingtai-web-scaffold@0.0.0 build
+> tsc -b && vite build
+
+vite v8.0.13 building client environment for production...
+[2Ktransforming...✓ 24 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                  0.43 kB │ gzip:  0.29 kB
+dist/assets/index-Df7i0ehL.js  224.36 kB │ gzip: 70.44 kB
+
+✓ built in 86ms
+== portal: go test ./... ==
+?   	github.com/anthropics/lingtai-portal	[no test files]
+?   	github.com/anthropics/lingtai-portal/i18n	[no test files]
+ok  	github.com/anthropics/lingtai-portal/internal/api	0.619s
+ok  	github.com/anthropics/lingtai-portal/internal/fs	0.425s
+ok  	github.com/anthropics/lingtai-portal/internal/migrate	0.248s
+?   	github.com/anthropics/lingtai-portal/web/node_modules/flatted/golang/pkg/flatted	[no test files]
+== portal: make build ==
+cd web && npm install
+
+up to date, audited 174 packages in 533ms
+
+49 packages are looking for funding
+  run `npm fund` for details
+
+4 vulnerabilities (1 low, 2 moderate, 1 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+npm warn allow-scripts 1 package has install scripts not yet covered by allowScripts:
+npm warn allow-scripts   fsevents@2.3.3 (install: (install scripts present))
+npm warn allow-scripts
+npm warn allow-scripts Run `npm approve-scripts --allow-scripts-pending` to review, or `npm approve-scripts <pkg>` to allow.
+cd web && npm run build
+
+> lingtai-web-scaffold@0.0.0 build
+> tsc -b && vite build
+
+vite v8.0.13 building client environment for production...
+[2Ktransforming...✓ 24 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                  0.43 kB │ gzip:  0.29 kB
+dist/assets/index-Df7i0ehL.js  224.36 kB │ gzip: 70.44 kB
+
+✓ built in 73ms
+go build -ldflags "-X main.version=v0.9.2-14-g29d25fa" -o bin/lingtai-portal .
+== final status ==
+## release/v0.9.3...origin/main
+?? reports/lingtai-release-v0.9.3-20260620/
+?? tui/internal/tui/logs/

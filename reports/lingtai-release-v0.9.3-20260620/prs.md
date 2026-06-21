@@ -1,0 +1,6 @@
+- [#375](https://github.com/Lingtai-AI/lingtai/pull/375) docs: add runtime refresh verification lessons — @huangzesen (3 files, +74/-9)
+- [#376](https://github.com/Lingtai-AI/lingtai/pull/376) Load notification view from sqlite log — @huangzesen (11 files, +767/-193)
+- [#377](https://github.com/Lingtai-AI/lingtai/pull/377) Resolve migration version collision — @huangzesen (15 files, +2037/-6)
+- [#379](https://github.com/Lingtai-AI/lingtai/pull/379) Show persisted notification block snapshots — @huangzesen (8 files, +579/-127)
+- [#380](https://github.com/Lingtai-AI/lingtai/pull/380) Show local timezone in kanban timestamps — @huangzesen (2 files, +125/-11)
+- [#381](https://github.com/Lingtai-AI/lingtai/pull/381) Show timezone and CLI token usage in daemons view — @huangzesen (2 files, +278/-14)
