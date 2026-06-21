@@ -68,14 +68,16 @@ func TestLoadDaemonSummariesReadsMetadataEventsAndChats(t *testing.T) {
 	}, "\n"))
 	write(filepath.Join(daemonDir, "result.txt"), "full result")
 
-	items, err := loadDaemonSummaries(agentDir)
+	listItems, err := loadDaemonSummaries(agentDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 1 {
-		t.Fatalf("got %d daemon summaries, want 1", len(items))
+	if len(listItems) != 1 {
+		t.Fatalf("got %d daemon summaries, want 1", len(listItems))
 	}
-	got := items[0]
+	// loadDaemonSummaries is the lightweight list path (daemon.json metadata
+	// only); loadDaemonDetail fills in the heavy per-run files lazily.
+	got := loadDaemonDetail(listItems[0])
 	if got.Handle != "em-7" || got.State != "done" || got.Backend != "lingtai" {
 		t.Fatalf("summary = %#v", got)
 	}
@@ -99,6 +101,159 @@ func TestLoadDaemonSummariesReadsMetadataEventsAndChats(t *testing.T) {
 	}
 	if got.Result != "full result" {
 		t.Fatalf("result = %q", got.Result)
+	}
+}
+
+func TestLoadDaemonSummariesDefersHeavyDetailReads(t *testing.T) {
+	agentDir := t.TempDir()
+	daemonDir := filepath.Join(agentDir, "daemons", "em-7-20260609-010203-abcdef")
+	if err := os.MkdirAll(filepath.Join(daemonDir, "logs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(daemonDir, "history"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(path, body string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(daemonDir, "daemon.json"), `{
+		"task":"Inspect daemon browser",
+		"group_id":"dg-20260609-010203-fedcba",
+		"state":"done",
+		"backend":"lingtai"
+	}`)
+	write(filepath.Join(daemonDir, "logs", "events.jsonl"),
+		`{"ts":"2026-06-09T01:02:04Z","event":"daemon_start"}`)
+	write(filepath.Join(daemonDir, "history", "chat_history.jsonl"),
+		`{"role":"assistant","text":"task done"}`)
+	write(filepath.Join(daemonDir, "logs", "token_ledger.jsonl"),
+		`{"input":10,"output":4}`)
+	write(filepath.Join(daemonDir, "result.txt"), "full result")
+
+	items, err := loadDaemonSummaries(agentDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("got %d daemon summaries, want 1", len(items))
+	}
+	got := items[0]
+	// Lightweight list path: daemon.json metadata is parsed...
+	if got.Task != "Inspect daemon browser" || got.State != "done" || got.GroupID != "dg-20260609-010203-fedcba" {
+		t.Fatalf("list metadata not parsed: %#v", got)
+	}
+	// ...but heavy per-run detail files are NOT read for the list.
+	if got.DetailLoaded {
+		t.Fatalf("list summary marked DetailLoaded; want lazy")
+	}
+	if len(got.Events) != 0 || got.EventCount != 0 || got.ToolCount != 0 || got.LastEventAt != "" {
+		t.Fatalf("events read eagerly in list path: %#v", got)
+	}
+	if len(got.Chats) != 0 {
+		t.Fatalf("chats read eagerly in list path: %#v", got.Chats)
+	}
+	if got.Result != "" {
+		t.Fatalf("result read eagerly in list path: %q", got.Result)
+	}
+	if got.Tokens.Calls != 0 {
+		t.Fatalf("token ledger read eagerly in list path: %#v", got.Tokens)
+	}
+}
+
+func TestLoadDaemonDetailReadsHeavyFiles(t *testing.T) {
+	agentDir := t.TempDir()
+	daemonDir := filepath.Join(agentDir, "daemons", "em-7-20260609-010203-abcdef")
+	if err := os.MkdirAll(filepath.Join(daemonDir, "logs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(daemonDir, "history"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(path, body string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(daemonDir, "daemon.json"), `{"task":"t","state":"done","backend":"lingtai"}`)
+	write(filepath.Join(daemonDir, "logs", "events.jsonl"), strings.Join([]string{
+		`{"ts":"2026-06-09T01:02:04Z","event":"daemon_start"}`,
+		`{"ts":"2026-06-09T01:02:05Z","event":"tool_call","name":"read"}`,
+		`{"ts":"2026-06-09T01:02:06Z","event":"tool_result","name":"read","status":"ok"}`,
+	}, "\n"))
+	write(filepath.Join(daemonDir, "history", "chat_history.jsonl"), `{"role":"assistant","text":"task done","ts":"2026-06-09T01:02:07Z"}`)
+	write(filepath.Join(daemonDir, "logs", "token_ledger.jsonl"), strings.Join([]string{
+		`{"input":10,"output":4,"thinking":2,"cached":7}`,
+		`{"input":3,"output":1,"thinking":0,"cached":2}`,
+	}, "\n"))
+	write(filepath.Join(daemonDir, "result.txt"), "full result")
+
+	items, err := loadDaemonSummaries(agentDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := loadDaemonDetail(items[0])
+	if !got.DetailLoaded {
+		t.Fatalf("loadDaemonDetail did not mark DetailLoaded")
+	}
+	if got.EventCount != 3 || got.ToolCount != 2 || len(got.Events) != 3 || got.LastEventAt != "2026-06-09T01:02:06Z" {
+		t.Fatalf("events not loaded: count=%d tools=%d events=%d last=%q", got.EventCount, got.ToolCount, len(got.Events), got.LastEventAt)
+	}
+	if got.Tokens.Calls != 2 || got.Tokens.Input != 13 || got.Tokens.Output != 5 {
+		t.Fatalf("tokens not loaded: %#v", got.Tokens)
+	}
+	if len(got.Chats) != 1 || got.Chats[0].Text != "task done" {
+		t.Fatalf("chats not loaded: %#v", got.Chats)
+	}
+	if got.Result != "full result" {
+		t.Fatalf("result not loaded: %q", got.Result)
+	}
+	// Light metadata from the list path is preserved through detail load.
+	if got.Task != "t" || got.State != "done" {
+		t.Fatalf("list metadata lost in detail load: %#v", got)
+	}
+}
+
+func TestDaemonsSelectionLoadsDetailLazily(t *testing.T) {
+	agentDir := t.TempDir()
+	mk := func(name, task string) {
+		t.Helper()
+		dir := filepath.Join(agentDir, "daemons", name)
+		if err := os.MkdirAll(filepath.Join(dir, "logs"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "daemon.json"),
+			[]byte(fmt.Sprintf(`{"task":%q,"state":"done","backend":"lingtai"}`, task)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "result.txt"), []byte("result for "+task), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk("em-1-20260609-010203-aaaaaa", "first")
+	mk("em-2-20260609-010204-bbbbbb", "second")
+
+	m := NewDaemonsModel(filepath.Dir(agentDir), agentDir)
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	msg := m.loadData().(daemonsLoadMsg)
+	m, _ = m.Update(msg)
+
+	// After load, no run has heavy detail yet except the auto-selected first.
+	if !m.items[m.selected].DetailLoaded {
+		t.Fatalf("selected run detail not loaded after initial load")
+	}
+	other := 1 - m.selected
+	if m.items[other].DetailLoaded {
+		t.Fatalf("non-selected run detail loaded eagerly: idx %d", other)
+	}
+
+	// Navigating to the other run loads its detail on demand.
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if !m.items[m.selected].DetailLoaded {
+		t.Fatalf("navigated run detail not loaded on selection")
 	}
 }
 
@@ -452,12 +607,16 @@ func TestReadDaemonSummaryPrefersLedgerOverDaemonJSON(t *testing.T) {
 		[]byte(`{"input":50,"output":20,"thinking":3,"cached":10}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got, err := readDaemonSummary(dir)
+	list, err := readDaemonSummary(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The per-call ledger is authoritative when present; the daemon.json
-	// block is only a fallback.
+	// The lightweight list path uses the daemon.json block (no ledger read).
+	if list.Tokens.Calls != 0 || list.Tokens.Input != 1 {
+		t.Fatalf("list path should use daemon.json block: %#v", list.Tokens)
+	}
+	// On detail load, the per-call ledger is authoritative when present.
+	got := loadDaemonDetail(list)
 	if got.Tokens.Calls != 1 || got.Tokens.Input != 50 || got.Tokens.Output != 20 {
 		t.Fatalf("ledger should win over daemon.json block: %#v", got.Tokens)
 	}

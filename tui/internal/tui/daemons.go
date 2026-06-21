@@ -97,6 +97,13 @@ type daemonSummary struct {
 	LastEventAt  string
 	Tokens       daemonTokenSummary
 	ModifiedTime time.Time
+
+	// DetailLoaded is true once the heavy per-run files (events, chat history,
+	// result, token ledger) have been read by loadDaemonDetail. The list path
+	// (loadDaemonSummaries → readDaemonSummary) leaves it false and reads only
+	// daemon.json + the directory stat, so opening /daemons with many runs no
+	// longer pays the cost of every run's full event/log/ledger files.
+	DetailLoaded bool
 }
 
 type daemonTokenSummary struct {
@@ -324,10 +331,24 @@ func (m DaemonsModel) updatePicker(msg tea.KeyPressMsg) (DaemonsModel, tea.Cmd) 
 	return m, nil
 }
 
+// ensureDetailLoaded lazily reads the heavy per-run files for the currently
+// selected daemon and caches the result in m.items, so each run's detail is
+// read at most once until the next reload. Unselected runs are never read.
+func (m *DaemonsModel) ensureDetailLoaded() {
+	if m.selected < 0 || m.selected >= len(m.items) {
+		return
+	}
+	if m.items[m.selected].DetailLoaded {
+		return
+	}
+	m.items[m.selected] = loadDaemonDetail(m.items[m.selected])
+}
+
 func (m *DaemonsModel) syncContent() {
 	if !m.ready {
 		return
 	}
+	m.ensureDetailLoaded()
 	leftW, rightW := m.paneWidths()
 	m.listVP.SetWidth(leftW)
 	m.detailVP.SetWidth(rightW)
@@ -714,21 +735,44 @@ func readDaemonSummary(dir string) (daemonSummary, error) {
 	item.Turn = intField(raw, "turn")
 	item.MaxTurns = intField(raw, "max_turns")
 	item.ElapsedS = floatField(raw, "elapsed_s")
+	// Lightweight list path: only daemon.json + the directory stat are read
+	// here. The cheap daemon.json token snapshot is surfaced so the list/detail
+	// can show CLI-backend usage without touching the ledger; the authoritative
+	// per-call token_ledger.jsonl, events, chats, and result are deferred to
+	// loadDaemonDetail (called when a run is selected).
+	item.Tokens = daemonTokensFromState(raw)
+	if item.ModifiedTime.IsZero() {
+		item.ModifiedTime = newestTimestamp(item.StartedAt, item.UpdatedAt, item.CompletedAt, item.FinishedAt)
+	}
+	return item, nil
+}
+
+// loadDaemonDetail reads the heavy per-run files for a single daemon run and
+// returns the summary enriched with events, chat history, result text, and the
+// per-call token ledger. It is called lazily when a run is selected/expanded so
+// the initial list render and Ctrl+R refresh stay cheap even with many runs.
+//
+// It is idempotent and safe to call repeatedly: already-loaded summaries are
+// returned unchanged so navigating back to a previously viewed run does not
+// re-read its files.
+func loadDaemonDetail(item daemonSummary) daemonSummary {
+	if item.DetailLoaded || item.Dir == "" {
+		item.DetailLoaded = true
+		return item
+	}
+	dir := item.Dir
 	item.Events, item.EventCount, item.ToolCount, item.LastEventAt = readDaemonEvents(filepath.Join(dir, "logs", "events.jsonl"))
 	item.Chats = readDaemonChats(filepath.Join(dir, "history", "chat_history.jsonl"))
 	item.Result = readDaemonResult(filepath.Join(dir, "result.txt"))
-	item.Tokens = readDaemonTokens(filepath.Join(dir, "logs", "token_ledger.jsonl"))
-	// CLI backends (claude/claude-p, codex, opencode, cursor) never write a
-	// per-call token_ledger.jsonl, but the kernel may keep UI-only running
-	// totals in daemon.json. Fall back to those so their usage still shows;
-	// the per-call ledger remains authoritative whenever it exists.
-	if item.Tokens.Calls == 0 {
-		item.Tokens = daemonTokensFromState(raw)
+	if ledger := readDaemonTokens(filepath.Join(dir, "logs", "token_ledger.jsonl")); ledger.Calls > 0 {
+		// CLI backends (claude/claude-p, codex, opencode, cursor) never write a
+		// per-call token_ledger.jsonl, so keep the daemon.json snapshot set by
+		// readDaemonSummary. The per-call ledger is authoritative whenever it
+		// exists.
+		item.Tokens = ledger
 	}
-	if item.ModifiedTime.IsZero() {
-		item.ModifiedTime = newestTimestamp(item.StartedAt, item.UpdatedAt, item.CompletedAt, item.FinishedAt, item.LastEventAt)
-	}
-	return item, nil
+	item.DetailLoaded = true
+	return item
 }
 
 func readDaemonEvents(path string) ([]daemonEvent, int, int, string) {
