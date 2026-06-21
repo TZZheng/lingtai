@@ -1,0 +1,14 @@
+a0ace7b a0ace7badfbcb1a8c06a64a89e00ebb1638bc6d3	huangzesen	hzsbazinga@outlook.com	2026-06-19T21:29:42-04:00	feat(tui): split kanban recent call lanes
+ee799c0 ee799c0a587f81ee97a09ef7eaa97b977bdebf17	huangzesen	hzsbazinga@outlook.com	2026-06-19T23:30:46-04:00	fix(tui): exclude daemon rows from main token ledgers
+821a2c0 821a2c0f7b5696cc815ca4e706a04243d86f672b	github-actions[bot]	41898282+github-actions[bot]@users.noreply.github.com	2026-06-20T04:37:12+00:00	chore(stars): update daily star count
+58de436 58de4364c9c95c4073d73ed61096b6bf4d2a815c	huangzesen	hzsbazinga@outlook.com	2026-06-20T02:37:17-04:00	docs: add runtime refresh verification lessons (#375)
+38c3495 38c3495fa282b296d77633095244999e0af366d0	huangzesen	hzsbazinga@outlook.com	2026-06-20T00:47:53-07:00	Load notification view from sqlite log
+2439898 24398982d3becd5c2b078ef8ae77725204b24e61	huangzesen	hzsbazinga@outlook.com	2026-06-20T03:50:32-04:00	Merge pull request #376 from Lingtai-AI/feat/notification-sqlite-jit-20260619
+9da1d3d 9da1d3dc064e034399789bef7b44d5ee10d19ffb	huangzesen	hzsbazinga@outlook.com	2026-06-20T01:30:35-07:00	Resolve migration version collision
+c16aede c16aede9a95fa296c8d9d49e460e15a8ee1660de	huangzesen	hzsbazinga@outlook.com	2026-06-20T04:37:37-04:00	Merge pull request #377 from Lingtai-AI/fix/migration-version-collision-20260620
+9f115d9 9f115d9f2f36b5e28c7c31812cc3c71de6717829	huangzesen	hzsbazinga@outlook.com	2026-06-20T05:34:17-04:00	Improve notification block viewer UX
+bd6c732 bd6c732e24774d00bcac2adee84510cb50aa729e	huangzesen	hzsbazinga@outlook.com	2026-06-20T14:37:28-04:00	Show persisted notification block snapshots (#379)
+05725c7 05725c755bf40673e20710de8c8cb1c86aeda0fe	huangzesen	hzsbazinga@outlook.com	2026-06-20T13:45:46-07:00	Show local timezone in kanban timestamps
+12aa315 12aa315106d7bef4e70b375f3ab81d65a69e170e	huangzesen	hzsbazinga@outlook.com	2026-06-20T16:52:23-04:00	Merge pull request #380 from Lingtai-AI/kanban-local-timezone-20260620
+9c264d0 9c264d0acd4b7dab30e661bea43dd7dcbd28b38b	huangzesen	hzsbazinga@outlook.com	2026-06-20T15:50:14-07:00	Show timezone and CLI token usage in daemons view
+29d25fa 29d25faf85edc2b5a224be7a329b78d6783cfd29	huangzesen	hzsbazinga@outlook.com	2026-06-20T15:50:19-07:00	Merge pull request #381 from Lingtai-AI/daemons-local-timezone-token-usage-20260620

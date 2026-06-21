@@ -1,0 +1,104 @@
+[
+  {
+    "additions": 74,
+    "author": {
+      "id": "MDQ6VXNlcjI5NzIwNzk5",
+      "is_bot": false,
+      "login": "huangzesen",
+      "name": ""
+    },
+    "baseRefName": "main",
+    "changedFiles": 3,
+    "deletions": 9,
+    "headRefName": "docs/dev-guide-codex-cache-lessons-20260620",
+    "mergedAt": "2026-06-20T06:37:18Z",
+    "number": 375,
+    "title": "docs: add runtime refresh verification lessons",
+    "url": "https://github.com/Lingtai-AI/lingtai/pull/375"
+  },
+  {
+    "additions": 767,
+    "author": {
+      "id": "MDQ6VXNlcjI5NzIwNzk5",
+      "is_bot": false,
+      "login": "huangzesen",
+      "name": ""
+    },
+    "baseRefName": "main",
+    "changedFiles": 11,
+    "deletions": 193,
+    "headRefName": "feat/notification-sqlite-jit-20260619",
+    "mergedAt": "2026-06-20T07:50:32Z",
+    "number": 376,
+    "title": "Load notification view from sqlite log",
+    "url": "https://github.com/Lingtai-AI/lingtai/pull/376"
+  },
+  {
+    "additions": 2037,
+    "author": {
+      "id": "MDQ6VXNlcjI5NzIwNzk5",
+      "is_bot": false,
+      "login": "huangzesen",
+      "name": ""
+    },
+    "baseRefName": "main",
+    "changedFiles": 15,
+    "deletions": 6,
+    "headRefName": "fix/migration-version-collision-20260620",
+    "mergedAt": "2026-06-20T08:37:37Z",
+    "number": 377,
+    "title": "Resolve migration version collision",
+    "url": "https://github.com/Lingtai-AI/lingtai/pull/377"
+  },
+  {
+    "additions": 579,
+    "author": {
+      "id": "MDQ6VXNlcjI5NzIwNzk5",
+      "is_bot": false,
+      "login": "huangzesen",
+      "name": ""
+    },
+    "baseRefName": "main",
+    "changedFiles": 8,
+    "deletions": 127,
+    "headRefName": "fix/notification-block-snapshot-view-20260620",
+    "mergedAt": "2026-06-20T18:37:28Z",
+    "number": 379,
+    "title": "Show persisted notification block snapshots",
+    "url": "https://github.com/Lingtai-AI/lingtai/pull/379"
+  },
+  {
+    "additions": 125,
+    "author": {
+      "id": "MDQ6VXNlcjI5NzIwNzk5",
+      "is_bot": false,
+      "login": "huangzesen",
+      "name": ""
+    },
+    "baseRefName": "main",
+    "changedFiles": 2,
+    "deletions": 11,
+    "headRefName": "kanban-local-timezone-20260620",
+    "mergedAt": "2026-06-20T20:52:24Z",
+    "number": 380,
+    "title": "Show local timezone in kanban timestamps",
+    "url": "https://github.com/Lingtai-AI/lingtai/pull/380"
+  },
+  {
+    "additions": 278,
+    "author": {
+      "id": "MDQ6VXNlcjI5NzIwNzk5",
+      "is_bot": false,
+      "login": "huangzesen",
+      "name": ""
+    },
+    "baseRefName": "main",
+    "changedFiles": 2,
+    "deletions": 14,
+    "headRefName": "daemons-local-timezone-token-usage-20260620",
+    "mergedAt": "2026-06-20T22:50:19Z",
+    "number": 381,
+    "title": "Show timezone and CLI token usage in daemons view",
+    "url": "https://github.com/Lingtai-AI/lingtai/pull/381"
+  }
+]
