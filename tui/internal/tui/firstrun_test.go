@@ -9,9 +9,55 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/anthropics/lingtai-tui/i18n"
 	"github.com/anthropics/lingtai-tui/internal/config"
 	"github.com/anthropics/lingtai-tui/internal/preset"
 )
+
+// TestSetupViewOmitsMoltPressureField guards the removal of the molt_pressure
+// configurable field from the agent setup wizard. molt_pressure is no longer a
+// user-facing setup input — it is written to init.json at its DefaultAgentOpts
+// value by the preset layer, but the wizard exposes no row for it. The Runtime
+// section still renders its other numeric fields (e.g. Max RPM), so the
+// assertion proves the molt row was removed, not the whole section.
+func TestSetupViewOmitsMoltPressureField(t *testing.T) {
+	i18n.SetLang("en")
+	baseDir := t.TempDir()
+	globalDir := t.TempDir()
+	orchDir := filepath.Join(baseDir, "manager")
+	if err := os.MkdirAll(orchDir, 0o755); err != nil {
+		t.Fatalf("mkdir orchDir: %v", err)
+	}
+	initJSON := map[string]interface{}{
+		"manifest": map[string]interface{}{
+			"agent_name":    "岩",
+			"language":      "en",
+			"molt_pressure": 0.42,
+		},
+	}
+	data, err := json.Marshal(initJSON)
+	if err != nil {
+		t.Fatalf("marshal init: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(orchDir, "init.json"), data, 0o644); err != nil {
+		t.Fatalf("write init: %v", err)
+	}
+
+	m := NewSetupModeModel(baseDir, globalDir, orchDir, "manager")
+	m.enterAgentNameDir(m.currentPreset())
+	m.step = stepAgentNameDir
+	view := m.View()
+
+	// The i18n key is removed, so T() echoes the key back; assert both the
+	// key echo and the former human label are absent from the rendered view.
+	if strings.Contains(view, "firstrun.molt_pressure") || strings.Contains(view, "Molt pressure") {
+		t.Fatalf("setup view should not expose the molt_pressure field; view=%s", view)
+	}
+	// Sanity: the Runtime section is still present (Max RPM row remains).
+	if maxRpm := i18n.T("firstrun.max_rpm"); !strings.Contains(view, maxRpm) {
+		t.Fatalf("setup view should still render the Runtime section (%q missing)", maxRpm)
+	}
+}
 
 func TestGetPresetProvider(t *testing.T) {
 	m := FirstRunModel{}

@@ -25,7 +25,7 @@ This package manages the TUI's bootstrap sequence — the steps that run before 
 
 ## Connections
 
-- **Called from:** `tui/main.go:228-273`, `tui/internal/tui/firstrun.go:597-604`, and `tui/internal/headless/spawn.go:77-83` — startup/first-run/headless bootstrap paths.
+- **Called from:** `tui/main.go:228-273`, `tui/internal/tui/firstrun.go:672-675`, and `tui/internal/headless/spawn.go:77-83` — startup/first-run/headless bootstrap paths.
 - **Calls out:** PyPI API (`pypi.org/pypi/lingtai/json`), GitHub API (`api.github.com/repos/Lingtai-AI/lingtai/releases/latest`), `uv` / `pip` CLI.
 - **Bootstrap sequence** (in `tui/main.go:228-273`):
   1. `config.MigrateLegacyLanguage(globalDir)` — one-shot language migration

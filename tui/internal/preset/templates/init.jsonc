@@ -118,14 +118,6 @@
     // Set this to cap memory usage or force earlier molt.
     "context_limit": null,
 
-    // Fraction (0.0–1.0) of context_limit that triggers molt warnings.
-    // 0.8 = warn at 80% context usage, molt soon after.
-    "molt_pressure": 0.8,
-
-    // Custom instructions appended to the molt briefing prompt.
-    // Empty = use default molt behavior.
-    "molt_prompt": "",
-
     // Per-wake loop budget: max iterations of the LLM/tool-call loop per
     // wake cycle. Every tool call counts as a turn, not just LLM requests.
     // Safety limit — agent sleeps once the budget is exhausted.

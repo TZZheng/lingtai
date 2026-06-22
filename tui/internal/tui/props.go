@@ -504,7 +504,6 @@ func (m PropsModel) renderLeft(maxW int) string {
 	lines = append(lines, "")
 	renderFields([]propsField{
 		{"stamina", i18n.T("props.stamina")},
-		{"molt_pressure", i18n.T("props.molt_pressure")},
 		{"soul_delay", i18n.T("props.soul_delay")},
 		{"molt_count", i18n.T("props.molt_count")},
 		{"max_turns", i18n.T("props.max_turns")},

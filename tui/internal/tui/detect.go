@@ -113,7 +113,7 @@ func PropagateOrchestratorConfig(baseDir, orchDir string) error {
 				}
 				manifest["soul"] = soulCopy
 			}
-			for _, key := range []string{"stamina", "context_limit", "molt_pressure"} {
+			for _, key := range []string{"stamina", "context_limit"} {
 				if v, ok := orchManifest[key]; ok {
 					manifest[key] = v
 				}

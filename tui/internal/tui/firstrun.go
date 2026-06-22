@@ -154,7 +154,6 @@ type FirstRunModel struct {
 	staminaInput   textinput.Model
 	ctxLimitInput  textinput.Model
 	soulDelayInput textinput.Model
-	moltPressInput textinput.Model
 	maxRpmInput    textinput.Model
 	maxAedInput    textinput.Model
 	// Authority toggles
@@ -354,11 +353,6 @@ func NewFirstRunModel(baseDir, globalDir string, hasPresets bool, preselectedRec
 	sdi.SetWidth(15)
 	sdi.Prompt = ""
 
-	mpi := textinput.New()
-	mpi.CharLimit = 6
-	mpi.SetWidth(15)
-	mpi.Prompt = ""
-
 	mri := textinput.New()
 	mri.CharLimit = 6
 	mri.SetWidth(15)
@@ -425,7 +419,6 @@ func NewFirstRunModel(baseDir, globalDir string, hasPresets bool, preselectedRec
 		staminaInput:      si,
 		ctxLimitInput:     ci,
 		soulDelayInput:    sdi,
-		moltPressInput:    mpi,
 		maxRpmInput:       mri,
 		maxAedInput:       mai,
 		covenantInput:     covi,
@@ -1832,10 +1825,6 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 					if soulDelay <= 0 {
 						soulDelay = 99999
 					}
-					moltPress, _ := strconv.ParseFloat(m.moltPressInput.Value(), 64)
-					if moltPress <= 0 || moltPress > 1 {
-						moltPress = 0.8
-					}
 					maxRpm, _ := strconv.Atoi(m.maxRpmInput.Value())
 					if maxRpm < 0 {
 						maxRpm = 60
@@ -1847,7 +1836,6 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 						Stamina:        stamina,
 						ContextLimit:   ctxLimit,
 						SoulDelay:      soulDelay,
-						MoltPressure:   moltPress,
 						MaxRpm:         maxRpm,
 						MaxAedAttempts: maxAedAttempts,
 						Karma:          m.karmaIdx == 0,
@@ -1893,10 +1881,6 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 				if err != nil || soulDelay <= 0 {
 					soulDelay = 99999
 				}
-				moltPress, err := strconv.ParseFloat(m.moltPressInput.Value(), 64)
-				if err != nil || moltPress <= 0 || moltPress > 1 {
-					moltPress = 0.8
-				}
 				maxRpm, err := strconv.Atoi(m.maxRpmInput.Value())
 				if err != nil || maxRpm < 0 {
 					maxRpm = 60
@@ -1911,7 +1895,6 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 					Stamina:        stamina,
 					ContextLimit:   ctxLimit,
 					SoulDelay:      soulDelay,
-					MoltPressure:   moltPress,
 					MaxRpm:         maxRpm,
 					MaxAedAttempts: maxAedAttempts,
 					Karma:          m.karmaIdx == 0,
@@ -1987,21 +1970,19 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 				case 5:
 					m.soulDelayInput, cmd = m.soulDelayInput.Update(msg)
 				case 6:
-					m.moltPressInput, cmd = m.moltPressInput.Update(msg)
-				case 7:
 					m.maxRpmInput, cmd = m.maxRpmInput.Update(msg)
-				case 8:
+				case 7:
 					m.maxAedInput, cmd = m.maxAedInput.Update(msg)
-				case 11:
+				case 10:
 					m.covenantInput, cmd = m.covenantInput.Update(msg)
 					m.covenantDirty = true
-				case 12:
+				case 11:
 					m.principleInput, cmd = m.principleInput.Update(msg)
 					m.principleDirty = true
-				case 13:
+				case 12:
 					m.soulFlowInput, cmd = m.soulFlowInput.Update(msg)
 					m.soulFlowDirty = true
-				case 14:
+				case 13:
 					m.commentInput, cmd = m.commentInput.Update(msg)
 				}
 				return m, cmd
@@ -2187,18 +2168,16 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 			case 5:
 				m.soulDelayInput, cmd = m.soulDelayInput.Update(msg)
 			case 6:
-				m.moltPressInput, cmd = m.moltPressInput.Update(msg)
-			case 7:
 				m.maxRpmInput, cmd = m.maxRpmInput.Update(msg)
-			case 8:
+			case 7:
 				m.maxAedInput, cmd = m.maxAedInput.Update(msg)
-			case 11:
+			case 10:
 				m.covenantInput, cmd = m.covenantInput.Update(msg)
-			case 12:
+			case 11:
 				m.principleInput, cmd = m.principleInput.Update(msg)
-			case 13:
+			case 12:
 				m.soulFlowInput, cmd = m.soulFlowInput.Update(msg)
-			case 14:
+			case 13:
 				m.commentInput, cmd = m.commentInput.Update(msg)
 			}
 		case stepRecipe:
@@ -2801,9 +2780,8 @@ func (m FirstRunModel) View() string {
 			{3, i18n.T("firstrun.stamina"), i18n.T("firstrun.stamina_hint"), m.staminaInput.View()},
 			{4, i18n.T("firstrun.context_limit"), i18n.T("firstrun.context_limit_hint"), m.ctxLimitInput.View()},
 			{5, i18n.T("firstrun.soul_delay"), i18n.T("firstrun.soul_delay_hint"), m.soulDelayInput.View()},
-			{6, i18n.T("firstrun.molt_pressure"), i18n.T("firstrun.molt_pressure_hint"), m.moltPressInput.View()},
-			{7, i18n.T("firstrun.max_rpm"), i18n.T("firstrun.max_rpm_hint"), m.maxRpmInput.View()},
-			{8, i18n.T("firstrun.max_aed_attempts"), i18n.T("firstrun.max_aed_attempts_hint"), m.maxAedInput.View()},
+			{6, i18n.T("firstrun.max_rpm"), i18n.T("firstrun.max_rpm_hint"), m.maxRpmInput.View()},
+			{7, i18n.T("firstrun.max_aed_attempts"), i18n.T("firstrun.max_aed_attempts_hint"), m.maxAedInput.View()},
 		}
 		for _, nf := range numFields {
 			hint := StyleFaint.Render(" (" + nf.hint + ")")
@@ -3003,16 +2981,16 @@ func centerText(s string, width int) string {
 
 // agentNameDirFieldCount is the number of fields in stepAgentNameDir,
 // including the Back/Next button slots at the end.
-const agentNameDirFieldCount = 17
+const agentNameDirFieldCount = 16
 
 // Field indices:
 // 0=name, 1=dir, 2=lang,
-// 3=stamina, 4=context_limit, 5=soul_delay, 6=molt_pressure, 7=max_rpm, 8=max_aed_attempts,
-// 9=karma, 10=nirvana,
-// 11=covenant, 12=principle, 13=soul_flow, 14=comment
-// 15=Back, 16=Next  (footer buttons; no input is focused here)
-const agentNameDirBackIdx = 15
-const agentNameDirNextIdx = 16
+// 3=stamina, 4=context_limit, 5=soul_delay, 6=max_rpm, 7=max_aed_attempts,
+// 8=karma, 9=nirvana,
+// 10=covenant, 11=principle, 12=soul_flow, 13=comment
+// 14=Back, 15=Next  (footer buttons; no input is focused here)
+const agentNameDirBackIdx = 14
+const agentNameDirNextIdx = 15
 
 // runCheckCaps runs `python -m lingtai check-caps` in a goroutine.
 func (m FirstRunModel) runCheckCaps() tea.Cmd {
@@ -3692,13 +3670,11 @@ func (m *FirstRunModel) enterAgentNameDir(p preset.Preset) {
 	m.staminaInput.SetValue("36000")
 	m.ctxLimitInput.SetValue("300000")
 	m.soulDelayInput.SetValue("99999")
-	m.moltPressInput.SetValue("0.8")
 	m.maxRpmInput.SetValue("60")
 	m.maxAedInput.SetValue(strconv.Itoa(preset.DefaultMaxAedAttempts))
 	m.staminaInput.Blur()
 	m.ctxLimitInput.Blur()
 	m.soulDelayInput.Blur()
-	m.moltPressInput.Blur()
 	m.maxRpmInput.Blur()
 	m.maxAedInput.Blur()
 
@@ -3734,9 +3710,6 @@ func (m *FirstRunModel) enterAgentNameDir(p preset.Preset) {
 				if v, ok := numberFromJSON(soul["delay"]); ok {
 					m.soulDelayInput.SetValue(formatNumber(v))
 				}
-			}
-			if v, ok := numberFromJSON(manifest["molt_pressure"]); ok {
-				m.moltPressInput.SetValue(formatFloat(v))
 			}
 			if v, ok := numberFromJSON(manifest["max_rpm"]); ok {
 				m.maxRpmInput.SetValue(formatNumber(v))
@@ -3824,19 +3797,12 @@ func formatNumber(v float64) string {
 	return strconv.FormatFloat(v, 'f', -1, 64)
 }
 
-// formatFloat renders a fractional value (molt_pressure, attention) without
-// trailing zeros — strconv's 'f', -1 form keeps just enough precision to round-trip.
-func formatFloat(v float64) string {
-	return strconv.FormatFloat(v, 'f', -1, 64)
-}
-
 func (m *FirstRunModel) focusAgentField() tea.Cmd {
 	m.nameInput.Blur()
 	m.dirInput.Blur()
 	m.staminaInput.Blur()
 	m.ctxLimitInput.Blur()
 	m.soulDelayInput.Blur()
-	m.moltPressInput.Blur()
 	m.maxRpmInput.Blur()
 	m.maxAedInput.Blur()
 	m.covenantInput.Blur()
@@ -3858,20 +3824,18 @@ func (m *FirstRunModel) focusAgentField() tea.Cmd {
 	case 5:
 		return m.soulDelayInput.Focus()
 	case 6:
-		return m.moltPressInput.Focus()
-	case 7:
 		return m.maxRpmInput.Focus()
-	case 8:
+	case 7:
 		return m.maxAedInput.Focus()
-	case 9, 10:
+	case 8, 9:
 		return nil // karma/nirvana — cycle selectors
-	case 11:
+	case 10:
 		return m.covenantInput.Focus()
-	case 12:
+	case 11:
 		return m.principleInput.Focus()
-	case 13:
+	case 12:
 		return m.soulFlowInput.Focus()
-	case 14:
+	case 13:
 		return m.commentInput.Focus()
 	}
 	return nil

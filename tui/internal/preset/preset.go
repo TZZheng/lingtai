@@ -1371,7 +1371,6 @@ type AgentOpts struct {
 	Stamina        float64  // max uptime in seconds
 	ContextLimit   int      // token budget
 	SoulDelay      float64  // seconds between soul cycles
-	MoltPressure   float64  // 0–1 ratio triggering molt
 	MaxRpm         int      // API requests-per-minute cap (cooperative network gate); 0 disables
 	MaxAedAttempts int      // AED (auto-error-recovery) retry attempts per message turn before fallback/sleep
 	Karma          bool     // lifecycle control over other agents
@@ -1402,7 +1401,6 @@ func DefaultAgentOpts() AgentOpts {
 		Stamina:        36000,
 		ContextLimit:   300000,
 		SoulDelay:      99999,
-		MoltPressure:   0.8,
 		MaxRpm:         60,
 		MaxAedAttempts: DefaultMaxAedAttempts,
 		Karma:          true,
@@ -1511,8 +1509,10 @@ func GenerateInitJSONWithOpts(p Preset, agentName, dirName, lingtaiDir, globalDi
 	manifest["soul"] = map[string]interface{}{"delay": opts.SoulDelay}
 	manifest["stamina"] = opts.Stamina
 	manifest["context_limit"] = opts.ContextLimit
-	manifest["molt_pressure"] = opts.MoltPressure
-	manifest["molt_prompt"] = ""
+	// molt_pressure and molt_prompt are intentionally NOT written: the kernel no
+	// longer accepts configurable context.molt thresholds or messages (Jason
+	// #4135/#4137/#4140). Existing init.json files that still carry stale keys
+	// are left untouched (no migration); the kernel ignores them.
 	// Per-wake loop budget: every iteration of the LLM/tool-call loop
 	// counts as a turn, not just LLM requests, so tool-heavy work burns
 	// through it quickly. The agent sleeps when the budget is exhausted.
