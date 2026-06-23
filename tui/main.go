@@ -94,14 +94,23 @@ func main() {
 
 	// Print version and check for updates (3s timeout).
 	// Skip upgrade check for dev builds (version contains '-' suffix like v0.4.31-4-gabcdef).
+	globalDir, err := config.GlobalDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 	isDev := strings.Contains(version, "-")
 	latestVersion := ""
 	if !isDev {
 		latestVersion = config.CheckTUIUpgrade(version)
 	}
 	if latestVersion != "" {
-		if handleTUIUpgrade(version, latestVersion) {
+		install := config.DetectCurrentTUIInstall(globalDir)
+		if config.SelectTUIUpdater(install).InstallMethod() == config.TUIInstallMethodHomebrew && handleTUIUpgrade(install, version, latestVersion) {
 			return
+		}
+		if install.Method != config.TUIInstallMethodHomebrew {
+			fmt.Println("lingtai-tui " + version)
 		}
 	} else {
 		fmt.Println("lingtai-tui " + version)
@@ -114,13 +123,6 @@ func main() {
 	// Always start in current directory
 	projectDir, _ := os.Getwd()
 	projectDir, _ = filepath.Abs(projectDir)
-
-	// Global config directory (~/.lingtai-tui)
-	globalDir, err := config.GlobalDir()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
 
 	// Global per-machine migrations (versioned in ~/.lingtai-tui/meta.json).
 	// Best-effort housekeeping — failures don't abort startup.

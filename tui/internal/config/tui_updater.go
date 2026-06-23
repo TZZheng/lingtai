@@ -1,0 +1,159 @@
+package config
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+)
+
+const homebrewTUIFormula = "lingtai-ai/lingtai/lingtai-tui"
+
+// TUIUpdater is the install-method-specific backend for TUI binary updates.
+// It is deliberately narrow: version checks and prompting stay with callers,
+// while the backend owns the mutation or guidance for one install method.
+type TUIUpdater interface {
+	InstallMethod() TUIInstallMethod
+	Upgrade(TUIUpdateOptions) TUIUpdateResult
+}
+
+// TUIUpdateOptions injects side effects for TUI updater backends.
+type TUIUpdateOptions struct {
+	LatestVersion string
+
+	Runner   CommandRunner
+	LookPath func(string) (string, error)
+
+	// IncludeHomebrewUpdate preserves doctor's existing `brew update` before
+	// `brew upgrade`. Startup leaves this false to keep its current command.
+	IncludeHomebrewUpdate bool
+	// ResolveHomebrewPath preserves doctor's full-path command reporting.
+	// Startup leaves this false so execution still goes through "brew".
+	ResolveHomebrewPath bool
+}
+
+// TUIUpdateResult is the backend result consumed by doctor and startup.
+type TUIUpdateResult struct {
+	Lines   []DoctorLine
+	Healthy bool
+	Updated bool
+	Err     error
+}
+
+func (r *TUIUpdateResult) add(sev DoctorSeverity, format string, args ...interface{}) {
+	r.Lines = append(r.Lines, DoctorLine{Severity: sev, Text: fmt.Sprintf(format, args...)})
+	if sev == DoctorFail {
+		r.Healthy = false
+	}
+}
+
+// DetectCurrentTUIInstall reports the install method for the running binary
+// with production side effects. Tests can use detectTUIInstallMethod directly.
+func DetectCurrentTUIInstall(globalDir string) TUIInstallInfo {
+	exe, err := os.Executable()
+	if err != nil {
+		exe = ""
+	}
+	return detectTUIInstallMethod(globalDir, exe, DoctorOptions{})
+}
+
+// SelectTUIUpdater returns the backend for the detected install method.
+func SelectTUIUpdater(install TUIInstallInfo) TUIUpdater {
+	switch install.Method {
+	case TUIInstallMethodHomebrew:
+		return homebrewTUIUpdater{}
+	case TUIInstallMethodSource:
+		return sourceTUIUpdater{}
+	default:
+		return unknownTUIUpdater{}
+	}
+}
+
+// RunTUIUpdate selects and runs the backend for the detected install method.
+func RunTUIUpdate(install TUIInstallInfo, opts TUIUpdateOptions) TUIUpdateResult {
+	return SelectTUIUpdater(install).Upgrade(opts)
+}
+
+type homebrewTUIUpdater struct{}
+
+func (homebrewTUIUpdater) InstallMethod() TUIInstallMethod {
+	return TUIInstallMethodHomebrew
+}
+
+func (homebrewTUIUpdater) Upgrade(opts TUIUpdateOptions) TUIUpdateResult {
+	result := TUIUpdateResult{Healthy: true}
+	if opts.Runner == nil {
+		opts.Runner = execCommandRunner{}
+	}
+	brew := "brew"
+	if opts.ResolveHomebrewPath {
+		lookPath := opts.LookPath
+		if lookPath == nil {
+			lookPath = exec.LookPath
+		}
+		resolved, err := lookPath("brew")
+		if err != nil || resolved == "" {
+			result.Err = errors.New("homebrew not found")
+			result.add(DoctorFail, "Homebrew not found; install/update manually from %s", tuiReleaseURL(opts.LatestVersion))
+			return result
+		}
+		brew = resolved
+	}
+
+	commands := [][]string{}
+	if opts.IncludeHomebrewUpdate {
+		commands = append(commands, []string{"update"})
+	}
+	commands = append(commands, []string{"upgrade", homebrewTUIFormula})
+	for _, args := range commands {
+		result.add(DoctorInfo, "Running: %s %s", brew, strings.Join(args, " "))
+		res := opts.Runner.Run(brew, args...)
+		appendCommandOutputToTUIUpdate(&result, res)
+		if res.Err != nil {
+			result.Err = res.Err
+			result.add(DoctorFail, "Command failed: %v", res.Err)
+			return result
+		}
+	}
+	result.Updated = true
+	result.add(DoctorWarn, "Brew upgrade finished. Restart lingtai-tui and run `lingtai-tui version` to verify the active binary changed.")
+	return result
+}
+
+type sourceTUIUpdater struct{}
+
+func (sourceTUIUpdater) InstallMethod() TUIInstallMethod {
+	return TUIInstallMethodSource
+}
+
+func (sourceTUIUpdater) Upgrade(opts TUIUpdateOptions) TUIUpdateResult {
+	result := TUIUpdateResult{Healthy: true}
+	result.add(DoctorWarn, "Source/user-local TUI update is not automated yet; rerun the installer for %s from %s", opts.LatestVersion, tuiReleaseURL(opts.LatestVersion))
+	return result
+}
+
+type unknownTUIUpdater struct{}
+
+func (unknownTUIUpdater) InstallMethod() TUIInstallMethod {
+	return TUIInstallMethodUnknown
+}
+
+func (unknownTUIUpdater) Upgrade(opts TUIUpdateOptions) TUIUpdateResult {
+	result := TUIUpdateResult{Healthy: true}
+	result.add(DoctorWarn, "TUI install method is unknown; update manually from %s", tuiReleaseURL(opts.LatestVersion))
+	return result
+}
+
+func appendCommandOutputToTUIUpdate(r *TUIUpdateResult, res CommandResult) {
+	for _, line := range interestingCommandLines(res.Stdout, res.Stderr) {
+		r.add(DoctorInfo, "  %s", line)
+	}
+}
+
+func tuiReleaseURL(version string) string {
+	if version == "" {
+		return "https://github.com/Lingtai-AI/lingtai/releases/latest"
+	}
+	return "https://github.com/Lingtai-AI/lingtai/releases/tag/" + version
+}

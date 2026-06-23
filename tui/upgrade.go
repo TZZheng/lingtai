@@ -19,7 +19,7 @@ type runningTUIProcess struct {
 	Command string
 }
 
-func handleTUIUpgrade(version, latestVersion string) bool {
+func handleTUIUpgrade(install config.TUIInstallInfo, version, latestVersion string) bool {
 	fmt.Printf("lingtai-tui %s (latest: %s)\n", version, latestVersion)
 
 	others := findOtherTUIProcesses()
@@ -53,10 +53,15 @@ func handleTUIUpgrade(version, latestVersion string) bool {
 	}
 
 	fmt.Println("  Upgrading...")
-	cmd := exec.Command("brew", "upgrade", "lingtai-ai/lingtai/lingtai-tui")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	update := config.RunTUIUpdate(install, config.TUIUpdateOptions{
+		LatestVersion: latestVersion,
+		Runner:        streamingCommandRunner{stdout: os.Stdout, stderr: os.Stderr},
+	})
+	if !update.Healthy {
+		err := update.Err
+		if err == nil {
+			err = fmt.Errorf("homebrew upgrade failed")
+		}
 		fmt.Fprintf(os.Stderr, "  Upgrade failed: %v\n", err)
 		return false
 	}
@@ -84,6 +89,19 @@ func readLineLower() string {
 
 func answerYes(answer string) bool {
 	return answer == "y" || answer == "yes"
+}
+
+type streamingCommandRunner struct {
+	stdout *os.File
+	stderr *os.File
+}
+
+func (r streamingCommandRunner) Run(name string, args ...string) config.CommandResult {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = r.stdout
+	cmd.Stderr = r.stderr
+	err := cmd.Run()
+	return config.CommandResult{Err: err}
 }
 
 func prepareOtherTUIProcessesForUpgrade(procs []runningTUIProcess) error {

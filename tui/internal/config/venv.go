@@ -412,8 +412,7 @@ type CommandResult struct {
 }
 
 // TUIInstallMethod identifies how the running lingtai-tui binary appears to
-// have been installed. It is intentionally small for now: doctor only needs
-// report/routing clarity, not a full updater backend.
+// have been installed. The updater layer uses it to choose the backend.
 type TUIInstallMethod string
 
 const (
@@ -577,29 +576,19 @@ func (r *DoctorReport) checkTUI(globalDir string, opts DoctorOptions) {
 	if !opts.ForceTUI {
 		return
 	}
-	if install.Method == TUIInstallMethodSource {
-		r.add(DoctorWarn, "Source/user-local TUI update is not automated yet; rerun the installer for %s from https://github.com/Lingtai-AI/lingtai/releases/tag/%s", release.TagName, release.TagName)
-		return
+	update := RunTUIUpdate(install, TUIUpdateOptions{
+		LatestVersion:         release.TagName,
+		Runner:                opts.Runner,
+		LookPath:              opts.LookPath,
+		IncludeHomebrewUpdate: true,
+		ResolveHomebrewPath:   true,
+	})
+	for _, line := range update.Lines {
+		r.add(line.Severity, "%s", line.Text)
 	}
-	if install.Method != TUIInstallMethodHomebrew {
-		r.add(DoctorWarn, "TUI install method is unknown; update manually from https://github.com/Lingtai-AI/lingtai/releases/tag/%s", release.TagName)
-		return
+	if !update.Healthy {
+		r.Healthy = false
 	}
-	brew, err := opts.LookPath("brew")
-	if err != nil || brew == "" {
-		r.add(DoctorFail, "Homebrew not found; install/update manually from https://github.com/Lingtai-AI/lingtai/releases/tag/%s", release.TagName)
-		return
-	}
-	for _, cmdArgs := range [][]string{{"update"}, {"upgrade", "lingtai-ai/lingtai/lingtai-tui"}} {
-		r.add(DoctorInfo, "Running: %s %s", brew, strings.Join(cmdArgs, " "))
-		res := opts.Runner.Run(brew, cmdArgs...)
-		appendCommandOutput(r, res)
-		if res.Err != nil {
-			r.add(DoctorFail, "Command failed: %v", res.Err)
-			return
-		}
-	}
-	r.add(DoctorWarn, "Brew upgrade finished. Restart lingtai-tui and run `lingtai-tui version` to verify the active binary changed.")
 }
 
 func detectTUIInstallMethod(globalDir, exe string, opts DoctorOptions) TUIInstallInfo {
@@ -1285,12 +1274,6 @@ func devEditableInstallCommand(globalDir, python string, dev devCheckout, lookPa
 		args = append(args, "-e", t)
 	}
 	return pipCmd, args
-}
-
-func appendCommandOutput(r *DoctorReport, res CommandResult) {
-	for _, line := range interestingCommandLines(res.Stdout, res.Stderr) {
-		r.add(DoctorInfo, "  %s", line)
-	}
 }
 
 func appendCommandOutputToRuntime(r *UpgradeRuntimeResult, res CommandResult) {
