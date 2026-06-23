@@ -258,6 +258,7 @@
   "codex.device_code_label": "One-time code:",
   "codex.device_waiting_hint": "Waiting for approval; the code expires in about 15 minutes. [Del/Esc] cancels.",
   "codex.logged_in": "Logged in as %s",
+  "codex.account_default": "default account",
   "codex.toggle_model": "toggle model",
   "codex.oauth_status_label": "Codex OAuth:",
   "codex.oauth_logged_in": "✓ Logged in (%s)",
@@ -289,7 +290,7 @@
   "preset.claude_code_auth_ok_badge": "OK",
   "preset.claude_code_auth_login_hint": "If you have a Claude subscription, run `claude auth login` first",
   "preset.codex_name_prompt": "name:",
-  "preset_editor.codex_already_exists": "Only one codex preset allowed. Delete the existing one first.",
+  "preset_editor.codex_already_exists": "A codex preset with that name already exists — pick another name.",
   "setup.save": "Save",
   "setup.select_provider": "Select Provider",
   "setup.title": "Configure",
@@ -654,5 +655,7 @@
   "login.setup_title": "Setup · Credentials",
   "login.setup_note": "This credential manager is part of /setup. /login is kept as a shortcut.",
   "login.codex_add_row": "Add Codex OAuth",
+  "login.codex_reauth_row": "Re-authenticate Codex OAuth",
+  "login.codex_add_another_row": "Add another Codex account",
   "login.codex_add_hint": "[Enter] login with Codex"
 }

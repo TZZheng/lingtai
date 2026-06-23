@@ -236,6 +236,103 @@ func TestResolveRefs_ConservativeDefault(t *testing.T) {
 	}
 }
 
+// writeCodexPresetWithAuthPath writes a codex preset whose llm.codex_auth_path
+// is set to authRef (may be ""), returning its absolute path.
+func writeCodexPresetWithAuthPath(t *testing.T, dir, name, authRef string) string {
+	t.Helper()
+	llm := map[string]interface{}{
+		"provider":    "codex",
+		"model":       "gpt-5.5",
+		"api_key_env": "",
+	}
+	if authRef != "" {
+		llm["codex_auth_path"] = authRef
+	}
+	doc := map[string]interface{}{
+		"description": map[string]interface{}{"summary": "codex preset"},
+		"manifest":    map[string]interface{}{"llm": llm},
+	}
+	raw, _ := json.MarshalIndent(doc, "", "  ")
+	path := filepath.Join(dir, name+".json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write preset: %v", err)
+	}
+	return path
+}
+
+func writeStubTokenFile(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(`{"refresh_token":"stub-refresh"}`), 0o600); err != nil {
+		t.Fatalf("write token: %v", err)
+	}
+}
+
+// TestResolveRefs_PerAccountCodexAuth verifies that, when AuthState.CodexAuthDir
+// is set, each codex preset's validity is judged by ITS OWN bound token file
+// (manifest.llm.codex_auth_path), with an empty path falling back to the legacy
+// account. One missing account never invalidates a different, valid one.
+func TestResolveRefs_PerAccountCodexAuth(t *testing.T) {
+	presetDir := t.TempDir()
+	authDir := t.TempDir()
+
+	// Two accounts on disk: legacy (valid) and a per-account file (valid).
+	writeStubTokenFile(t, filepath.Join(authDir, "codex-auth.json"))
+	writeStubTokenFile(t, filepath.Join(authDir, "codex-auth", "work.json"))
+
+	legacyBound := writeCodexPresetWithAuthPath(t, presetDir, "codex-legacy", "")
+	workBound := writeCodexPresetWithAuthPath(t, presetDir, "codex-work", "~/never-used-home")
+	// Re-point work-bound preset at the real per-account file via a relative
+	// ref so it resolves under authDir (avoids depending on $HOME in tests).
+	workBound = writeCodexPresetWithAuthPath(t, presetDir, "codex-work", "codex-auth/work.json")
+	missingBound := writeCodexPresetWithAuthPath(t, presetDir, "codex-missing", "codex-auth/gone.json")
+
+	auth := AuthState{CodexAuthDir: authDir}
+
+	cases := []struct {
+		name    string
+		ref     string
+		wantKey bool
+	}{
+		{"legacy-bound valid", legacyBound, true},
+		{"work-bound valid", workBound, true},
+		{"missing-account invalid", missingBound, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ResolveRefsWithAuth([]string{tc.ref}, nil, auth)
+			if len(got) != 1 {
+				t.Fatalf("expected 1 resolved ref, got %d", len(got))
+			}
+			if got[0].HasKey != tc.wantKey {
+				t.Errorf("HasKey = %v, want %v (CodexAuthRef=%q)", got[0].HasKey, tc.wantKey, got[0].CodexAuthRef)
+			}
+		})
+	}
+
+	// CodexAuthRef should echo the preset's bound path verbatim.
+	got := ResolveRefsWithAuth([]string{workBound}, nil, auth)
+	if got[0].CodexAuthRef != "codex-auth/work.json" {
+		t.Errorf("CodexAuthRef = %q, want the preset's codex_auth_path", got[0].CodexAuthRef)
+	}
+}
+
+// TestResolveRefs_CodexFallsBackToGlobalBoolWithoutDir verifies that when
+// CodexAuthDir is empty, codex validity falls back to the legacy global bool
+// (backward compatibility for callers that don't set the dir).
+func TestResolveRefs_CodexFallsBackToGlobalBoolWithoutDir(t *testing.T) {
+	dir := t.TempDir()
+	codexRef := writeCodexPresetWithAuthPath(t, dir, "codex", "")
+	if got := ResolveRefsWithAuth([]string{codexRef}, nil, AuthState{CodexOAuthConfigured: true}); !got[0].HasKey {
+		t.Error("with CodexOAuthConfigured=true and no dir, codex should be valid")
+	}
+	if got := ResolveRefsWithAuth([]string{codexRef}, nil, AuthState{CodexOAuthConfigured: false}); got[0].HasKey {
+		t.Error("with CodexOAuthConfigured=false and no dir, codex should be invalid")
+	}
+}
+
 func TestGenerateInitJSON_ProducesValidJSON(t *testing.T) {
 	withTempPresets(t, func() {
 		p := DefaultPreset()

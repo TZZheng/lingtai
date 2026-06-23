@@ -126,14 +126,16 @@ func main() {
 	// Best-effort housekeeping — failures don't abort startup.
 	globalmigrate.Run(globalDir)
 
-	// Test Codex OAuth validity on every launch. If codex-auth.json exists
-	// and the access token is expired (or near-expired), this round-trips
-	// the refresh token through auth.openai.com and writes the refreshed
-	// bundle back atomically. A 401/403 response means the grant was
-	// revoked server-side (password changed, "log out everywhere", etc.)
-	// — surface that as a startup banner so the user re-OAuths via
-	// /setup. Transient errors (offline, 5xx) leave local tokens
-	// untouched and stay silent.
+	// Test Codex OAuth validity on every launch across ALL stored accounts
+	// (legacy ~/.lingtai-tui/codex-auth.json plus per-account files under
+	// codex-auth/). For each account whose access token is expired (or
+	// near-expired), this round-trips the refresh token through
+	// auth.openai.com and writes the refreshed bundle back atomically. A
+	// 401/403 response means that account's grant was revoked server-side
+	// (password changed, "log out everywhere", etc.) — surface that as a
+	// startup banner naming the account so the user re-OAuths via /setup.
+	// Transient errors (offline, 5xx) leave local tokens untouched and stay
+	// silent.
 	codexBanner := tui.ValidateCodexAuthOnStartup(globalDir)
 	if codexBanner != "" {
 		fmt.Println(codexBanner)

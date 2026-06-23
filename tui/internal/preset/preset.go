@@ -584,6 +584,12 @@ type ResolvedRef struct {
 	// configured credential, so this is false. Only meaningful when Exists
 	// is true.
 	HasKey bool
+	// CodexAuthRef is the codex preset's manifest.llm.codex_auth_path value
+	// (verbatim, possibly ""). Empty means the preset uses the legacy
+	// single-account fallback file. Only set for codex presets; "" for all
+	// others. Lets a UI surface which account a codex preset is bound to
+	// without re-reading the preset file.
+	CodexAuthRef string
 }
 
 // AuthState carries machine-level credential facts the credential guard
@@ -591,11 +597,21 @@ type ResolvedRef struct {
 // but the struct leaves room to add future OAuth providers without churning
 // the ResolveRefs signature again.
 type AuthState struct {
-	// CodexOAuthConfigured is true when ~/.lingtai-tui/codex-auth.json
-	// parses and carries a non-empty refresh_token. The preset package must
-	// not import the tui package (import cycle), so this is computed by the
+	// CodexOAuthConfigured is true when the legacy single-account token
+	// file ~/.lingtai-tui/codex-auth.json parses and carries a non-empty
+	// refresh_token. It is the fallback signal for a codex preset that
+	// declares no manifest.llm.codex_auth_path. The preset package must not
+	// import the tui package (import cycle), so this is computed by the
 	// caller and passed in.
 	CodexOAuthConfigured bool
+
+	// CodexAuthDir is the directory (typically ~/.lingtai-tui) that
+	// per-account codex_auth_path values resolve against when they are
+	// relative or "~/"-prefixed. When set, resolveOneRef validates a codex
+	// preset's OWN bound token file at manifest.llm.codex_auth_path instead
+	// of the global CodexOAuthConfigured bool, so multiple Codex accounts
+	// are judged independently. Empty falls back to CodexOAuthConfigured.
+	CodexAuthDir string
 
 	// ClaudeCodeAuthConfigured is true when the local Claude Code CLI
 	// (`claude`) is installed and reports a logged-in session. The
@@ -605,6 +621,39 @@ type AuthState struct {
 	// true. Computed by the caller (see tui.claudeCodeAuthConfigured) and
 	// passed in to avoid the preset→tui import cycle.
 	ClaudeCodeAuthConfigured bool
+}
+
+// codexTokenFileValid reports whether the Codex OAuth token file at the
+// resolved path parses and carries a non-empty refresh_token. Mirrors the
+// tui package's readCodexTokenFile check but lives here to avoid the
+// preset→tui import cycle. Token material is never returned or logged.
+func codexTokenFileValid(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var tok struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	return json.Unmarshal(data, &tok) == nil && tok.RefreshToken != ""
+}
+
+// resolveCodexAuthRef expands a preset's manifest.llm.codex_auth_path against
+// authDir. Empty ref → the legacy ~/.lingtai-tui/codex-auth.json fallback.
+// "~/"-prefixed and absolute refs are honored; a bare relative value resolves
+// under authDir so it still lands in the TUI-owned tree.
+func resolveCodexAuthRef(authDir, ref string) string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return filepath.Join(authDir, "codex-auth.json")
+	}
+	if strings.HasPrefix(ref, "~/") || ref == "~" {
+		return expandUserPath(ref)
+	}
+	if filepath.IsAbs(ref) {
+		return ref
+	}
+	return filepath.Join(authDir, ref)
 }
 
 // ResolveRefs expands and inspects a list of preset path strings. For
@@ -666,9 +715,11 @@ func resolveOneRef(ref string, existingKeys map[string]string, auth AuthState) R
 	if p, err := loadFromPath(abs); err == nil {
 		envName := ""
 		provider := ""
+		codexAuthPath := ""
 		if llm, ok := p.Manifest["llm"].(map[string]interface{}); ok {
 			envName, _ = llm["api_key_env"].(string)
 			provider, _ = llm["provider"].(string)
+			codexAuthPath, _ = llm["codex_auth_path"].(string)
 		}
 		switch {
 		case envName != "":
@@ -678,8 +729,19 @@ func resolveOneRef(ref string, existingKeys map[string]string, auth AuthState) R
 			}
 		case provider == "codex":
 			// Codex declares no api_key_env by design — it uses ChatGPT
-			// OAuth (codex-auth.json). Valid only when OAuth is configured.
-			r.HasKey = auth.CodexOAuthConfigured
+			// OAuth token files. A preset may bind to a specific account via
+			// manifest.llm.codex_auth_path; absent that it falls back to the
+			// legacy single-account file. When auth.CodexAuthDir is set we
+			// validate the preset's OWN bound token file so multiple accounts
+			// are judged independently; otherwise we fall back to the global
+			// CodexOAuthConfigured signal (e.g. callers that only have the
+			// legacy bool).
+			r.CodexAuthRef = codexAuthPath
+			if auth.CodexAuthDir != "" {
+				r.HasKey = codexTokenFileValid(resolveCodexAuthRef(auth.CodexAuthDir, codexAuthPath))
+			} else {
+				r.HasKey = auth.CodexOAuthConfigured
+			}
 		case provider == "claude-agent-sdk" || provider == "claude_agent_sdk":
 			// Claude Agent SDK declares no api_key_env by design — it
 			// authenticates through the local Claude Code CLI login. Valid

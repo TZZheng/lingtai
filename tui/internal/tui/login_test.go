@@ -295,6 +295,215 @@ func TestLoginModel_NonCodexOnlyCursorBoundedByVirtualRow(t *testing.T) {
 	}
 }
 
+// TestLoginModel_EscDuringLoginStaysOnCredentials verifies the reported
+// UX-bug fix: pressing Esc while a Codex login is mid-flight cancels the
+// login and stays on the credentials screen — it must NOT emit a
+// ViewChangeMsg that would dump the user back to the home/mail view.
+func TestLoginModel_EscDuringLoginStaysOnCredentials(t *testing.T) {
+	dir := t.TempDir()
+	m := NewLoginModel("", dir)
+	cancelled := false
+	m.codexLogging = true
+	m.codexCancel = func() { cancelled = true }
+	m.codexAuthURL = "https://auth.openai.com/x"
+	m.codexDeviceURL = "https://auth.openai.com/codex/device"
+	m.codexDeviceCode = "ABCD-1234"
+	startEpoch := m.codexLoginEpoch
+
+	m, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	if !cancelled {
+		t.Error("Esc during login must invoke codexCancel")
+	}
+	if cmd != nil {
+		// Run the command and confirm it is NOT a ViewChangeMsg to mail.
+		if msg := cmd(); msg != nil {
+			if vc, ok := msg.(ViewChangeMsg); ok {
+				t.Fatalf("Esc mid-login must not change view; got ViewChangeMsg{View:%q}", vc.View)
+			}
+		}
+	}
+	if m.codexLogging {
+		t.Error("codexLogging should be cleared after Esc cancel")
+	}
+	if m.codexLoginEpoch == startEpoch {
+		t.Error("codexLoginEpoch should bump on Esc cancel so late callbacks are dropped")
+	}
+	if m.codexAuthURL != "" || m.codexDeviceURL != "" || m.codexDeviceCode != "" {
+		t.Errorf("Esc cancel must clear transient login fields; url=%q devURL=%q code=%q",
+			m.codexAuthURL, m.codexDeviceURL, m.codexDeviceCode)
+	}
+}
+
+// TestLoginModel_EscWithNoLoginExitsToMail verifies that when no Codex
+// login is in flight, Esc still returns to the home/mail view (unchanged
+// behavior for the idle credentials screen).
+func TestLoginModel_EscWithNoLoginExitsToMail(t *testing.T) {
+	dir := t.TempDir()
+	m := NewLoginModel("", dir)
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd == nil {
+		t.Fatal("idle Esc should emit a ViewChangeMsg command")
+	}
+	msg := cmd()
+	vc, ok := msg.(ViewChangeMsg)
+	if !ok || vc.View != "mail" {
+		t.Fatalf("idle Esc should return to mail; got %T %+v", msg, msg)
+	}
+}
+
+// TestLoginModel_CodexRowShownWithExistingEntry verifies the multi-Codex
+// unblock: an "Add another Codex account" row is shown even when a Codex
+// credential already exists, so adding a SECOND account is always reachable
+// (it targets a new token file, not the existing one). Re-auth of the
+// existing account is a separate action (Enter on the entry itself).
+func TestLoginModel_CodexRowShownWithExistingEntry(t *testing.T) {
+	dir := t.TempDir()
+	seedLoginCodexAuth(t, dir)
+
+	m := NewLoginModel("", dir)
+	if len(m.entries) != 1 || m.entries[0].Provider != "codex" {
+		t.Fatalf("precondition: expected single codex entry; got %#v", m.entries)
+	}
+	if !m.virtualAddCodexRow() {
+		t.Fatal("Codex add-account row must remain available when a codex entry exists")
+	}
+	m.width = 80
+	view := m.View()
+	if !strings.Contains(view, "Add another Codex account") {
+		t.Fatalf("view should show the add-another-account row; view=%q", view)
+	}
+
+	// Cursor on the virtual row (index == len(entries)). Enter opens the
+	// chooser AND targets a new account (empty target path).
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if m.cursor != 1 {
+		t.Fatalf("Down should reach the virtual row at index 1; got %d", m.cursor)
+	}
+	m, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatal("Enter on the add-account row must not start a network command")
+	}
+	if !m.codexChoosingMethod {
+		t.Fatal("Enter on the add-account row should open the Codex method chooser")
+	}
+	if m.codexLoginTargetPath != "" {
+		t.Fatalf("add-account must target a NEW account (empty path); got %q", m.codexLoginTargetPath)
+	}
+}
+
+// TestLoginModel_ReauthExistingAccountTargetsItsFile verifies that Enter on an
+// existing Codex account entry sets the login target to THAT account's token
+// file, so re-auth overwrites the right account rather than creating a new one.
+func TestLoginModel_ReauthExistingAccountTargetsItsFile(t *testing.T) {
+	dir := t.TempDir()
+	seedLoginCodexAuth(t, dir)
+
+	m := NewLoginModel("", dir)
+	if len(m.entries) != 1 || m.entries[0].Provider != "codex" {
+		t.Fatalf("precondition: expected single codex entry; got %#v", m.entries)
+	}
+	wantPath := m.entries[0].CodexPath
+	if wantPath == "" {
+		t.Fatal("codex entry should carry its token file path")
+	}
+	// cursor starts at 0 (the codex entry). Enter re-auths this account.
+	m, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatal("Enter on a codex entry must not start a network command")
+	}
+	if !m.codexChoosingMethod {
+		t.Fatal("Enter on a codex entry should open the method chooser")
+	}
+	if m.codexLoginTargetPath != wantPath {
+		t.Fatalf("re-auth should target the account's own file %q; got %q", wantPath, m.codexLoginTargetPath)
+	}
+}
+
+// TestLoginModel_AddAccountWritesNewFileNotLegacy verifies that completing an
+// "add another account" login (empty target) when a legacy account already
+// exists writes a NEW per-account file under codex-auth/ rather than
+// overwriting the legacy account.
+func TestLoginModel_AddAccountWritesNewFileNotLegacy(t *testing.T) {
+	dir := t.TempDir()
+	seedLoginCodexAuth(t, dir) // legacy account present (stub@example.com)
+	legacy := filepath.Join(dir, "codex-auth.json")
+	legacyBefore, _ := os.ReadFile(legacy)
+
+	m := NewLoginModel("", dir)
+	// Simulate the user choosing "add another account": target stays empty.
+	m.codexLoginTargetPath = ""
+	m.codexLogging = true
+	m.codexLoginEpoch = 7
+
+	done := CodexOAuthDoneMsg{
+		Epoch: 7,
+		Tokens: &CodexTokens{
+			AccessToken:  "new-access",
+			RefreshToken: "new-refresh",
+			Email:        "second@example.com",
+		},
+	}
+	m, _ = m.Update(done)
+
+	// Legacy file must be untouched.
+	legacyAfter, _ := os.ReadFile(legacy)
+	if string(legacyBefore) != string(legacyAfter) {
+		t.Error("adding a new account must not overwrite the legacy account file")
+	}
+	// A new per-account file must now exist under codex-auth/.
+	accts := listCodexAccounts(dir)
+	if len(accts) != 2 {
+		t.Fatalf("expected 2 accounts after add; got %d: %#v", len(accts), accts)
+	}
+	foundSecond := false
+	for _, a := range accts {
+		if a.Email == "second@example.com" && !a.Legacy {
+			foundSecond = true
+		}
+	}
+	if !foundSecond {
+		t.Errorf("new per-account file for second@example.com not found; accts=%#v", accts)
+	}
+}
+
+// TestLoginModel_FirstAccountSeedsLegacyFile verifies that the FIRST Codex
+// login (no account yet) seeds the legacy file, so existing presets with no
+// codex_auth_path keep working without any field churn.
+func TestLoginModel_FirstAccountSeedsLegacyFile(t *testing.T) {
+	dir := t.TempDir()
+	m := NewLoginModel("", dir)
+	if len(m.entries) != 0 {
+		t.Fatalf("precondition: expected no entries; got %#v", m.entries)
+	}
+	m.codexLoginTargetPath = ""
+	m.codexLogging = true
+	m.codexLoginEpoch = 1
+	m, _ = m.Update(CodexOAuthDoneMsg{
+		Epoch:  1,
+		Tokens: &CodexTokens{AccessToken: "a", RefreshToken: "r", Email: "first@example.com"},
+	})
+	if _, err := os.Stat(filepath.Join(dir, "codex-auth.json")); err != nil {
+		t.Fatalf("first account should seed the legacy file: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "codex-auth")); err == nil {
+		t.Error("first account should not create a per-account dir")
+	}
+}
+
+// TestLoginModel_NoClaudeCodeAuthRow verifies the Claude Code auth row is
+// no longer surfaced on the credentials screen (the auth path is
+// unsupported for now and intentionally hidden).
+func TestLoginModel_NoClaudeCodeAuthRow(t *testing.T) {
+	dir := t.TempDir()
+	m := NewLoginModel("", dir)
+	m.width = 80
+	view := m.View()
+	if strings.Contains(view, "Claude Code auth") {
+		t.Fatalf("credentials view must not render the Claude Code auth row; view=%q", view)
+	}
+}
+
 func TestSetupCredentialsModelUsesSetupChrome(t *testing.T) {
 	dir := t.TempDir()
 	m := NewSetupCredentialsModel("", dir)

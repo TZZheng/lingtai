@@ -3,7 +3,6 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -873,6 +872,61 @@ func (m PresetEditorModel) isCodexProvider() bool {
 	return asString(m.llmMap()["provider"]) == "codex"
 }
 
+// codexAccountRefs returns the selectable codex_auth_path values for the
+// account picker on the feAPIKey row: "" (legacy/default account) first, then
+// each per-account file's home-shortened ref. Order is stable so ←/→ cycling
+// is predictable.
+func (m PresetEditorModel) codexAccountRefs() []string {
+	refs := []string{""} // "" == legacy/default account
+	if m.globalDir == "" {
+		return refs
+	}
+	for _, a := range listCodexAccounts(m.globalDir) {
+		if a.Legacy {
+			continue // the legacy file is already represented by ""
+		}
+		refs = append(refs, a.Ref)
+	}
+	return refs
+}
+
+// codexAuthRef returns the preset's bound manifest.llm.codex_auth_path ("" when
+// unset / legacy fallback).
+func (m PresetEditorModel) codexAuthRef() string {
+	return asString(m.llmMap()["codex_auth_path"])
+}
+
+// setCodexAuthRef writes (or clears) manifest.llm.codex_auth_path. An empty ref
+// removes the field so the preset falls back to the legacy account with no
+// stray key in the JSON.
+func (m *PresetEditorModel) setCodexAuthRef(ref string) {
+	llm := m.llmMap()
+	if asString(llm["provider"]) != "codex" || strings.TrimSpace(ref) == "" {
+		delete(llm, "codex_auth_path")
+		return
+	}
+	llm["codex_auth_path"] = ref
+}
+
+// codexBoundAccountLabel returns a non-secret label for the account the preset
+// is currently bound to, plus whether that account's token file is valid.
+func (m PresetEditorModel) codexBoundAccountLabel() (string, bool) {
+	ref := m.codexAuthRef()
+	path := resolveCodexAuthPath(m.globalDir, ref)
+	valid := codexAuthPathValid(path)
+	if ref == "" {
+		// Legacy/default: prefer the stored email for the label.
+		if tok, ok := readCodexTokenFile(path); ok && tok.Email != "" {
+			return tok.Email, valid
+		}
+		return i18n.T("codex.account_default"), valid
+	}
+	if tok, ok := readCodexTokenFile(path); ok && tok.Email != "" {
+		return tok.Email, valid
+	}
+	return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)), valid
+}
+
 func (m PresetEditorModel) codexServiceTier() string {
 	llm, _ := m.working.Manifest["llm"].(map[string]interface{})
 	if asString(llm["service_tier"]) == "fast" {
@@ -1061,6 +1115,16 @@ func (m *PresetEditorModel) cycleFocused(dir int) {
 		if m.isCodexProvider() {
 			m.setCodexThinking(cycleString(codexThinkingOptions, m.codexThinking(), dir))
 		}
+	case feAPIKey:
+		// Codex account selector: bind the preset to the next/previous
+		// stored account by cycling manifest.llm.codex_auth_path. "" is the
+		// legacy/default account.
+		if m.isCodexProvider() {
+			refs := m.codexAccountRefs()
+			if len(refs) > 1 {
+				m.setCodexAuthRef(cycleString(refs, m.codexAuthRef(), dir))
+			}
+		}
 	case feTier:
 		// Cycle ""→1→2→3→4→5→"" with → and reverse with ←. tierValues
 		// is ordered best-first ([5..1]) for the library's picker, so
@@ -1240,20 +1304,17 @@ func (m PresetEditorModel) fieldString(f editorField) string {
 		s, _ := llm["base_url"].(string)
 		return s
 	case feAPIKey:
-		// Codex uses OAuth credential, not an API key.
-		// Show read-only status from codex-auth.json.
+		// Codex uses an OAuth credential, not an API key. Show the bound
+		// account (manifest.llm.codex_auth_path → resolved token file) and
+		// its validity. When more than one account exists, ←/→ cycles the
+		// binding (see isCyclable/cycleField). No secret is shown.
 		if asString(llm["provider"]) == "codex" {
 			if m.globalDir != "" {
-				authPath := filepath.Join(m.globalDir, "codex-auth.json")
-				if data, err := os.ReadFile(authPath); err == nil {
-					var tokens CodexTokens
-					if json.Unmarshal(data, &tokens) == nil && tokens.RefreshToken != "" {
-						if tokens.Email != "" {
-							return "✓ " + tokens.Email
-						}
-						return "✓ " + i18n.T("codex.logged_in")
-					}
+				label, valid := m.codexBoundAccountLabel()
+				if valid {
+					return "✓ " + label
 				}
+				return "✗ " + label + " — " + i18n.T("codex.oauth_not_logged_in")
 			}
 			return i18n.T("codex.oauth_not_logged_in")
 		}
@@ -1708,6 +1769,10 @@ func (m PresetEditorModel) isCyclable(f editorField) bool {
 		return true
 	case feServiceTier, feThinking:
 		return m.isCodexProvider()
+	case feAPIKey:
+		// For codex, the "API key" row is an account selector: ←/→ binds the
+		// preset to a different Codex OAuth account when more than one exists.
+		return m.isCodexProvider() && len(m.codexAccountRefs()) > 1
 	case feModel:
 		provider := asString(m.llmMap()["provider"])
 		_, hasPicker := providerModels[provider]

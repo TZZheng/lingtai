@@ -374,6 +374,78 @@ func TestPickPreset_DelCancelsInFlightLogin(t *testing.T) {
 	}
 }
 
+// TestPickPreset_EscDuringLoginStaysOnPicker verifies the reported UX-bug
+// fix: pressing Esc while a Codex login is mid-flight cancels the login
+// and stays on the preset picker — it must NOT emit a ViewChangeMsg that
+// would dump the user straight back to the home/mail view, and must not
+// leave a stale spinner/URL/code behind.
+func TestPickPreset_EscDuringLoginStaysOnPicker(t *testing.T) {
+	dir := t.TempDir()
+	cancelled := false
+	m := FirstRunModel{
+		step:           stepPickPreset,
+		globalDir:      dir,
+		cursor:         0, // Codex row (no saved presets)
+		codexLoggingIn: true,
+		codexCancel:    func() { cancelled = true },
+		codexAuthURL:   "https://auth.openai.com/x",
+		codexDeviceURL: "https://auth.openai.com/codex/device",
+	}
+	startEpoch := m.codexLoginEpoch
+
+	m, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	if !cancelled {
+		t.Error("Esc during codexLoggingIn must invoke codexCancel")
+	}
+	if cmd != nil {
+		if msg := cmd(); msg != nil {
+			if vc, ok := msg.(ViewChangeMsg); ok {
+				t.Fatalf("Esc mid-login must not change view; got ViewChangeMsg{View:%q}", vc.View)
+			}
+		}
+	}
+	if m.step != stepPickPreset {
+		t.Errorf("Esc mid-login should stay on stepPickPreset; got step=%v", m.step)
+	}
+	if m.codexLoggingIn {
+		t.Error("codexLoggingIn should clear after Esc cancel")
+	}
+	if m.codexLoginEpoch == startEpoch {
+		t.Error("codexLoginEpoch should bump on Esc cancel so late callbacks are dropped")
+	}
+	if m.codexAuthURL != "" || m.codexDeviceURL != "" {
+		t.Errorf("Esc cancel must clear transient login fields; url=%q devURL=%q", m.codexAuthURL, m.codexDeviceURL)
+	}
+}
+
+// TestPickPreset_EscFromMethodChooserStaysOnPicker verifies that Esc while
+// the Codex login method chooser is open backs out to the picker (closing
+// the chooser) rather than exiting to home.
+func TestPickPreset_EscFromMethodChooserStaysOnPicker(t *testing.T) {
+	dir := t.TempDir()
+	m := FirstRunModel{
+		step:                stepPickPreset,
+		globalDir:           dir,
+		cursor:              0,
+		codexChoosingMethod: true,
+	}
+	m, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd != nil {
+		if msg := cmd(); msg != nil {
+			if vc, ok := msg.(ViewChangeMsg); ok {
+				t.Fatalf("Esc from method chooser must not change view; got ViewChangeMsg{View:%q}", vc.View)
+			}
+		}
+	}
+	if m.codexChoosingMethod {
+		t.Error("Esc should close the Codex method chooser")
+	}
+	if m.step != stepPickPreset {
+		t.Errorf("Esc from chooser should stay on stepPickPreset; got step=%v", m.step)
+	}
+}
+
 func TestSetupModeDefaultsToKeepCurrentPreset(t *testing.T) {
 	baseDir := t.TempDir()
 	globalDir := t.TempDir()

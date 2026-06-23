@@ -855,7 +855,10 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 		if msg.Tokens == nil {
 			return m, nil
 		}
-		authPath := filepath.Join(m.globalDir, "codex-auth.json")
+		// First-run manages the primary (legacy) account; additional
+		// accounts are added from Setup → Credentials. Token material is
+		// secret: written 0600, never logged.
+		authPath := legacyCodexAuthPath(m.globalDir)
 		data, err := json.MarshalIndent(msg.Tokens, "", "  ")
 		if err != nil {
 			m.message = fmt.Sprintf("Failed to encode tokens: %v", err)
@@ -1180,8 +1183,10 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 				if !ok {
 					return m, nil
 				}
-				// Saved codex preset without valid auth → require login first.
-				if m.getPresetProvider(p) == "codex" && !m.codexAuth.valid {
+				// Saved codex preset whose bound account isn't authed → require
+				// login first. Checks the preset's own codex_auth_path, so a
+				// different account being missing doesn't block this one.
+				if m.getPresetProvider(p) == "codex" && !m.codexPresetAuthValid(p) {
 					m.message = i18n.T("firstrun.preset_pick.codex_needs_oauth_hint")
 					return m, nil
 				}
@@ -1203,7 +1208,7 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 				if !ok {
 					return m, nil
 				}
-				if m.getPresetProvider(p) == "codex" && !m.codexAuth.valid {
+				if m.getPresetProvider(p) == "codex" && !m.codexPresetAuthValid(p) {
 					m.message = i18n.T("firstrun.preset_pick.codex_needs_oauth_hint")
 					return m, nil
 				}
@@ -1246,7 +1251,7 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 						return m, nil
 					case m.codexAuth.valid && m.codexLogoutArmed:
 						m.codexLogoutArmed = false
-						authPath := filepath.Join(m.globalDir, "codex-auth.json")
+						authPath := legacyCodexAuthPath(m.globalDir)
 						_ = os.Remove(authPath)
 						m.refreshCodexAuth()
 						m.message = i18n.T("firstrun.preset_pick.codex_logged_out")
@@ -1274,17 +1279,31 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 				}
 				return m, nil
 			case "esc":
-				// Leaving the picker mid-OAuth would otherwise leave
-				// the goroutine running with the listener bound; cancel
-				// it so the port releases and the late callback is
-				// dropped (epoch bump).
-				if m.codexLoggingIn && m.codexCancel != nil {
-					m.codexCancel()
-					m.codexCancel = nil
+				// Esc while a Codex login is mid-flight (or the method
+				// chooser is open) cancels that login and stays on the
+				// picker — it does NOT exit to home. Dumping the user back
+				// to the mail/home view here was the reported UX bug: Esc
+				// in the OAuth flow should back out to the preceding
+				// credentials/setup context, not jump past it. We tear down
+				// the goroutine (releasing the bound listener), bump the
+				// epoch so any late callback is dropped, and clear every
+				// transient login field so no stale spinner/URL/code lingers.
+				if m.codexLoggingIn || m.codexChoosingMethod {
+					if m.codexCancel != nil {
+						m.codexCancel()
+						m.codexCancel = nil
+					}
 					m.codexLoginEpoch++
 					m.codexLoggingIn = false
+					m.codexChoosingMethod = false
+					m.codexReloginArmed = false
+					m.codexLogoutArmed = false
 					m.codexSession = nil
 					m.codexAuthURL = ""
+					m.codexDeviceURL = ""
+					m.codexDeviceCode = ""
+					m.message = i18n.T("firstrun.preset_pick.codex_cancelled")
+					return m, nil
 				}
 				if m.setupMode {
 					return m, func() tea.Msg { return ViewChangeMsg{View: "mail"} }
@@ -2272,7 +2291,7 @@ func (m FirstRunModel) View() string {
 				displayDesc = p.Description.Summary
 			}
 			isCodex := m.getPresetProvider(p) == "codex"
-			needsOAuth := isCodex && !m.codexAuth.valid
+			needsOAuth := isCodex && !m.codexPresetAuthValid(p)
 			nameStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorAgent)
 			name := nameStyle.Render(displayName)
 			if needsOAuth {
@@ -2365,21 +2384,11 @@ func (m FirstRunModel) View() string {
 				b.WriteString(row + "\n")
 			}
 
-			// Claude Code auth detection is informational only: the
-			// claude-agent-sdk preset uses the user's existing Claude CLI
-			// login, so the TUI never stores or mutates Claude credentials.
-			{
-				label := i18n.T("preset.claude_code_auth_row_label")
-				labelStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorAgent)
-				row := "  " + labelStyle.Render(label)
-				if m.claudeCodeAuthValid {
-					okStyle := lipgloss.NewStyle().Foreground(ColorActive)
-					row += "  " + okStyle.Render("✓ "+i18n.T("preset.claude_code_auth_ok_badge"))
-				} else {
-					row += "  " + StyleFaint.Render(i18n.T("preset.claude_code_auth_login_hint"))
-				}
-				b.WriteString(row + "\n")
-			}
+			// Claude Code OAuth/auth row is hidden for now — that auth path
+			// is unsupported in the current build, so we don't surface a
+			// setup affordance for it. Detection (claudeCodeAuthValid /
+			// refreshClaudeCodeAuth) still runs and feeds the claude-agent-sdk
+			// credential guard; only the user-visible row is suppressed.
 
 		}
 		// Footer buttons (Back/Next) — at visibleCount+1 and +2.
@@ -3916,16 +3925,39 @@ func (m FirstRunModel) presetAtVisibleIdx(i int) (preset.Preset, bool) {
 	return m.presets[i], true
 }
 
-func (m *FirstRunModel) refreshCodexAuth() {
-	authPath := filepath.Join(m.globalDir, "codex-auth.json")
-	raw, err := os.ReadFile(authPath)
-	if err != nil {
-		m.codexAuth.valid = false
-		m.codexAuth.email = ""
-		return
+// codexPresetAuthValid reports whether the Codex OAuth credential bound to a
+// specific preset is usable. It resolves the preset's
+// manifest.llm.codex_auth_path against globalDir (empty → legacy single-
+// account file) and validates that token file. This is what gates editing /
+// selecting a particular codex preset, so one missing account never blocks a
+// different, validly-bound codex preset.
+func (m FirstRunModel) codexPresetAuthValid(p preset.Preset) bool {
+	ref := ""
+	if llm, ok := p.Manifest["llm"].(map[string]interface{}); ok {
+		ref, _ = llm["codex_auth_path"].(string)
 	}
-	var tokens CodexTokens
-	if err := json.Unmarshal(raw, &tokens); err != nil || tokens.RefreshToken == "" {
+	return codexAuthPathValid(resolveCodexAuthPath(m.globalDir, ref))
+}
+
+func (m *FirstRunModel) refreshCodexAuth() {
+	// codexAuth.valid reflects whether ANY Codex account is configured, so
+	// the inline credential row shows an authed state once the user has at
+	// least one account. Per-preset gating uses codexPresetAuthValid.
+	tokens, ok := readCodexTokenFile(legacyCodexAuthPath(m.globalDir))
+	if !ok {
+		// No legacy account; fall back to any per-account file so the row
+		// still reflects "Codex is set up" when only newer accounts exist.
+		if hasAnyCodexAccount(m.globalDir) {
+			m.codexAuth.valid = true
+			m.codexAuth.email = ""
+			for _, a := range listCodexAccounts(m.globalDir) {
+				if a.Valid && a.Email != "" {
+					m.codexAuth.email = a.Email
+					break
+				}
+			}
+			return
+		}
 		m.codexAuth.valid = false
 		m.codexAuth.email = ""
 		return

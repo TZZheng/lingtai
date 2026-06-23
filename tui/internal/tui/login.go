@@ -41,31 +41,41 @@ type loginEntry struct {
 	IsOAuth  bool
 	BaseURL  string
 	Key      string // raw key or access token
+	// CodexPath is the absolute on-disk token file backing a Codex OAuth
+	// entry (legacy ~/.lingtai-tui/codex-auth.json or a per-account file
+	// under ~/.lingtai-tui/codex-auth/). Empty for non-codex entries. Each
+	// codex account is its own entry, so multiple ChatGPT accounts coexist.
+	CodexPath string
+	// CodexLegacy marks the entry backed by the legacy single-account file.
+	CodexLegacy bool
 }
 
 type loginHealthMsg struct {
 	Provider string
 	Status   loginStatus
 	Detail   string
+	// CodexPath disambiguates codex entries, which all share Provider
+	// "codex" but back distinct accounts (distinct token files). Empty for
+	// non-codex entries, which are matched by Provider alone.
+	CodexPath string
 }
 
 // LoginModel shows saved credentials with live health checks. It is opened
 // from Setup → Credentials; /login remains a compatibility shortcut into
 // the same setup subpage.
 type LoginModel struct {
-	entries             []loginEntry
-	cursor              int
-	activePreset        string
-	activeModel         string
-	orchDir             string
-	globalDir           string
-	width, height       int
-	setupSubpage        bool
-	message             string
-	reenteringKey       bool
-	keyInput            textarea.Model
-	codexLogging        bool
-	claudeCodeAuthValid bool // detection-only; no Claude token is stored by TUI
+	entries       []loginEntry
+	cursor        int
+	activePreset  string
+	activeModel   string
+	orchDir       string
+	globalDir     string
+	width, height int
+	setupSubpage  bool
+	message       string
+	reenteringKey bool
+	keyInput      textarea.Model
+	codexLogging  bool
 	// codexCancel cancels an in-flight startOAuthFlow goroutine. Set
 	// when codexLogging flips to true on Enter; cleared in
 	// CodexOAuthDoneMsg or by an explicit Del cancel.
@@ -88,6 +98,12 @@ type LoginModel struct {
 	codexMethodCursor   int // 0=browser OAuth, 1=device code
 	codexDeviceURL      string
 	codexDeviceCode     string
+	// codexLoginTargetPath is the token file the in-flight Codex login will
+	// write to. An empty string means "add a new account" — the destination
+	// path is derived from the authenticated email after tokens arrive. A
+	// non-empty path means "re-authenticate this existing account" and the
+	// tokens overwrite that file.
+	codexLoginTargetPath string
 }
 
 // NewSetupCredentialsModel opens the credential manager as a /setup subpage.
@@ -123,10 +139,9 @@ func providerBaseURL(provider string) string {
 // and globally saved credentials.
 func NewLoginModel(orchDir, globalDir string) LoginModel {
 	m := LoginModel{
-		orchDir:             orchDir,
-		globalDir:           globalDir,
-		deleteArmedIdx:      -1,
-		claudeCodeAuthValid: claudeCodeAuthConfigured(),
+		orchDir:        orchDir,
+		globalDir:      globalDir,
+		deleteArmedIdx: -1,
 	}
 
 	// 1. Read orchestrator's active provider/model.
@@ -134,24 +149,27 @@ func NewLoginModel(orchDir, globalDir string) LoginModel {
 	m.activePreset = provider
 	m.activeModel = model
 
-	// 2. Check for codex-auth.json (OAuth entry).
-	codexAuthPath := filepath.Join(globalDir, "codex-auth.json")
-	if data, err := os.ReadFile(codexAuthPath); err == nil {
-		var tokens CodexTokens
-		if json.Unmarshal(data, &tokens) == nil && tokens.RefreshToken != "" {
-			display := "OAuth"
-			if tokens.Email != "" {
-				display = "OAuth — " + tokens.Email
-			}
-			m.entries = append(m.entries, loginEntry{
-				Provider: "codex",
-				Display:  display,
-				Status:   loginChecking,
-				IsOAuth:  true,
-				BaseURL:  "https://chatgpt.com/backend-api",
-				Key:      tokens.AccessToken,
-			})
+	// 2. Enumerate every stored Codex OAuth account — the legacy
+	// single-account file plus any per-account files under codex-auth/.
+	// Each becomes its own entry so multiple ChatGPT accounts coexist.
+	for _, acct := range listCodexAccounts(globalDir) {
+		tok, _ := readCodexTokenFile(acct.Path)
+		display := "OAuth"
+		if acct.Email != "" {
+			display = "OAuth — " + acct.Email
+		} else if !acct.Legacy {
+			display = "OAuth — " + acct.Label()
 		}
+		m.entries = append(m.entries, loginEntry{
+			Provider:    "codex",
+			Display:     display,
+			Status:      loginChecking,
+			IsOAuth:     true,
+			BaseURL:     "https://chatgpt.com/backend-api",
+			Key:         tok.AccessToken,
+			CodexPath:   acct.Path,
+			CodexLegacy: acct.Legacy,
+		})
 	}
 
 	// 3. Read config.Keys for API-key-based providers.
@@ -186,12 +204,18 @@ func NewLoginModel(orchDir, globalDir string) LoginModel {
 // ---------------------------------------------------------------------------
 
 func checkHealth(e loginEntry) loginHealthMsg {
+	// base carries the discriminators (Provider + CodexPath) every return
+	// path must echo so the Update handler can match the right entry — codex
+	// entries share a Provider, so CodexPath is what distinguishes accounts.
+	base := loginHealthMsg{Provider: e.Provider, CodexPath: e.CodexPath}
+	mk := func(s loginStatus, detail string) loginHealthMsg {
+		out := base
+		out.Status = s
+		out.Detail = detail
+		return out
+	}
 	if e.BaseURL == "" || e.Key == "" {
-		return loginHealthMsg{
-			Provider: e.Provider,
-			Status:   loginInvalid,
-			Detail:   "no endpoint",
-		}
+		return mk(loginInvalid, "no endpoint")
 	}
 
 	var url string
@@ -204,24 +228,24 @@ func checkHealth(e loginEntry) loginHealthMsg {
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return loginHealthMsg{Provider: e.Provider, Status: loginError, Detail: "connection error"}
+		return mk(loginError, "connection error")
 	}
 	req.Header.Set("Authorization", "Bearer "+e.Key)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return loginHealthMsg{Provider: e.Provider, Status: loginError, Detail: "connection error"}
+		return mk(loginError, "connection error")
 	}
 	defer resp.Body.Close()
 	io.ReadAll(io.LimitReader(resp.Body, 1024)) // drain body
 
 	switch {
 	case resp.StatusCode >= 200 && resp.StatusCode < 300:
-		return loginHealthMsg{Provider: e.Provider, Status: loginValid}
+		return mk(loginValid, "")
 	case resp.StatusCode == 401 || resp.StatusCode == 403:
-		return loginHealthMsg{Provider: e.Provider, Status: loginInvalid, Detail: "invalid credentials"}
+		return mk(loginInvalid, "invalid credentials")
 	default:
-		return loginHealthMsg{Provider: e.Provider, Status: loginError, Detail: fmt.Sprintf("HTTP %d", resp.StatusCode)}
+		return mk(loginError, fmt.Sprintf("HTTP %d", resp.StatusCode))
 	}
 }
 
@@ -249,11 +273,17 @@ func (m LoginModel) Update(msg tea.Msg) (LoginModel, tea.Cmd) {
 
 	case loginHealthMsg:
 		for idx := range m.entries {
-			if m.entries[idx].Provider == msg.Provider {
-				m.entries[idx].Status = msg.Status
-				m.entries[idx].Detail = msg.Detail
-				break
+			if m.entries[idx].Provider != msg.Provider {
+				continue
 			}
+			// Codex entries share a Provider but back distinct accounts;
+			// match the specific token file so health lands on the right row.
+			if msg.Provider == "codex" && m.entries[idx].CodexPath != msg.CodexPath {
+				continue
+			}
+			m.entries[idx].Status = msg.Status
+			m.entries[idx].Detail = msg.Detail
+			break
 		}
 
 	case CodexOAuthURLMsg:
@@ -294,26 +324,47 @@ func (m LoginModel) Update(msg tea.Msg) (LoginModel, tea.Cmd) {
 			return m, nil
 		}
 
-		// Save tokens to codex-auth.json.
+		// Resolve the destination token file. A re-auth targets the
+		// existing account's file (codexLoginTargetPath set when the user
+		// pressed Enter on that account); an "add account" leaves the target
+		// empty so we derive a fresh per-account path from the email — unless
+		// no account exists yet, in which case the first account seeds the
+		// legacy file so existing presets keep working without churn.
+		target := m.codexLoginTargetPath
+		legacy := filepath.Join(m.globalDir, legacyCodexAuthFile)
+		if target == "" {
+			if !fileExists(legacy) {
+				target = legacy
+			} else {
+				target = newCodexAuthPath(m.globalDir, msg.Tokens.Email)
+			}
+		}
+		m.codexLoginTargetPath = ""
+
+		// Token material is secret: written 0600, never logged.
 		data, err := json.MarshalIndent(msg.Tokens, "", "  ")
 		if err != nil {
 			m.message = "failed to marshal tokens: " + err.Error()
 			return m, nil
 		}
-		authPath := filepath.Join(m.globalDir, "codex-auth.json")
-		if err := os.WriteFile(authPath, data, 0o600); err != nil {
-			m.message = "failed to save codex-auth.json: " + err.Error()
+		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+			m.message = "failed to create credential dir: " + err.Error()
+			return m, nil
+		}
+		if err := os.WriteFile(target, data, 0o600); err != nil {
+			m.message = "failed to save Codex credential: " + err.Error()
 			return m, nil
 		}
 
-		// Update or add codex entry.
+		// Update the matching account entry by path, or add a new one.
+		isLegacy := target == legacy
 		display := "OAuth"
 		if msg.Tokens.Email != "" {
 			display = "OAuth — " + msg.Tokens.Email
 		}
 		found := false
 		for idx := range m.entries {
-			if m.entries[idx].Provider == "codex" {
+			if m.entries[idx].Provider == "codex" && m.entries[idx].CodexPath == target {
 				m.entries[idx].Display = display
 				m.entries[idx].Key = msg.Tokens.AccessToken
 				m.entries[idx].Status = loginChecking
@@ -324,20 +375,23 @@ func (m LoginModel) Update(msg tea.Msg) (LoginModel, tea.Cmd) {
 		}
 		if !found {
 			m.entries = append(m.entries, loginEntry{
-				Provider: "codex",
-				Display:  display,
-				Status:   loginChecking,
-				IsOAuth:  true,
-				BaseURL:  "https://chatgpt.com/backend-api",
-				Key:      msg.Tokens.AccessToken,
+				Provider:    "codex",
+				Display:     display,
+				Status:      loginChecking,
+				IsOAuth:     true,
+				BaseURL:     "https://chatgpt.com/backend-api",
+				Key:         msg.Tokens.AccessToken,
+				CodexPath:   target,
+				CodexLegacy: isLegacy,
 			})
 		}
 
-		// Re-run health check for codex.
-		entry := m.entryByProvider("codex")
-		if entry != nil {
-			e := *entry
-			return m, func() tea.Msg { return checkHealth(e) }
+		// Re-run health check for the affected account.
+		for idx := range m.entries {
+			if m.entries[idx].Provider == "codex" && m.entries[idx].CodexPath == target {
+				e := m.entries[idx]
+				return m, func() tea.Msg { return checkHealth(e) }
+			}
 		}
 
 	case tea.PasteMsg:
@@ -390,9 +444,15 @@ func (m *LoginModel) hasCodexOAuth() bool {
 }
 
 // virtualAddCodexRow returns true when the "Add Codex OAuth" virtual row
-// should appear — whenever no Codex OAuth entry exists yet.
+// should appear. It is always shown so the user can always add another
+// ChatGPT account: with no account it adds the first credential; with one
+// or more it adds an additional account (a separate token file under
+// codex-auth/). Re-authenticating an existing account is a separate action
+// (Enter on that account's entry). Previously this row hid itself once a
+// Codex entry existed AND only one token file could exist; both limits are
+// removed — a Codex login must always be reachable and accounts coexist.
 func (m *LoginModel) virtualAddCodexRow() bool {
-	return !m.hasCodexOAuth()
+	return true
 }
 
 // cursorMax returns the maximum valid cursor index (entries + virtual row if present).
@@ -443,17 +503,27 @@ func (m LoginModel) updateNormal(msg tea.KeyPressMsg) (LoginModel, tea.Cmd) {
 
 	switch key {
 	case "esc":
-		// Leaving /login mid-OAuth would otherwise leave the goroutine
-		// running and the local listener bound; cancel cleanly.
-		if m.codexLogging && m.codexCancel != nil {
-			m.codexCancel()
-			m.codexCancel = nil
+		// Esc while a Codex login is mid-flight cancels that login and
+		// stays on the credentials screen — it does NOT exit to home.
+		// Returning to the credentials list (rather than mail) is the
+		// fix for the reported UX bug where Esc in the OAuth flow dumped
+		// the user back to the home page instead of the screen they came
+		// from. Tearing down the goroutine releases the bound listener and
+		// the epoch bump drops any late callback; every transient login
+		// field is cleared so no stale spinner/URL/code lingers.
+		if m.codexLogging {
+			if m.codexCancel != nil {
+				m.codexCancel()
+				m.codexCancel = nil
+			}
 			m.codexLoginEpoch++
 			m.codexLogging = false
 			m.codexSession = nil
 			m.codexAuthURL = ""
 			m.codexDeviceURL = ""
 			m.codexDeviceCode = ""
+			m.message = i18n.T("login.codex_cancelled")
+			return m, nil
 		}
 		return m, func() tea.Msg { return ViewChangeMsg{View: "mail"} }
 	case "up", "k":
@@ -467,6 +537,9 @@ func (m LoginModel) updateNormal(msg tea.KeyPressMsg) (LoginModel, tea.Cmd) {
 	case "enter":
 		// Virtual "Add Codex OAuth" row — open method chooser without network.
 		if m.cursorOnVirtualRow() {
+			// Add a NEW account: empty target → completion handler derives a
+			// fresh per-account path (or seeds legacy when none exists yet).
+			m.codexLoginTargetPath = ""
 			m.codexChoosingMethod = true
 			m.codexMethodCursor = 0
 			m.message = ""
@@ -475,6 +548,8 @@ func (m LoginModel) updateNormal(msg tea.KeyPressMsg) (LoginModel, tea.Cmd) {
 		if m.cursor >= 0 && m.cursor < len(m.entries) {
 			entry := m.entries[m.cursor]
 			if entry.IsOAuth {
+				// Re-authenticate THIS account: tokens overwrite its own file.
+				m.codexLoginTargetPath = entry.CodexPath
 				m.codexChoosingMethod = true
 				m.codexMethodCursor = 0
 				m.message = ""
@@ -516,7 +591,13 @@ func (m LoginModel) updateNormal(msg tea.KeyPressMsg) (LoginModel, tea.Cmd) {
 		m.deleteArmedIdx = -1
 		entry := m.entries[m.cursor]
 		if entry.IsOAuth {
-			authPath := filepath.Join(m.globalDir, "codex-auth.json")
+			// Remove just this account's token file. CodexPath is the
+			// specific legacy or per-account file backing the entry, so
+			// deleting one account never touches another.
+			authPath := entry.CodexPath
+			if authPath == "" {
+				authPath = filepath.Join(m.globalDir, legacyCodexAuthFile)
+			}
 			if err := os.Remove(authPath); err != nil && !os.IsNotExist(err) {
 				m.message = "failed to remove credential: " + err.Error()
 				return m, nil
@@ -680,29 +761,21 @@ func (m LoginModel) View() string {
 		}
 	}
 
-	// Virtual "Add Codex OAuth" row — shown whenever no Codex OAuth entry exists.
+	// Virtual Codex OAuth row — always shown so a Codex login is always
+	// reachable. It ADDS a new account: with no account it reads "Add Codex
+	// OAuth"; with one or more it reads "Add another Codex account". To
+	// re-authenticate an existing account the user presses Enter on that
+	// account's own entry above (which targets that account's token file).
 	if m.virtualAddCodexRow() {
 		rowCursor := "  "
 		if m.cursorOnVirtualRow() {
 			rowCursor = StyleAccent.Render("> ")
 		}
-		b.WriteString(rowCursor + lipgloss.NewStyle().Bold(true).Foreground(ColorAgent).Render(i18n.T("login.codex_add_row")) + "\n")
-	}
-
-	// Claude Code auth is detection-only and intentionally sits under the
-	// Codex auth row in Setup → Credentials. It confirms whether the
-	// claude-agent-sdk preset can reuse the local Claude CLI login, or
-	// tells Claude subscribers how to enable it.
-	{
-		labelStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorAgent)
-		row := "  " + labelStyle.Render(i18n.T("preset.claude_code_auth_row_label"))
-		if m.claudeCodeAuthValid {
-			okStyle := lipgloss.NewStyle().Foreground(ColorActive)
-			row += "  " + okStyle.Render("✓ "+i18n.T("preset.claude_code_auth_ok_badge"))
-		} else {
-			row += "  " + StyleFaint.Render(i18n.T("preset.claude_code_auth_login_hint"))
+		rowKey := "login.codex_add_row"
+		if m.hasCodexOAuth() {
+			rowKey = "login.codex_add_another_row"
 		}
-		b.WriteString(row + "\n")
+		b.WriteString(rowCursor + lipgloss.NewStyle().Bold(true).Foreground(ColorAgent).Render(i18n.T(rowKey)) + "\n")
 	}
 
 	// Key re-entry area.
@@ -752,11 +825,12 @@ func (m LoginModel) View() string {
 	b.WriteString("\n" + strings.Repeat("─", m.width) + "\n")
 	var footerHint string
 	if len(m.entries) == 0 {
+		// No stored credentials yet — only the add affordance applies.
 		footerHint = i18n.T("login.codex_add_hint") + "  [Esc] back"
-	} else if m.virtualAddCodexRow() {
-		footerHint = "[Enter] re-authenticate / " + i18n.T("login.codex_add_hint") + "  [Del] " + i18n.T("login.remove_hint") + "  [Esc] back"
 	} else {
-		footerHint = "[Enter] re-authenticate  [Del] " + i18n.T("login.remove_hint") + "  [Esc] back"
+		// Entries plus the always-present Codex login row: Enter on an
+		// entry re-authenticates, Enter on the Codex row adds/re-auths.
+		footerHint = "[Enter] re-authenticate / " + i18n.T("login.codex_add_hint") + "  [Del] " + i18n.T("login.remove_hint") + "  [Esc] back"
 	}
 	b.WriteString(StyleFaint.Render("  "+footerHint) + "\n")
 

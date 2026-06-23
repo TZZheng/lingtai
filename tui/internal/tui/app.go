@@ -1592,15 +1592,35 @@ func openBrowser(url string) {
 // agent-launch validateCodexAuthForAgents, the kernel's CodexTokenManager
 // inside the agent process) all see the freshest tokens.
 func ValidateCodexAuthOnStartup(globalDir string) string {
-	authPath := filepath.Join(globalDir, "codex-auth.json")
+	// Refresh every stored account (legacy + per-account files). A revoked
+	// or malformed account yields a banner that names which account; valid
+	// or absent accounts are silent. The first problem account wins the
+	// returned banner so the launch line stays one short string.
+	accounts := listCodexAccounts(globalDir)
+	if len(accounts) == 0 {
+		return ""
+	}
+	var banner string
+	for _, acct := range accounts {
+		if msg := validateOneCodexAuthFile(acct.Path, acct.Label()); msg != "" && banner == "" {
+			banner = msg
+		}
+	}
+	return banner
+}
+
+// validateOneCodexAuthFile refreshes a single Codex token file in place,
+// returning a banner string only on a malformed file or a server-side-revoked
+// grant. label identifies the account in the banner without leaking secrets.
+// Token material is written 0600 and never logged.
+func validateOneCodexAuthFile(authPath, label string) string {
 	raw, err := os.ReadFile(authPath)
 	if err != nil {
 		return ""
 	}
-
 	var tokens CodexTokens
 	if err := json.Unmarshal(raw, &tokens); err != nil || tokens.RefreshToken == "" {
-		return "⚠ Codex OAuth: codex-auth.json malformed — re-login via /setup"
+		return fmt.Sprintf("⚠ Codex OAuth (%s): credential malformed — re-login via /setup", label)
 	}
 
 	const refreshBufferSeconds = 300
@@ -1611,7 +1631,7 @@ func ValidateCodexAuthOnStartup(globalDir string) string {
 	fresh, err := refreshCodexTokens(tokens.RefreshToken, tokens)
 	if err != nil {
 		if err == ErrCodexAuthRevoked {
-			return "⚠ Codex OAuth session expired — re-login via /setup → Codex 凭据"
+			return fmt.Sprintf("⚠ Codex OAuth (%s) session expired — re-login via /setup → Codex 凭据", label)
 		}
 		return ""
 	}
@@ -1631,33 +1651,24 @@ func ValidateCodexAuthOnStartup(globalDir string) string {
 	return ""
 }
 
-// codexOAuthConfigured reports whether ~/.lingtai-tui/codex-auth.json
-// parses and carries a non-empty refresh_token — the canonical "Codex OAuth
-// is usable" signal shared across the TUI (login.go, firstrun.go,
-// preset_editor.go all check the same shape). It reads no secret to the
-// screen; it only returns a bool. Pass the result into
-// preset.AuthState.CodexOAuthConfigured so the preset validity guard can
-// judge codex presets correctly without importing this package.
+// codexOAuthConfigured reports whether the legacy single-account file
+// ~/.lingtai-tui/codex-auth.json parses and carries a non-empty
+// refresh_token. It is the fallback signal for a codex preset that declares
+// no manifest.llm.codex_auth_path; per-account validity is checked through
+// preset.AuthState.CodexAuthDir. It reads no secret to the screen; it only
+// returns a bool.
 func codexOAuthConfigured(globalDir string) bool {
-	data, err := os.ReadFile(filepath.Join(globalDir, "codex-auth.json"))
-	if err != nil {
-		return false
-	}
-	var tokens CodexTokens
-	return json.Unmarshal(data, &tokens) == nil && tokens.RefreshToken != ""
+	return codexAuthPathValid(legacyCodexAuthPath(globalDir))
 }
 
-// validateCodexAuthForAgents scans all agent directories under projectDir
-// for init.json files whose active/default preset is codex. If any exist
-// but ~/.lingtai-tui/codex-auth.json is missing or invalid, returns a
-// warning string. Otherwise returns "".
+// validateCodexAuthForAgents scans all agent directories under projectDir for
+// init.json files whose active/default preset is codex, and validates the
+// SPECIFIC Codex account each such preset binds to (manifest.llm.codex_auth_path,
+// falling back to the legacy file). If any agent's bound account is missing or
+// invalid, returns a warning naming that agent. A different, validly-bound
+// account never suppresses (or triggers) the warning. Returns "" when all
+// codex-using agents have a usable bound account.
 func validateCodexAuthForAgents(globalDir, projectDir string) string {
-	// Quick check: is codex-auth.json valid?
-	if codexOAuthConfigured(globalDir) {
-		return ""
-	}
-
-	// Check if any agent uses a codex preset
 	entries, _ := os.ReadDir(projectDir)
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -1680,14 +1691,42 @@ func validateCodexAuthForAgents(globalDir, projectDir string) string {
 		if presetBlock == nil {
 			continue
 		}
-		// Check default and active
 		for _, key := range []string{"default", "active"} {
-			if path, _ := presetBlock[key].(string); path != "" {
-				if strings.Contains(path, "codex") {
-					return fmt.Sprintf("⚠ Codex OAuth 未验证 — agent %q 使用 codex 预设", e.Name())
-				}
+			presetRef, _ := presetBlock[key].(string)
+			if presetRef == "" || !strings.Contains(presetRef, "codex") {
+				continue
+			}
+			// Resolve the preset's bound account and validate just that file.
+			if !codexPresetRefAuthValid(globalDir, presetRef) {
+				return fmt.Sprintf("⚠ Codex OAuth 未验证 — agent %q 使用 codex 预设", e.Name())
 			}
 		}
 	}
 	return ""
+}
+
+// codexPresetRefAuthValid loads the preset file at presetRef and validates the
+// Codex OAuth account it binds to (manifest.llm.codex_auth_path, empty →
+// legacy fallback). When the preset file can't be read (e.g. a transient path),
+// it falls back to validating the legacy account so a missing preset file
+// doesn't spuriously fail an agent that may still resolve at launch.
+func codexPresetRefAuthValid(globalDir, presetRef string) bool {
+	abs := presetRef
+	if strings.HasPrefix(abs, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			abs = filepath.Join(home, abs[2:])
+		}
+	}
+	ref := ""
+	if data, err := os.ReadFile(abs); err == nil {
+		var p map[string]interface{}
+		if json.Unmarshal(data, &p) == nil {
+			if manifest, ok := p["manifest"].(map[string]interface{}); ok {
+				if llm, ok := manifest["llm"].(map[string]interface{}); ok {
+					ref, _ = llm["codex_auth_path"].(string)
+				}
+			}
+		}
+	}
+	return codexAuthPathValid(resolveCodexAuthPath(globalDir, ref))
 }

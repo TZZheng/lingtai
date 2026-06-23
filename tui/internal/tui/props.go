@@ -570,6 +570,7 @@ func (m PropsModel) renderLeft(maxW int) string {
 				cfg, _ := config.LoadConfig(m.globalDir)
 				auth := preset.AuthState{
 					CodexOAuthConfigured:     codexOAuthConfigured(m.globalDir),
+					CodexAuthDir:             m.globalDir,
 					ClaudeCodeAuthConfigured: claudeCodeAuthConfigured(),
 				}
 				resolved := preset.ResolveRefsWithAuth(allowedRefs, cfg.Keys, auth)
