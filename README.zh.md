@@ -227,7 +227,7 @@ brew upgrade lingtai-ai/lingtai/lingtai-tui
 
 升级完后重启 TUI，让新的二进制接管。Python 运行时由 TUI 在 `~/.lingtai-tui/runtime/venv/` 下统一管理——往系统 Python 里 `pip install lingtai` 不会影响在运行的项目。
 
-也可以运行 `lingtai-tui self-update`，让 TUI 按检测到的安装方式升级自己的二进制。在当前阶段它会升级 Homebrew 安装；源码/用户本地安装和未知安装会停下并给出指引，而不会运行 `brew`。
+也可以运行 `lingtai-tui self-update`，让 TUI 按检测到的安装方式升级自己的二进制。它会升级 Homebrew 和源码/用户本地安装；未知安装会停下并给出指引，而不会运行 `brew`。
 
 <details>
 <summary><b>首次安装？先装 Homebrew</b></summary>
@@ -368,6 +368,18 @@ lingtai-tui
 也可以从 GitHub 下载源码：
 ```bash
 curl -L "https://github.com/Lingtai-AI/lingtai/archive/refs/tags/${VERSION}.tar.gz" -o lingtai.tar.gz
+```
+
+如果源码/用户本地版本是通过仓库根目录的 `install.sh` 安装的，后续可以直接运行：
+
+```bash
+lingtai-tui self-update
+```
+
+更新器会读取 `~/.lingtai-tui/install.json`，按最新 release tag 重新运行源码安装器，并验证更新后的二进制。进阶/手动场景可直接使用安装器约定：
+
+```bash
+./install.sh --update --prefix <prefix> --version <tag> --non-interactive
 ```
 
 </details>
