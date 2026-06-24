@@ -382,6 +382,8 @@ lingtai-tui self-update
 ./install.sh --update --prefix <prefix> --version <tag> --non-interactive
 ```
 
+启动时，源码/用户本地安装也会检查新的 TUI release。有更新时，灵台会先询问再运行源码更新；选择否会保持当前二进制不变，并提示稍后可运行 `lingtai-tui self-update`。
+
 </details>
 
 ### 内核开发模式（进阶）

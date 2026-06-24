@@ -303,6 +303,8 @@ The updater reads `~/.lingtai-tui/install.json`, reruns the source installer for
 ./install.sh --update --prefix <prefix> --version <tag> --non-interactive
 ```
 
+On startup, source/user-local installs also check for newer TUI releases. If one is available, LingTai asks before running the source update. Choosing no leaves the current binary unchanged and prints `lingtai-tui self-update` for later.
+
 ### Kernel dev mode (advanced)
 
 Only if you are editing the kernel checkout and want your edits to take effect immediately in the TUI runtime:
