@@ -48,6 +48,22 @@ assert_eq '\t' "$(json_escape $'\t')" "json tab escaping"
 assert_eq '\b' "$(json_escape $'\b')" "json backspace escaping"
 assert_eq '\f' "$(json_escape $'\f')" "json form-feed escaping"
 assert_eq '\u0001' "$(json_escape $'\001')" "json generic control-byte escaping"
+assert_eq "$tmp/prefix/bin" "$(bin_dir_for_prefix "$tmp/prefix")" "bin dir from prefix"
+assert_eq "$tmp/prefix/bin" "$(bin_dir_for_prefix "$tmp/prefix/")" "bin dir from slash-suffixed prefix"
+
+REF="main"
+UPDATE_MODE=0
+INSTALL_PREFIX=""
+NON_INTERACTIVE=0
+parse_args --update --prefix "$tmp/prefix" --version v1.2.3 --non-interactive
+assert_eq "1" "$UPDATE_MODE" "update mode flag"
+assert_eq "$tmp/prefix" "$INSTALL_PREFIX" "update prefix flag"
+assert_eq "v1.2.3" "$REF" "update version flag"
+assert_eq "1" "$NON_INTERACTIVE" "non-interactive flag"
+REF="main"
+UPDATE_MODE=0
+INSTALL_PREFIX=""
+NON_INTERACTIVE=0
 
 printf 'second\n' >> "$repo/file.txt"
 git -C "$repo" commit -qam "second"
@@ -64,6 +80,26 @@ mkdir -p "$bin_dir"
 tui_path="$bin_dir/lingtai-tui"
 portal_path="$bin_dir/lingtai-portal"
 touch "$tui_path" "$portal_path"
+
+replacement_src="$tmp/replacement-src"
+printf 'new-binary\n' > "$replacement_src"
+printf 'old-binary\n' > "$tui_path"
+install_binary_atomically "$replacement_src" "$tui_path"
+assert_eq "new-binary" "$(cat "$tui_path")" "atomic replacement content"
+if compgen -G "$bin_dir/.lingtai-tui.tmp.*" >/dev/null; then
+  fail "atomic replacement left temp files in $bin_dir"
+fi
+
+fake_tui="$tmp/fake-lingtai-tui"
+cat > "$fake_tui" <<'SH'
+#!/usr/bin/env bash
+echo "lingtai-tui v1.2.3"
+SH
+chmod +x "$fake_tui"
+verify_tui_binary_version "$fake_tui" "v1.2.3"
+if verify_tui_binary_version "$fake_tui" "v9.9.9" 2>/dev/null; then
+  fail "version verifier accepted mismatched version"
+fi
 
 write_install_metadata \
   "$global_dir" \
