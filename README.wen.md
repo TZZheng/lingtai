@@ -56,6 +56,8 @@ mkdir my-project && cd my-project
 lingtai-tui
 ```
 
+> 初入 LingTai？先读[小白工作手册](docs/beginner-work-manual.zh.md)（或[单文件 HTML 图解版](docs/beginner-work-manual-stick-figure.zh.html)），再启首个项目。
+
 初启之时，灵台作 `.lingtai/`，备其运行时，引君择模型与配方，并令一常驻器灵守此项目。
 
 ```text
