@@ -776,6 +776,48 @@ func (m PropsModel) renderDetail() string {
 
 	var lines []string
 
+	raw := map[string]any{}
+	if agentRaw, err := fs.ReadAgentRaw(m.selectedDir); err == nil {
+		for k, v := range agentRaw {
+			raw[k] = v
+		}
+	}
+	if initRaw, err := fs.ReadInitManifest(m.selectedDir); err == nil {
+		for k, v := range initRaw {
+			if _, exists := raw[k]; !exists {
+				raw[k] = v
+			}
+		}
+	}
+
+	lines = append(lines, "")
+	lines = append(lines, "  "+sectionStyle.Render(i18n.T("props.detail_agent_info")))
+	lines = append(lines, "")
+	appendDetailRow := func(label, value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		lines = append(lines, "  "+labelStyle.Render(label+": ")+valueStyle.Render(value))
+	}
+	appendRawRow := func(key, label string) {
+		v, ok := raw[key]
+		if !ok || v == nil {
+			return
+		}
+		appendDetailRow(label, fmt.Sprintf("%v", v))
+	}
+	appendRawRow("agent_name", i18n.T("props.agent_name"))
+	appendRawRow("nickname", i18n.T("props.nickname"))
+	appendRawRow("agent_id", i18n.T("props.agent_id"))
+	appendRawRow("address", i18n.T("props.address"))
+	appendRawRow("state", i18n.T("props.state"))
+	appendDetailRow(i18n.T("props.detail_agent_path"), m.selectedDir)
+	appendDetailRow(i18n.T("props.detail_network_path"), m.baseDir)
+	if m.orchDir != "" && m.orchDir != m.selectedDir {
+		appendDetailRow(i18n.T("props.detail_orchestrator_path"), m.orchDir)
+	}
+
 	lines = append(lines, "")
 	lines = append(lines, "  "+sectionStyle.Render(i18n.T("props.detail_tokens_by_provider")))
 	lines = append(lines, "")

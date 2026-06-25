@@ -107,6 +107,52 @@ func TestPropsRenderRightShowsRunningDaemons(t *testing.T) {
 	}
 }
 
+func TestPropsRenderDetailShowsAgentPathInfo(t *testing.T) {
+	networkDir := t.TempDir()
+	agentDir := filepath.Join(networkDir, "mimo-1")
+	orchDir := filepath.Join(networkDir, "orchestrator")
+	if err := os.MkdirAll(agentDir, 0o755); err != nil {
+		t.Fatalf("mkdir agent dir: %v", err)
+	}
+	if err := os.MkdirAll(orchDir, 0o755); err != nil {
+		t.Fatalf("mkdir orchestrator dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(agentDir, ".agent.json"), []byte(`{
+		"agent_name": "mimo-1",
+		"nickname": "Mimo",
+		"agent_id": "agent-123",
+		"address": "mimo-1",
+		"state": "IDLE"
+	}`), 0o644); err != nil {
+		t.Fatalf("write agent metadata: %v", err)
+	}
+
+	m := PropsModel{
+		baseDir:     networkDir,
+		orchDir:     orchDir,
+		selectedDir: agentDir,
+	}
+
+	got := ansi.Strip(m.renderDetail())
+	for _, want := range []string{
+		i18n.T("props.detail_agent_info"),
+		i18n.T("props.detail_agent_path"),
+		i18n.T("props.detail_network_path"),
+		i18n.T("props.detail_orchestrator_path"),
+		agentDir,
+		networkDir,
+		orchDir,
+		"mimo-1",
+		"Mimo",
+		"agent-123",
+		"IDLE",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("detail missing %q in:\n%s", want, got)
+		}
+	}
+}
+
 func TestPropsRenderDetailShowsDaemonCounts(t *testing.T) {
 	m := PropsModel{
 		detailDaemonCounts: fs.DaemonCounts{
