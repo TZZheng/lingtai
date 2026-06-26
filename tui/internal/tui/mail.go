@@ -141,7 +141,7 @@ type MailModel struct {
 	lastInputLines    int
 	lastPaletteLines  int
 	lastBannerLines   int
-	lastTelemetryRow  bool // whether the home telemetry row was reserved last sync
+	lastTelemetryRow  bool             // whether the home telemetry row was reserved last sync
 	pendingMessage    string           // full text from editor, sent on Enter
 	globalDir         string           // ~/.lingtai-tui/
 	wasActive         bool             // true if previous refresh was ACTIVE
@@ -1379,6 +1379,45 @@ func (m MailModel) viewEditorWarn() string {
 	return b.String()
 }
 
+// composeCenteredHeader lays out a three-part header line — left block anchored
+// at column 0, right block flush with the terminal's right edge, and the center
+// block placed at the *absolute* terminal midpoint (start column
+// (width-centerW)/2) rather than centered in the leftover gap between left and
+// right. All widths are display widths (lipgloss.Width) so ANSI styling and
+// multibyte runes are handled correctly.
+//
+// When absolute centering would overlap the left or right block (or the
+// terminal is too narrow), it falls back to centering the block in the leftover
+// gap, and finally to a single-space compact layout, so the line is always
+// non-empty and never drops a block.
+func composeCenteredHeader(left, center, right string, width int) string {
+	leftW := lipgloss.Width(left)
+	centerW := lipgloss.Width(center)
+	rightW := lipgloss.Width(right)
+
+	// Absolute centering: place the center block so its midpoint sits at the
+	// terminal midpoint. Require at least one space of separation on each side
+	// of the center block to keep the blocks visually distinct.
+	start := (width - centerW) / 2
+	if start >= leftW+1 && start+centerW <= width-rightW-1 {
+		leftGap := start - leftW
+		rightGap := width - rightW - (start + centerW)
+		return left + strings.Repeat(" ", leftGap) + center + strings.Repeat(" ", rightGap) + right
+	}
+
+	// Fallback: center the block in whatever gap remains between the anchored
+	// left and right blocks.
+	gapTotal := width - leftW - centerW - rightW - 1
+	if gapTotal > 0 {
+		leftGap := gapTotal / 2
+		rightGap := gapTotal - leftGap
+		return left + strings.Repeat(" ", leftGap) + center + strings.Repeat(" ", rightGap) + right
+	}
+
+	// Too narrow for any gap: compact single-space layout, no overlap math.
+	return left + " " + center + " " + right
+}
+
 func (m MailModel) View() string {
 	if m.showEditorWarn {
 		return m.viewEditorWarn()
@@ -1426,18 +1465,9 @@ func (m MailModel) View() string {
 
 	leftW := lipgloss.Width(titleLeft)
 	rightW := lipgloss.Width(titleRight)
-	centerW := lipgloss.Width(titleCenter)
 	var titleLine string
 	if titleCenter != "" {
-		// Three-part layout: left ... center ... right
-		gapTotal := m.width - leftW - centerW - rightW - 1
-		if gapTotal > 0 {
-			leftGap := gapTotal / 2
-			rightGap := gapTotal - leftGap
-			titleLine = titleLeft + strings.Repeat(" ", leftGap) + titleCenter + strings.Repeat(" ", rightGap) + titleRight
-		} else {
-			titleLine = titleLeft + " " + titleCenter + " " + titleRight
-		}
+		titleLine = composeCenteredHeader(titleLeft, titleCenter, titleRight, m.width)
 	} else {
 		padding := m.width - leftW - rightW - 1
 		if padding > 0 {
