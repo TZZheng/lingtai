@@ -469,6 +469,7 @@
   "doctor.report_saving": "saving report...",
   "doctor.report_saved": "report saved: %s",
   "doctor.report_save_failed": "save failed: %s",
+  "doctor.report_privacy_notice": "⎔ Reports are saved locally and redacted — raw logs, prompts, tool I/O, and command text are excluded by default. Review the bundle before sharing.",
   "palette.nirvana": "Wipe everything and start fresh",
   "nirvana.title": "Nirvana",
   "nirvana.warning": "⚠ This will permanently destroy all data in the working directory.",

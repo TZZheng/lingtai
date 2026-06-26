@@ -44,6 +44,24 @@ func TestDoctorSaveAffordanceOnlyAfterResultWithDraft(t *testing.T) {
 	}
 }
 
+func TestDoctorPrivacyNoticeShownOnlyWithDraft(t *testing.T) {
+	const notice = "Review the bundle before sharing"
+
+	// Loading view (no draft yet) must not show the redaction/share reminder.
+	m := NewDoctorModel(t.TempDir(), t.TempDir())
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
+	if strings.Contains(m.View(), notice) {
+		t.Fatalf("loading doctor view must not show the privacy notice:\n%s", m.View())
+	}
+
+	// Once a run has completed and produced a draft, the reminder is prominent
+	// near the save affordance.
+	m = finishedDoctor(t, t.TempDir(), t.TempDir())
+	if !strings.Contains(m.View(), notice) {
+		t.Fatalf("completed doctor view should show the privacy notice:\n%s", m.View())
+	}
+}
+
 func TestDoctorBareRSavesReportWithoutRerun(t *testing.T) {
 	orchDir := filepath.Join(t.TempDir(), "agent-one")
 	if err := os.MkdirAll(orchDir, 0o755); err != nil {

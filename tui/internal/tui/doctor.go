@@ -316,7 +316,15 @@ func (m DoctorModel) View() string {
 	if m.ready && !m.viewport.AtBottom() {
 		hint += " " + RuneBullet + " ↑↓ " + i18n.T("doctor.scroll")
 	}
-	footer := strings.Repeat("─", m.width) + "\n" + StyleFaint.Render(hint)
+	footer := strings.Repeat("─", m.width) + "\n"
+	// Prominent privacy reminder: whenever a completed run can be (or has been)
+	// saved, spell out that the bundle is local + redacted and should be reviewed
+	// before sharing. Sits on its own accented line above the hint so it reads as
+	// a notice rather than another keybinding.
+	if m.draft != nil {
+		footer += "  " + StyleAccent.Render(i18n.T("doctor.report_privacy_notice")) + "\n"
+	}
+	footer += StyleFaint.Render(hint)
 
 	return header + "\n" + PaintViewportBG(body, m.width) + "\n" + footer
 }
