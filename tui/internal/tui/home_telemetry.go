@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"image/color"
-	"path/filepath"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -12,34 +11,51 @@ import (
 	"github.com/anthropics/lingtai-tui/internal/fs"
 )
 
-// Home telemetry row — a single muted line shown between the input box and the
-// bottom path/shortcut footer. It condenses the current session's token usage
-// and the live context-window pressure into one high-density line:
+// Home telemetry row — a single muted line shown BELOW the input box and ABOVE
+// the bottom path/shortcut status bar. It condenses the CURRENT SESSION's token
+// economy and the live context-window pressure into one high-density line:
 //
-//	tok 18.4k / 128k  ctx 14%  ▓▓▓░░░░░░░░░░░
+//	api 42  tok 181.6k  cache 88%  tok/api 4.3k    ctx 73% ▓▓▓▓░░
 //
-// meaning: session tokens so far / model context limit, context-usage percent,
-// and a small adaptive bar. It is scalar-only — never the noisy `_meta` block
-// hidden by PR #440. Data sources (all already read elsewhere in the TUI):
-//   - sessionTokens: fs.SumTokenLedger(...).Input+Output+Thinking (props.go)
-//   - contextLimit:  manifest.llm.context_limit (fs.ReadInitManifest)
-//   - contextUsage:  latest notification Meta.Context.Usage (0..1, -1 = none)
+// All numbers are scoped to the current molt session (since the latest
+// psyche_molt), NOT the whole-ledger lifetime total and NOT a single round:
+//   - api:     LLM API calls this session
+//   - tok:     total session tokens (input + output + thinking)
+//   - cache:   cache-hit rate (cached / input)
+//   - tok/api: average tokens per API call
+// and, separately, the live context-window pressure with the gauge Jason liked:
+//   - ctx N% ▓▓░░: latest context-window fill fraction over the model's limit.
 //
-// When no data is available the row is omitted entirely (graceful hide), matching
-// the TUI's "show nothing rather than a placeholder zero" footer style.
+// It is scalar-only — never the noisy `_meta` block hidden by PR #440.
+//
+// Why this differs from the original #441 row ("数据有点怪", msg 3198): that row
+// showed `tok <global> / <limit>` where <global> was fs.SumTokenLedger over the
+// ENTIRE ledger — every molt the agent has ever lived (163 molts / 20k+ rows for
+// a long-lived agent) — so the number only grew and bore no relation to the
+// session in view. And <limit> was read from manifest["llm"]["context_limit"],
+// a key that does not exist (context_limit sits at the manifest TOP LEVEL), so
+// the "/ limit" half silently never rendered. This version reads current-session
+// stats from the same source the molt-session stats panel uses
+// (fs.SumMoltSessionTokenLedger().Current, props.go) and the limit from the
+// correct manifest key. When no data is available the row is omitted entirely.
 
 // homeTelemetry holds the already-resolved scalars for the home row. Keeping the
 // data plain (no rendering) makes formatHomeTelemetry trivially testable.
 type homeTelemetry struct {
-	sessionTokens int64   // total session tokens (input+output+thinking); 0 = unknown
+	apiCalls      int64   // current-session LLM API calls; 0 = none/unknown
+	sessionTokens int64   // current-session tokens (input+output+thinking); 0 = unknown
+	cached        int64   // current-session cached input tokens
+	inputTokens   int64   // current-session input tokens (cache-rate denominator)
 	contextLimit  int64   // model context window; 0 = unknown
 	contextUsage  float64 // latest context-usage fraction 0..1; <0 = unknown
 }
 
-// gatherHomeTelemetry resolves the three telemetry scalars for the orchestrator
-// agent from data the TUI already reads elsewhere:
-//   - sessionTokens from logs/token_ledger.jsonl (fs.SumTokenLedger, cached)
-//   - contextLimit from manifest.llm.context_limit (fs.ReadInitManifest)
+// gatherHomeTelemetry resolves the telemetry scalars for the orchestrator agent
+// from data the TUI already reads elsewhere:
+//   - current-session token/cache/api stats from logs/token_ledger.jsonl bounded
+//     to the current molt window (fs.SumMoltSessionTokenLedger().Current) — the
+//     SAME source and scope as the molt-session stats panel in props.go
+//   - contextLimit from manifest TOP-LEVEL `context_limit` (fs.ReadInitManifest)
 //   - contextUsage from the freshest notification Meta.Context.Usage in the
 //     current message list (the same value the notification footer renders)
 //
@@ -48,14 +64,13 @@ type homeTelemetry struct {
 func (m MailModel) gatherHomeTelemetry() homeTelemetry {
 	t := homeTelemetry{contextUsage: -1}
 	if m.orchestrator != "" {
-		ledger := fs.SumTokenLedger(filepath.Join(m.orchestrator, "logs", "token_ledger.jsonl"))
-		t.sessionTokens = ledger.Input + ledger.Output + ledger.Thinking
+		cur := fs.SumMoltSessionTokenLedger(m.orchestrator).Current
+		t.apiCalls = cur.APICalls
+		t.sessionTokens = cur.Input + cur.Output + cur.Thinking
+		t.cached = cur.Cached
+		t.inputTokens = cur.Input
 		if manifest, err := fs.ReadInitManifest(m.orchestrator); err == nil {
-			if llm, ok := manifest["llm"].(map[string]interface{}); ok {
-				if cl, ok := llm["context_limit"].(float64); ok && cl > 0 {
-					t.contextLimit = int64(cl)
-				}
-			}
+			t.contextLimit = manifestContextLimit(manifest)
 		}
 	}
 	// Latest context-usage fraction: scan the built messages backward for the
@@ -70,10 +85,58 @@ func (m MailModel) gatherHomeTelemetry() homeTelemetry {
 	return t
 }
 
+// manifestContextLimit resolves the model context window from a manifest read by
+// fs.ReadInitManifest, returning 0 when unknown. It checks BOTH nestings because
+// the two artifacts ReadInitManifest can return disagree on where the value sits
+// (the em-1 "do not assume wrong nesting" trap):
+//   - the kernel-resolved system/manifest.resolved.json carries it at the
+//     TOP LEVEL (`manifest.context_limit`); `llm.context_limit` is absent there —
+//     verified empirically across every live agent on this machine. The original
+//     PR #441 read only `llm.context_limit` and so always missed it.
+//   - the raw init.json fallback (stopped / never-booted agents) keeps the
+//     saved-preset canonical shape `llm.context_limit` (see
+//     internal/preset/preset.go NormalizeLegacyContextLimit). flattenInitManifest
+//     does NOT hoist context_limit to top level, so that case needs the llm path.
+//
+// Top level wins when both are present.
+func manifestContextLimit(manifest map[string]interface{}) int64 {
+	if cl, ok := manifest["context_limit"].(float64); ok && cl > 0 {
+		return int64(cl)
+	}
+	if llm, ok := manifest["llm"].(map[string]interface{}); ok {
+		if cl, ok := llm["context_limit"].(float64); ok && cl > 0 {
+			return int64(cl)
+		}
+	}
+	return 0
+}
+
 // hasData reports whether any fragment is renderable. With nothing to show the
 // caller omits the whole row.
 func (t homeTelemetry) hasData() bool {
-	return t.sessionTokens > 0 || t.contextUsage >= 0
+	return t.apiCalls > 0 || t.sessionTokens > 0 || t.contextUsage >= 0
+}
+
+// hasHomeTelemetry reports whether View() will render the additive telemetry row.
+// It is the single predicate shared by the height budget (syncViewportHeight)
+// and the renderer (View) so they can never disagree about whether the row
+// occupies a line — a disagreement is exactly what clipped the status bar.
+func (m MailModel) hasHomeTelemetry() bool {
+	return m.gatherHomeTelemetry().hasData()
+}
+
+// mailFooterHeight returns how many terminal rows the mail-view footer block
+// occupies: sep(1) + palette(N) + input(N) + optional telemetry(1) + status(1),
+// plus the layout's trailing border(1). It is the single source of truth for
+// footer height shared by syncViewportHeight (the viewport budget) and View()
+// (the actual render), so the additive telemetry row is reserved consistently
+// and never overflows the frame.
+func mailFooterHeight(paletteLines, inputLines int, telemetryVisible bool) int {
+	h := 1 + paletteLines + inputLines + 1 + 1 // sep + palette + input + border + status
+	if telemetryVisible {
+		h++
+	}
+	return h
 }
 
 // formatHomeTelemetry renders the telemetry row for the given terminal width, or
@@ -88,19 +151,31 @@ func formatHomeTelemetry(t homeTelemetry, width int) string {
 
 	var segs []string
 
-	// tok 18.4k / 128k  (the "/ limit" half is dropped when the limit is unknown)
+	// Current-session token economy: api · tok · cache · tok/api. Each fragment
+	// is dropped when its source is unknown so a missing piece never shows a 0.
+	if t.apiCalls > 0 {
+		segs = append(segs, fmt.Sprintf("%s %d", i18n.T("mail.telemetry_api"), t.apiCalls))
+	}
 	if t.sessionTokens > 0 {
-		tok := i18n.T("mail.telemetry_tok") + " " + humanizeTokenCount(t.sessionTokens)
-		if t.contextLimit > 0 {
-			tok += " / " + humanizeTokenCount(t.contextLimit)
-		}
-		segs = append(segs, tok)
+		segs = append(segs, i18n.T("mail.telemetry_tok")+" "+humanizeTokenCount(t.sessionTokens))
+	}
+	if t.inputTokens > 0 {
+		segs = append(segs, i18n.T("mail.telemetry_cache")+" "+formatCacheRate(t.cached, t.inputTokens))
+	}
+	if t.apiCalls > 0 && t.sessionTokens > 0 {
+		segs = append(segs, i18n.T("mail.telemetry_tok_per_api")+" "+humanizeTokenCount(avgPerCall(t.sessionTokens, t.apiCalls)))
 	}
 
-	// ctx 14%  ▓▓▓░░  (the bar is dropped on narrow terminals)
+	// ctx 73% / 250k  ▓▓▓░░  — live context-window pressure with the gauge Jason
+	// liked (msg 3195/3196). The bar fills to the latest context-usage fraction;
+	// the absolute window limit is appended when known so "73%" has a referent.
+	// The bar is dropped on narrow terminals but the "ctx N%" number stays.
 	if t.contextUsage >= 0 {
 		pct := t.contextUsage * 100
 		ctx := fmt.Sprintf("%s %.0f%%", i18n.T("mail.telemetry_ctx"), pct)
+		if t.contextLimit > 0 {
+			ctx += " / " + humanizeTokenCount(t.contextLimit)
+		}
 		if barW := homeTelemetryBarWidth(width); barW > 0 {
 			ctx += "  " + renderContextBar(pct, barW)
 		}

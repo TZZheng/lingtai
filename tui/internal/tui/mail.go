@@ -141,6 +141,7 @@ type MailModel struct {
 	lastInputLines    int
 	lastPaletteLines  int
 	lastBannerLines   int
+	lastTelemetryRow  bool // whether the home telemetry row was reserved last sync
 	pendingMessage    string           // full text from editor, sent on Enter
 	globalDir         string           // ~/.lingtai-tui/
 	wasActive         bool             // true if previous refresh was ACTIVE
@@ -273,14 +274,20 @@ func (m *MailModel) syncViewportHeight() bool {
 		paletteLines = m.palette.LineCount()
 	}
 	bannerLines := m.bannerLineCount()
-	if inputLines == m.lastInputLines && paletteLines == m.lastPaletteLines && bannerLines == m.lastBannerLines {
+	telemetryRow := m.hasHomeTelemetry()
+	if inputLines == m.lastInputLines && paletteLines == m.lastPaletteLines && bannerLines == m.lastBannerLines && telemetryRow == m.lastTelemetryRow {
 		return false
 	}
 	m.lastInputLines = inputLines
 	m.lastPaletteLines = paletteLines
 	m.lastBannerLines = bannerLines
-	// Layout: header(2) + topBanner(0-1) + viewport + bottomBanner(0-1) + sep(1) + palette(N) + input(N) + border(1) + status(1)
-	footerHeight := 1 + paletteLines + inputLines + 1 + 1
+	m.lastTelemetryRow = telemetryRow
+	// Layout: header(2) + topBanner(0-1) + viewport + bottomBanner(0-1) + footer.
+	// The footer block (sep + palette + input + optional telemetry + status) is
+	// sized by mailFooterHeight so View() and this height budget stay in lockstep
+	// — the telemetry row added by PR #441 must be reserved here or it pushes the
+	// bottom status bar (the "ctrl+o soul" hint) off-screen.
+	footerHeight := mailFooterHeight(paletteLines, inputLines, telemetryRow)
 	vpHeight := m.height - 2 - bannerLines - footerHeight
 	if vpHeight < 1 {
 		vpHeight = 1

@@ -5,9 +5,11 @@ import (
 	"testing"
 )
 
-// The home telemetry row condenses current-session token usage and live context
-// pressure into one muted line: "tok 18.4k / 128k  ctx 14%  ▓▓▓░░". It is
-// scalar-only (never the _meta block hidden by PR #440) and hides gracefully
+// The home telemetry row condenses the CURRENT SESSION's token economy
+// (api · tok · cache · tok/api) plus the live context pressure gauge into one
+// muted line: "api 42  tok 181.6k  cache 88%  tok/api 4.3k  ctx 73% ▓▓▓░░". It
+// is scalar-only (never the _meta block hidden by PR #440), scoped to the
+// current molt session (never the global lifetime total), and hides gracefully
 // when no data is available.
 func TestFormatHomeTelemetry(t *testing.T) {
 	tests := []struct {
@@ -25,32 +27,47 @@ func TestFormatHomeTelemetry(t *testing.T) {
 			exact: "",
 		},
 		{
-			name:  "tokens + limit + ctx + bar (wide)",
-			tel:   homeTelemetry{sessionTokens: 18432, contextLimit: 128000, contextUsage: 0.14},
+			name: "full current-session economy + ctx + bar (wide)",
+			// 42 calls, 181,585 tokens, 180,224 cached of 181,585 input (99.3%),
+			// avg 4,323 tok/call. ctx 73% → amber bar.
+			tel: homeTelemetry{
+				apiCalls: 42, sessionTokens: 181585, inputTokens: 181585,
+				cached: 180224, contextLimit: 200000, contextUsage: 0.73,
+			},
 			width: 120,
-			want:  []string{"tok", "18.4k", "/", "128.0k", "ctx", "14%", "▓", "░"},
+			// api count, humanized token total, cache rate, tok/api, ctx + bar.
+			want: []string{"api", "42", "tok", "181.6k", "cache", "%", "tok/api", "ctx", "73%", "▓", "░"},
 		},
 		{
-			name:  "tokens without a known context limit — drop the / half",
-			tel:   homeTelemetry{sessionTokens: 5000, contextLimit: 0, contextUsage: -1},
+			name: "no api calls yet — drop api & tok/api, keep tokens",
+			tel: homeTelemetry{
+				apiCalls: 0, sessionTokens: 5000, inputTokens: 5000, cached: 0,
+				contextUsage: -1,
+			},
 			width: 120,
 			want:  []string{"tok", "5.0k"},
-			// no limit, no ctx, no bar
-			notWant: []string{"/", "ctx", "▓"},
+			// no api count, no per-call average, no ctx, no bar
+			notWant: []string{"api", "tok/api", "ctx", "▓"},
 		},
 		{
-			name:  "context only — no session tokens yet",
-			tel:   homeTelemetry{sessionTokens: 0, contextLimit: 128000, contextUsage: 0.5},
+			name: "context only — no session ledger yet",
+			tel: homeTelemetry{
+				apiCalls: 0, sessionTokens: 0, inputTokens: 0,
+				contextLimit: 128000, contextUsage: 0.5,
+			},
 			width: 120,
 			want:  []string{"ctx", "50%", "▓"},
-			// nothing to show for tokens, so no "tok"
-			notWant: []string{"tok"},
+			// nothing to show for the token economy
+			notWant: []string{"tok", "api", "cache"},
 		},
 		{
-			name:    "narrow terminal (<40) keeps numbers, hides bar",
-			tel:     homeTelemetry{sessionTokens: 18432, contextLimit: 128000, contextUsage: 0.14},
+			name: "narrow terminal (<40) keeps numbers, hides bar",
+			tel: homeTelemetry{
+				apiCalls: 42, sessionTokens: 18432, inputTokens: 18432,
+				cached: 9000, contextUsage: 0.14,
+			},
 			width:   30,
-			want:    []string{"tok", "18.4k", "ctx", "14%"},
+			want:    []string{"api", "42", "tok", "18.4k", "cache", "ctx", "14%"},
 			notWant: []string{"▓", "░"},
 		},
 	}
