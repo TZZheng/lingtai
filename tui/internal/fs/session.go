@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anthropics/lingtai-tui/i18n"
 	"github.com/anthropics/lingtai-tui/internal/sqlitelog"
 )
 
@@ -880,7 +881,17 @@ func formatToolResultEvent(entry map[string]interface{}) string {
 	return strings.Join(lines, "\n")
 }
 
+// appendToolResultMetaBlocks decides whether a tool_result carries any of the
+// synthesized `_meta` envelope blocks (`_tool`, `_runtime.state`,
+// `_runtime.guidance`, `notifications`, `_notification_guidance`). The blocks
+// themselves are too noisy for the ctrl+o chat replay, so instead of expanding
+// them inline we emit a single short hint pointing the user at `/notification`,
+// where the full canonical `_meta.*` envelope is paged on demand. The raw
+// metadata is still carried in the underlying event and stripped out of the
+// `result:` body by displayToolResultValue, so nothing is lost — only hidden.
 func appendToolResultMetaBlocks(lines []string, entry map[string]interface{}, resultMap map[string]interface{}) []string {
+	hasMeta := false
+
 	toolBlock := map[string]interface{}{}
 	copyIfPresent(toolBlock, "id", entry, "tool_call_id")
 	copyIfPresent(toolBlock, "trace_id", entry, "tool_trace_id")
@@ -889,34 +900,38 @@ func appendToolResultMetaBlocks(lines []string, entry map[string]interface{}, re
 	copyIfPresent(toolBlock, "status", entry, "status")
 	copyIfPresent(toolBlock, "elapsed_ms", entry, "elapsed_ms")
 	if len(toolBlock) > 0 {
-		lines = appendMetadataBlock(lines, "_tool", toolBlock)
+		hasMeta = true
 	}
 
 	runtimeStateRendered := false
 	runtimeGuidanceRendered := false
 	if runtimeMap := firstMapValue(entry, resultMap, "_runtime"); runtimeMap != nil {
-		if state, ok := runtimeMap["state"]; ok {
-			lines = appendMetadataBlock(lines, "_runtime.state", state)
+		if _, ok := runtimeMap["state"]; ok {
+			hasMeta = true
 			runtimeStateRendered = true
 		}
-		if guidance, ok := runtimeMap["guidance"]; ok {
-			lines = appendMetadataBlock(lines, "_runtime.guidance", guidance)
+		if _, ok := runtimeMap["guidance"]; ok {
+			hasMeta = true
 			runtimeGuidanceRendered = true
 		}
 	}
 	if resultMap != nil && !runtimeStateRendered {
-		if pending, ok := resultMap["_runtime_pending"]; ok {
-			lines = appendMetadataBlock(lines, "_runtime.state", pending)
+		if _, ok := resultMap["_runtime_pending"]; ok {
+			hasMeta = true
 		}
 	}
 	if guidance := firstValue(entry, resultMap, "_runtime_guidance"); guidance != nil && !runtimeGuidanceRendered {
-		lines = appendMetadataBlock(lines, "_runtime.guidance", guidance)
+		hasMeta = true
 	}
 	if notifications := firstValue(entry, resultMap, "notifications"); notifications != nil {
-		lines = appendMetadataBlock(lines, "notifications", notifications)
+		hasMeta = true
 	}
 	if guidance := firstValue(entry, resultMap, "_notification_guidance"); guidance != nil {
-		lines = appendMetadataBlock(lines, "_notification_guidance", guidance)
+		hasMeta = true
+	}
+
+	if hasMeta {
+		lines = append(lines, i18n.T("mail.meta_hidden_hint"))
 	}
 	return lines
 }
@@ -969,18 +984,6 @@ func firstValue(primary map[string]interface{}, secondary map[string]interface{}
 		}
 	}
 	return nil
-}
-
-func appendMetadataBlock(lines []string, name string, value interface{}) []string {
-	text := formatToolResultValue(value)
-	if text == "" {
-		return lines
-	}
-	lines = append(lines, name+":")
-	for _, line := range strings.Split(text, "\n") {
-		lines = append(lines, "  "+line)
-	}
-	return lines
 }
 
 func formatToolErrorSummary(toolErr map[string]interface{}) []string {

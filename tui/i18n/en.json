@@ -137,6 +137,7 @@
   "mail.lang_moved": "Agent language is now in /settings. Change it there, then /refresh.",
   "mail.launch_failed": "Failed to launch agent: %s",
   "mail.editor_hint": "Input box scrolls at this size. Use pgup/pgdn or mouse wheel here; ctrl+e opens vim/editor.",
+  "mail.meta_hidden_hint": "_meta hidden — use /notification to see the meta block",
   "mail.no_messages": "No messages yet. Waiting for mail...",
   "mail.initial_loading": "loading...",
   "mail.load_more": "▲ %d older — ctrl+u to load",

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/anthropics/lingtai-tui/i18n"
 )
 
 // helper: write lines to a file, each terminated by \n.
@@ -386,7 +388,7 @@ func TestParseEventToolResultRendersScalarAndKeepsLongResult(t *testing.T) {
 	}
 }
 
-func TestParseEventToolResultRendersParallelMetaBlocks(t *testing.T) {
+func TestParseEventToolResultHidesMetaBlocksBehindNotificationHint(t *testing.T) {
 	raw := map[string]interface{}{
 		"ts":            1781258400.0,
 		"type":          "tool_result",
@@ -426,19 +428,12 @@ func TestParseEventToolResultRendersParallelMetaBlocks(t *testing.T) {
 	if e == nil {
 		t.Fatal("parseEvent returned nil")
 	}
+	// The `_meta` envelope blocks are too noisy for the ctrl+o chat replay, so
+	// instead of expanding them inline we emit a single hint pointing the user
+	// at `/notification`. The non-meta tool summary and result body still show.
 	for _, want := range []string{
 		"bash → ok 42ms",
-		"_tool:",
-		`"id": "call_meta"`,
-		`"trace_id": "trace_meta"`,
-		"_runtime.state:",
-		`"current_time": "2026-06-21T00:40:00-07:00"`,
-		"_runtime.guidance:",
-		`"guidance_version": "0.3.0"`,
-		"notifications:",
-		`"mcp.telegram"`,
-		"_notification_guidance:",
-		"read the producer channel first",
+		i18n.T("mail.meta_hidden_hint"),
 		"result: {",
 		`"stdout": "done"`,
 	} {
@@ -446,7 +441,22 @@ func TestParseEventToolResultRendersParallelMetaBlocks(t *testing.T) {
 			t.Fatalf("Body missing %q:\n%s", want, e.Body)
 		}
 	}
-	if strings.Contains(e.Body, "_runtime_pending") {
-		t.Fatalf("runtime pending metadata should be rendered as _runtime.state, not duplicated in result:\n%s", e.Body)
+	// None of the expanded meta blocks should leak into the replay body.
+	for _, notWant := range []string{
+		"_tool:",
+		`"trace_id": "trace_meta"`,
+		"_runtime.state:",
+		"2026-06-21T00:40:00-07:00",
+		"_runtime.guidance:",
+		"guidance_version",
+		"notifications:",
+		"mcp.telegram",
+		"_notification_guidance:",
+		"read the producer channel first",
+		"_runtime_pending",
+	} {
+		if strings.Contains(e.Body, notWant) {
+			t.Fatalf("Body should not contain hidden meta block %q:\n%s", notWant, e.Body)
+		}
 	}
 }
