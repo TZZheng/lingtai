@@ -106,6 +106,10 @@ func noDevHome(t *testing.T) (string, func(string) (string, bool)) {
 type fakeFileInfo struct{ os.FileInfo }
 
 func writeSourceInstallMetadata(t *testing.T, globalDir, prefix, binDir string, managed []string) {
+	writeSourceInstallMetadataVersion(t, globalDir, prefix, binDir, "v0.8.1", managed)
+}
+
+func writeSourceInstallMetadataVersion(t *testing.T, globalDir, prefix, binDir, version string, managed []string) {
 	t.Helper()
 	if err := os.MkdirAll(globalDir, 0o755); err != nil {
 		t.Fatalf("mkdir global dir: %v", err)
@@ -117,10 +121,10 @@ func writeSourceInstallMetadata(t *testing.T, globalDir, prefix, binDir string, 
 		"prefix":           prefix,
 		"bin_dir":          binDir,
 		"repo_url":         "https://github.com/Lingtai-AI/lingtai.git",
-		"requested_ref":    "v0.8.1",
-		"resolved_ref":     "v0.8.1",
+		"requested_ref":    version,
+		"resolved_ref":     version,
 		"resolved_commit":  "0123456789abcdef",
-		"stamped_version":  "v0.8.1",
+		"stamped_version":  version,
 		"installed_at":     "2026-06-23T00:00:00Z",
 		"managed_binaries": managed,
 	})
@@ -768,8 +772,8 @@ func TestRunDoctorUpdateReportsSourceInstallAndDoesNotRunBrew(t *testing.T) {
 	prefix := t.TempDir()
 	binDir := filepath.Join(prefix, "bin")
 	exe := filepath.Join(binDir, "lingtai-tui")
-	writeSourceInstallMetadata(t, globalDir, prefix, binDir, []string{exe})
-	runner := &fakeRunner{versions: []string{"0.9.7", "0.9.7"}}
+	writeSourceInstallMetadataVersion(t, globalDir, prefix, binDir, "v0.8.0", []string{exe})
+	runner := &sourceUpdateRunner{t: t, globalDir: globalDir, prefix: prefix, binDir: binDir, latest: "v0.8.1", runtimeVersion: "0.9.7"}
 
 	report := RunDoctorUpdate(globalDir, DoctorOptions{
 		CurrentTUIVersion: "v0.8.0",
@@ -795,8 +799,8 @@ func TestRunDoctorUpdateReportsSourceInstallAndDoesNotRunBrew(t *testing.T) {
 	if !containsLine(report.Lines, "TUI install method: source/user-local") {
 		t.Fatalf("expected source install method report: %+v", report.Lines)
 	}
-	if !containsLine(report.Lines, "Source/user-local TUI update is not automated yet") {
-		t.Fatalf("expected source manual-update guidance: %+v", report.Lines)
+	if !containsLine(report.Lines, "Source/user-local TUI update verified") {
+		t.Fatalf("expected source updater success: %+v", report.Lines)
 	}
 	if containsCall(runner.calls, "brew") {
 		t.Fatalf("source install must not run brew, got %#v", runner.calls)

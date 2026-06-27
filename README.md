@@ -272,7 +272,7 @@ brew upgrade lingtai-ai/lingtai/lingtai-tui
 
 After upgrading, restart the TUI so the new binary takes over. The TUI manages the Python runtime under `~/.lingtai-tui/runtime/venv/` — installing `lingtai` into your system Python does not affect a running project.
 
-You can also run `lingtai-tui self-update` to update the TUI binary through the detected install method. At this stage it updates Homebrew installs; source/user-local and unknown installs stop with guidance instead of running `brew`.
+You can also run `lingtai-tui self-update` to update the TUI binary through the detected install method. It updates Homebrew and source/user-local installs; unknown installs stop with guidance instead of running `brew`.
 
 First-time install problems (missing `brew`, WSL/Ubuntu/Debian prerequisites, source-build failures) are covered up top in [First-time install troubleshooting](#first-time-install-troubleshooting).
 
@@ -290,6 +290,18 @@ lingtai-tui
 ```
 
 `install.sh` builds `lingtai-tui` and (when `npm` is available) `lingtai-portal`, then installs binaries into the Homebrew prefix if `brew` exists, otherwise `/usr/local/bin`.
+
+Source installs made through `install.sh` can update through the same command:
+
+```bash
+lingtai-tui self-update
+```
+
+The updater reads `~/.lingtai-tui/install.json`, reruns the source installer for the latest release tag, and verifies the updated binary. For advanced/manual use, the installer contract is:
+
+```bash
+./install.sh --update --prefix <prefix> --version <tag> --non-interactive
+```
 
 ### Kernel dev mode (advanced)
 

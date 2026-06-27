@@ -17,6 +17,9 @@ REF="main"
 REPO="https://github.com/Lingtai-AI/lingtai.git"
 TMPDIR="${TMPDIR:-/tmp}"
 BUILD_DIR="$TMPDIR/lingtai-install-$$"
+UPDATE_MODE=0
+INSTALL_PREFIX=""
+NON_INTERACTIVE=0
 
 usage() {
   cat <<'EOF'
@@ -25,10 +28,15 @@ Build lingtai-tui and lingtai-portal from source and install them.
 Usage:
   curl -sSL https://raw.githubusercontent.com/Lingtai-AI/lingtai/main/install.sh | bash
   ./install.sh [--ref <branch|tag|commit>]
+  ./install.sh --update --prefix <prefix> --version <tag> --non-interactive
 
 Options:
-  --ref <ref>   Git branch, tag, or commit to build (default: main)
-  -h, --help    Show this help
+  --ref <ref>          Git branch, tag, or commit to build (default: main)
+  --update             Update an existing source/user-local install
+  --prefix <prefix>    Existing install prefix for --update
+  --version <tag>      Release tag to install for --update
+  --non-interactive    Fail instead of installing missing dependencies
+  -h, --help           Show this help
 
 Binaries are installed to the first of: Homebrew's bin directory, a writable
 /usr/local/bin, or ~/.local/bin. The portal is skipped when npm is missing.
@@ -122,6 +130,68 @@ prefix_for_bin_dir() {
   fi
 }
 
+bin_dir_for_prefix() {
+  local prefix="$1"
+  printf '%s/bin\n' "${prefix%/}"
+}
+
+install_binary_atomically() {
+  local src="$1" dst="$2" dir base tmp
+  dir="$(dirname "$dst")"
+  base="$(basename "$dst")"
+  tmp="$dir/.$base.tmp.$$"
+  install -m 755 "$src" "$tmp"
+  mv -f "$tmp" "$dst"
+}
+
+verify_tui_binary_version() {
+  local binary="$1" want="$2" output
+  output="$("$binary" version 2>&1)"
+  case "$output" in
+    *"$want"*) ;;
+    *)
+      echo "error: built lingtai-tui reports '$output', expected '$want'" >&2
+      return 1
+      ;;
+  esac
+}
+
+ensure_lingtai_alias() {
+  local bin_dir="$1"
+  if [[ ! -e "$bin_dir/lingtai" ]] || [[ -L "$bin_dir/lingtai" && "$(readlink "$bin_dir/lingtai")" == "$bin_dir/lingtai-tui" ]]; then
+    ln -sfn "$bin_dir/lingtai-tui" "$bin_dir/lingtai"
+  else
+    echo "  (skipping 'lingtai' alias — $bin_dir/lingtai already exists)"
+  fi
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --ref) REF="${2:?error: --ref requires a value}"; shift 2 ;;
+      --update) UPDATE_MODE=1; shift ;;
+      --prefix) INSTALL_PREFIX="${2:?error: --prefix requires a value}"; shift 2 ;;
+      --version) REF="${2:?error: --version requires a value}"; shift 2 ;;
+      --non-interactive) NON_INTERACTIVE=1; shift ;;
+      -h|--help) usage; exit 0 ;;
+      *) echo "error: unknown flag: $1" >&2; usage >&2; exit 1 ;;
+    esac
+  done
+
+  if [[ "$UPDATE_MODE" == "1" ]]; then
+    if [[ -z "$INSTALL_PREFIX" ]]; then
+      echo "error: --update requires --prefix <prefix>" >&2
+      usage >&2
+      exit 1
+    fi
+    if [[ -z "$(release_tag_name "$REF")" ]]; then
+      echo "error: --update requires --version <release-tag>" >&2
+      usage >&2
+      exit 1
+    fi
+  fi
+}
+
 json_escape() {
   local s="$1" ch ord
   local LC_ALL=C
@@ -187,13 +257,7 @@ EOF
 }
 
 main() {
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --ref) REF="${2:?error: --ref requires a value}"; shift 2 ;;
-    -h|--help) usage; exit 0 ;;
-    *) echo "error: unknown flag: $1" >&2; usage >&2; exit 1 ;;
-  esac
-done
+parse_args "$@"
 
 # Remove the build directory even when a build or install step fails midway.
 cleanup() {
@@ -220,7 +284,13 @@ fi
 # Detect install path — prefer Homebrew prefix, then a writable /usr/local/bin,
 # else fall back to a user-writable dir so non-Homebrew systems don't abort with
 # a Permission denied at the install step.
-if command -v brew &>/dev/null; then
+if [[ "$UPDATE_MODE" == "1" ]]; then
+  BIN_DIR="$(bin_dir_for_prefix "$INSTALL_PREFIX")"
+  if [[ ! -d "$BIN_DIR" ]]; then
+    echo "error: update target bin dir does not exist: $BIN_DIR" >&2
+    exit 1
+  fi
+elif command -v brew &>/dev/null; then
   BIN_DIR="$(brew --prefix)/bin"
 elif [ -w /usr/local/bin ]; then
   BIN_DIR="/usr/local/bin"
@@ -238,7 +308,7 @@ if ! command -v git &>/dev/null; then
 fi
 
 if ! command -v go &>/dev/null; then
-  if command -v brew &>/dev/null; then
+  if command -v brew &>/dev/null && [[ "$NON_INTERACTIVE" != "1" ]]; then
     echo "==> Installing Go via Homebrew ..."
     brew install go
   else
@@ -283,19 +353,33 @@ else
   suggest_install npm
 fi
 
-echo "==> Installing to $BIN_DIR ..."
-install -m 755 "$BUILD_DIR/lingtai-tui" "$BIN_DIR/lingtai-tui"
-# Create 'lingtai' alias for backward compatibility
-# Only if 'lingtai' doesn't exist or is already a symlink to lingtai-tui
-if [[ ! -e "$BIN_DIR/lingtai" ]] || [[ -L "$BIN_DIR/lingtai" && "$(readlink "$BIN_DIR/lingtai")" == "$BIN_DIR/lingtai-tui" ]]; then
-  ln -sfn "$BIN_DIR/lingtai-tui" "$BIN_DIR/lingtai"
+if [[ "$UPDATE_MODE" == "1" ]]; then
+  STAGE_BIN_DIR="$BUILD_DIR/stage/bin"
+  mkdir -p "$STAGE_BIN_DIR"
+  install -m 755 "$BUILD_DIR/lingtai-tui" "$STAGE_BIN_DIR/lingtai-tui"
+  verify_tui_binary_version "$STAGE_BIN_DIR/lingtai-tui" "$VERSION"
+
+  echo "==> Installing update to $BIN_DIR ..."
+  install_binary_atomically "$STAGE_BIN_DIR/lingtai-tui" "$BIN_DIR/lingtai-tui"
 else
-  echo "  (skipping 'lingtai' alias — $BIN_DIR/lingtai already exists)"
+  echo "==> Installing to $BIN_DIR ..."
+  install -m 755 "$BUILD_DIR/lingtai-tui" "$BIN_DIR/lingtai-tui"
 fi
+# Create 'lingtai' alias for backward compatibility.
+# Only if 'lingtai' doesn't exist or is already a symlink to lingtai-tui.
+ensure_lingtai_alias "$BIN_DIR"
 PORTAL_PATH=""
 if [[ -f "$BUILD_DIR/lingtai-portal" ]]; then
-  install -m 755 "$BUILD_DIR/lingtai-portal" "$BIN_DIR/lingtai-portal"
+  if [[ "$UPDATE_MODE" == "1" ]]; then
+    install -m 755 "$BUILD_DIR/lingtai-portal" "$STAGE_BIN_DIR/lingtai-portal"
+    install_binary_atomically "$STAGE_BIN_DIR/lingtai-portal" "$BIN_DIR/lingtai-portal"
+  else
+    install -m 755 "$BUILD_DIR/lingtai-portal" "$BIN_DIR/lingtai-portal"
+  fi
   PORTAL_PATH="$BIN_DIR/lingtai-portal"
+fi
+if [[ "$UPDATE_MODE" == "1" ]]; then
+  verify_tui_binary_version "$BIN_DIR/lingtai-tui" "$VERSION"
 fi
 
 GLOBAL_DIR="$HOME/.lingtai-tui"

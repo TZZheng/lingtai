@@ -451,6 +451,11 @@ type tuiInstallMetadata struct {
 	InstallMethod   string   `json:"install_method"`
 	Prefix          string   `json:"prefix"`
 	BinDir          string   `json:"bin_dir"`
+	RepoURL         string   `json:"repo_url"`
+	RequestedRef    string   `json:"requested_ref"`
+	ResolvedRef     string   `json:"resolved_ref"`
+	ResolvedCommit  string   `json:"resolved_commit"`
+	StampedVersion  string   `json:"stamped_version"`
 	ManagedBinaries []string `json:"managed_binaries"`
 }
 
@@ -578,8 +583,10 @@ func (r *DoctorReport) checkTUI(globalDir string, opts DoctorOptions) {
 	}
 	update := RunTUIUpdate(install, TUIUpdateOptions{
 		LatestVersion:         release.TagName,
+		GlobalDir:             globalDir,
 		Runner:                opts.Runner,
 		LookPath:              opts.LookPath,
+		Stat:                  opts.Stat,
 		IncludeHomebrewUpdate: true,
 		ResolveHomebrewPath:   true,
 	})
