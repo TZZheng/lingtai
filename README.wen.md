@@ -75,6 +75,8 @@ project/
 
 > 欲手动更新 TUI，可行 `lingtai-tui self-update`；其先辨装法，Homebrew 与 `source/user-local` 皆可自更，`unknown/other` 则止而示指引。
 
+> 启时亦察源码/用户本地之新版；若辞，则不动旧二进制，并示 `lingtai-tui self-update` 以待后行。
+
 > `doctor` 亦辨 TUI 之装法：`homebrew`、`source/user-local`、`unknown/other`。非 Homebrew 者，不妄行 `brew`，但示手动更新之路。
 
 > 大陆网络之镜像、stale tap、源码编译诸细，详见 [README.zh 安装详解](README.zh.md#安装详解)。
