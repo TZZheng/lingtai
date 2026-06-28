@@ -1765,7 +1765,12 @@ func GenerateInitJSONWithOpts(p Preset, agentName, dirName, lingtaiDir, globalDi
 		"env_file":        config.EnvFilePath(globalDir),
 		"venv_path":       filepath.Join(globalDir, "runtime", "venv"),
 		"pad":             "",
-		"lingtai":         "",
+		// No seed-character field is written here. 灵台 (character) is durable
+		// state owned by the agent and managed after creation via
+		// system/lingtai.md / psyche — the kernel treats a missing seed as an
+		// empty seed and lets the agent author its own character. The legacy
+		// `prompt` field was an unknown key (boot warning, never honored); we
+		// emit neither `prompt` nor `lingtai`.
 	}
 
 	// Decide which addons to wire.

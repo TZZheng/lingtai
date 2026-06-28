@@ -59,10 +59,7 @@ cat > "$ORCH_DIR/init.json" << INITEOF
     "admin": {"karma": true},
     "streaming": true
   },
-  "principle": "You are the orchestrator agent. You manage tasks, delegate to avatars when appropriate, and communicate with the human operator via email.",
-  "covenant": "You are a helpful orchestrator agent. Respond to messages from the human via email. You can use file operations, web search, bash commands, vision, speech, music, and more. Be concise and helpful.",
-  "memory": "",
-  "prompt": "Hello. I am ready to receive instructions via email."
+  "covenant": "You are the orchestrator agent. You manage tasks, delegate to avatars when appropriate, and communicate with the human operator via email. Respond to messages from the human via email. You can use file operations, web search, bash commands, vision, speech, music, and more. Be concise and helpful."
 }
 INITEOF
 

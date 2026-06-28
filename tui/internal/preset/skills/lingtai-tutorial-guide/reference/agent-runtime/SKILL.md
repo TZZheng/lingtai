@@ -18,7 +18,7 @@ Use this file after the root `tutorial-guide` router sends you here. Keep teachi
 Read YOUR init.json and walk through every field you find. **Do not recite a list of fields — read the file and explain what is there.** The human sees the real structure.
 
 Key patterns to explain:
-- The `_file` convention: for `principle`, `covenant`, `soul`, `procedures`, `pad`, `prompt`, `brief`, `comment` — inline text or a path to a shared file.
+- The `_file` convention: live init fields like `covenant`, `pad`, `comment`, `base_prompt` take inline text or a `<field>_file` path to a shared file. (Older fields such as `principle`, `procedures`, `brief`, `soul`, and the legacy `prompt` are migrated by the kernel but no longer seeded here.) Note: there is **no** seed field for the agent's character in init.json — character is durable state the agent authors for itself after creation, managed via `system/lingtai.md` / psyche, not written into init.json.
 - `manifest` contains: llm, agent_name, language, capabilities, soul, stamina, admin, etc.
 - `addons` connects to external messaging services.
 - `env_file` for secrets.

@@ -3,6 +3,14 @@
 **Date:** 2026-03-29
 **Status:** Approved
 
+> **Superseded note (2026-06-28):** This is a frozen historical spec. The init-schema
+> field names referenced below have since changed. In particular, the old `prompt`
+> seed field was renamed to `lingtai`, then made **optional**, and the TUI no longer
+> seeds a character field at all — 灵台 (character) is durable state managed after
+> creation via `system/lingtai.md` / psyche, not written into generated init.json.
+> The `_setup_from_init()` resolve loop and field list quoted here reflect the
+> 2026-03-29 schema, not current behavior. Read this for history, not as live guidance.
+
 ## Problem
 
 The agent setup page (Step 3/4: "Name your agent") exposes only 7 fields: name, folder, language, stamina, context_limit, soul_delay, molt_pressure. Several important configuration values are hardcoded and invisible to the user:

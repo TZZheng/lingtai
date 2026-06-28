@@ -220,9 +220,9 @@
   //   "covenant_file": "covenant.md"                 ← reads from file
   // If both are present, the file takes precedence.
 
-  // Guiding principle — shapes the agent's decision-making.
-  // Injected as a system prompt section.
-  "principle": "",
+  // NOTE: `principle` is a legacy field — the kernel migrates it but no
+  // longer honors an inline value here. The guiding principle now lives in
+  // system/principle.md (resolved via principle_file). Don't add it back.
 
   // Covenant — protected prompt section the agent cannot modify.
   // Core behavioral rules that persist across molts.
@@ -240,11 +240,12 @@
 
   // Initial pad — pre-loaded into system/pad.md.
   // The agent can edit this via the eigen intrinsic.
-  "pad": "",
+  "pad": ""
   // Or use a file: "pad_file": "pad.md"
 
-  // First message — what the agent sees when it wakes up.
-  // This is the initial user prompt that starts the conversation.
-  "prompt": "Hello! How can I help you today?"
-  // Or use a file: "prompt_file": "prompt.md"
+  // Character / 灵台 is NOT seeded here. It is durable state the agent owns
+  // and authors for itself after creation — managed via system/lingtai.md
+  // (psyche), not written into init.json by the TUI. There is no seed field
+  // for it in this template; omitting it lets the agent start with an empty
+  // character and write its own.
 }

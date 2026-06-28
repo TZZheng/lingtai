@@ -312,10 +312,10 @@ func TestM028PreservesUnrelatedKeys(t *testing.T) {
 	tmp := t.TempDir()
 	lingtaiDir := filepath.Join(tmp, ".lingtai")
 	initPath := writeM028Init(t, lingtaiDir, "alice", map[string]interface{}{
-		"manifest":      map[string]interface{}{"agent_name": "alice"},
-		"covenant_file": "/etc/covenant.md",
-		"prompt":        "be helpful",
-		"addons":        map[string]interface{}{"imap": map[string]interface{}{"config": ".secrets/imap.json"}},
+		"manifest":           map[string]interface{}{"agent_name": "alice"},
+		"covenant_file":      "/etc/covenant.md",
+		"some_unrelated_key": "be helpful",
+		"addons":             map[string]interface{}{"imap": map[string]interface{}{"config": ".secrets/imap.json"}},
 	})
 
 	if err := migrateAddonsToMCP(lingtaiDir); err != nil {
@@ -326,8 +326,8 @@ func TestM028PreservesUnrelatedKeys(t *testing.T) {
 	if got["covenant_file"] != "/etc/covenant.md" {
 		t.Errorf("covenant_file lost: %v", got["covenant_file"])
 	}
-	if got["prompt"] != "be helpful" {
-		t.Errorf("prompt lost: %v", got["prompt"])
+	if got["some_unrelated_key"] != "be helpful" {
+		t.Errorf("some_unrelated_key lost: %v", got["some_unrelated_key"])
 	}
 	manifest := got["manifest"].(map[string]interface{})
 	if manifest["agent_name"] != "alice" {
