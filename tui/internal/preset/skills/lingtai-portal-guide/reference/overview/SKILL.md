@@ -2,6 +2,7 @@
 name: portal-guide-overview
 description: Nested lingtai-portal-guide reference for portal purpose, opening the browser view, and the `.portal/` directory layout.
 version: 1.0.0
+last_changed_at: "2026-06-02T01:46:45-07:00"
 ---
 
 # Portal overview

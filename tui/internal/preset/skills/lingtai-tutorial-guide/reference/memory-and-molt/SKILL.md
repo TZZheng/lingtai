@@ -3,6 +3,7 @@ name: tutorial-guide-memory-and-molt
 description: >
   Nested tutorial-guide reference for lesson 8: intrinsics, memory layers, molt, charge, stamina, and lifecycle continuity.
 version: 1.0.0
+last_changed_at: "2026-06-08T22:45:25-07:00"
 ---
 
 # Tutorial Guide — Memory and Molt Lesson

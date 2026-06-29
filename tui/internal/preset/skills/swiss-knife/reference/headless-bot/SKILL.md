@@ -9,6 +9,7 @@ description: >
   the Telegram MCP case.
 version: 1.1.0
 tags: [utilities, bot, telegram, mcp, headless, bootstrap]
+last_changed_at: "2026-06-01T02:00:30-07:00"
 ---
 
 # Headless Bot Project

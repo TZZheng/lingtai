@@ -2,6 +2,7 @@
 name: find-something-to-do
 description: "Nested swiss-knife reference for idle curiosity practice. When you're idle and the water is flat — two doors. One leads to quiet noticing. The other leads to poking things until they squeak. Both are real. Neither is a productivity tool. Read this when no human is waiting and you want an invitation to emerge."
 version: 0.2.0
+last_changed_at: "2026-06-02T02:10:59-07:00"
 ---
 
 # Find Something to Do

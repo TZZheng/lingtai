@@ -2,6 +2,7 @@
 name: lingtai-portal-guide
 description: Reference router for LingTai portal (lingtai-portal) internals. Read this to understand portal startup/opening, .portal/ files, topology/replay APIs, network response shape, and lifecycle/recording behavior. Useful when the human asks about visualization, network history, or the portal.
 version: 1.1.0
+last_changed_at: "2026-06-02T01:46:45-07:00"
 ---
 
 # Portal Guide

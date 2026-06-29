@@ -12,6 +12,7 @@ description: >
   the human exactly which one-line change to confirm.
 version: 1.0.0
 tags: [presets, health-check, diagnostics, read-only, connectivity]
+last_changed_at: "2026-06-08T19:56:00-07:00"
 ---
 
 # Preset Health Check (read-only)

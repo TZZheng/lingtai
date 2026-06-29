@@ -3,6 +3,7 @@ name: tutorial-guide-capabilities
 description: >
   Nested tutorial-guide reference for lesson 9: avatars, network exercises, and dynamic capability demonstrations.
 version: 1.0.0
+last_changed_at: "2026-06-02T00:34:40-07:00"
 ---
 
 # Tutorial Guide — Capabilities Lesson

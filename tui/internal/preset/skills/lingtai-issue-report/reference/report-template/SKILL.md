@@ -2,6 +2,7 @@
 name: issue-report-report-template
 description: Nested lingtai-issue-report reference for the report skeleton — subject/title format, the structured body sections (what's wrong, where, reproduction, expected vs actual, severity, suggested fix), and how to send it via LingTai email or the human's active channel. Read this when you are ready to assemble the report.
 version: 1.0.0
+last_changed_at: "2026-06-02T02:43:15-07:00"
 ---
 
 # Issue report — report template

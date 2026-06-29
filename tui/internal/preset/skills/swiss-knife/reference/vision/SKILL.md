@@ -11,6 +11,7 @@ description: >
   applies.
 version: 1.0.0
 tags: [vision, image, ocr, vlm, decision-tree, nested-skill]
+last_changed_at: "2026-06-02T11:16:04-07:00"
 ---
 
 # vision (router)

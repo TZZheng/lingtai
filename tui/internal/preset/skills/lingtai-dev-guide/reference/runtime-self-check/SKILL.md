@@ -10,6 +10,7 @@ description: >
   runtime objects (services/adapters/caches) were actually rebuilt after a
   refresh, not just that new source is imported.
 version: 1.2.0
+last_changed_at: "2026-06-24T15:24:47-07:00"
 ---
 
 # Runtime Self-Check

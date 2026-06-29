@@ -7,6 +7,7 @@ description: >
   source-labeled deliverables with syntax/validation checks, and maintainer
   authorization boundaries for opening, editing, and merging PRs.
 version: 1.0.0
+last_changed_at: "2026-06-13T23:25:20-07:00"
 ---
 
 # PR Review & Deliverables

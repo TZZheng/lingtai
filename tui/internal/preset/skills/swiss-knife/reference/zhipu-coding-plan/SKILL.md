@@ -9,6 +9,7 @@ description: >
   vs BigModel mainland), and where the live docs are. MCP server
   registration is owned by the `mcp-manual` skill (kernel capability).
 version: 1.0.0
+last_changed_at: "2026-05-31T21:29:38-07:00"
 ---
 
 # zhipu-coding-plan

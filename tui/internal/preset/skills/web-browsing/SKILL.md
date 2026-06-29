@@ -7,6 +7,7 @@ description: >
   search. Read this router when the script fails, you need site/tier routing,
   or you are composing a multi-step web/research pipeline.
 version: 3.1.0
+last_changed_at: "2026-06-01T01:47:09-07:00"
 ---
 
 # web-browsing — Router

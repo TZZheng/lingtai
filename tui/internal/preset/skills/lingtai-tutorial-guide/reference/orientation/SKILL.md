@@ -3,6 +3,7 @@ name: tutorial-guide-orientation
 description: >
   Nested tutorial-guide reference for lessons 1–3: welcome, live architecture discovery, global directory, project directory, and agent working directory.
 version: 1.0.0
+last_changed_at: "2026-06-10T19:45:10-07:00"
 ---
 
 # Tutorial Guide — Orientation Lessons

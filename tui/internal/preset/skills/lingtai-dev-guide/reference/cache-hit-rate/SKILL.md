@@ -11,6 +11,7 @@ description: >
   effective prompt caching has been recently, or to diagnose a cache-hit-rate
   drop after a refresh/affinity/cache-key change.
 version: 1.0.0
+last_changed_at: "2026-06-21T20:24:21-05:00"
 ---
 
 # Cache Hit Rate
