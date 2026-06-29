@@ -9,6 +9,7 @@ description: >
   matches the current UI language.
 version: 1.0.0
 tags: [tui, help, slash-commands, reference, palette, lingtai-tui]
+last_changed_at: "2026-06-09T04:21:55-07:00"
 ---
 
 # lingtai-tui help — canonical TUI reference

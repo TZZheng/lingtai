@@ -11,6 +11,7 @@ description: >
   especially anything containing equations.
 version: 1.0.0
 tags: [html, report, mathjax, deliverable, artifact]
+last_changed_at: "2026-05-31T21:29:38-07:00"
 ---
 
 # HTML Report — Standalone Artifacts for Humans

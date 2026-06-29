@@ -8,6 +8,7 @@ description: >
   or one-shot shell vision.
 version: 2.1.0
 tags: [manual, cli, minimax, mmx, image, video, music, speech, tts, vision, media-generation]
+last_changed_at: "2026-06-02T11:16:04-07:00"
 ---
 
 # minimax-cli

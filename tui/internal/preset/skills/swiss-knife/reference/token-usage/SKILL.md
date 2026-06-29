@@ -5,6 +5,7 @@ description: >
   Use for model cost reports, cache rates, budget/burn analysis, and tools-per-API-call trends across LingTai logs.
 version: 2.1.0
 tags: [python, cost, tokens, litellm, budget, tools, agents]
+last_changed_at: "2026-06-23T17:01:03-07:00"
 ---
 
 # Token Usage, Cost, and Agentic-Intensity Reports v2

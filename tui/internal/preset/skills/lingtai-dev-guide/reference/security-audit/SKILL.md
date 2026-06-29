@@ -3,6 +3,7 @@ name: dev-guide-security-audit
 description: >
   Nested lingtai-dev-guide reference for security audits: secret scanning, file permissions, MCP config, communication security, data exposure, agent permission review, severity classification, and report format.
 version: 1.0.0
+last_changed_at: "2026-06-02T00:05:51-07:00"
 ---
 
 # LingTai Security Audit Reference

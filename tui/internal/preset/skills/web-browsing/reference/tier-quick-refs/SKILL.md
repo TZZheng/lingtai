@@ -5,6 +5,7 @@ description: >
   Tier 1 APIs, Tier 1.5 Trafilatura, Tier 2 BeautifulSoup, Tier 3 Playwright
   stealth, Tier 4 Jina/Firecrawl, and Tier 5 AI-native search.
 version: 1.0.0
+last_changed_at: "2026-06-01T01:47:09-07:00"
 ---
 
 # Web Browsing Tier Quick References

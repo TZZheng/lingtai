@@ -3,6 +3,7 @@ name: dev-guide-debug-troubleshoot
 description: >
   Nested lingtai-dev-guide reference for diagnosing LingTai failures: agent process state, OOM/crashes, avatar spawn issues, post-molt memory loss, mail delivery, scheduled messages, tool timeouts, and escalation.
 version: 1.0.0
+last_changed_at: "2026-06-02T00:05:51-07:00"
 ---
 
 # LingTai Debug & Troubleshoot Reference

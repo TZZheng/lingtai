@@ -6,6 +6,7 @@ description: >
   sibling mechanics, locale fallback, validator checks, hand-authored recipes,
   testing, and publishing.
 version: 1.0.0
+last_changed_at: "2026-06-02T00:08:39-07:00"
 ---
 
 # Recipe Format Reference

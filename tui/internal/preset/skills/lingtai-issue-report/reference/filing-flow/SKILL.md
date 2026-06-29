@@ -2,6 +2,7 @@
 name: issue-report-filing-flow
 description: Nested lingtai-issue-report reference for the filing decision — the always-required human consent boundary, the read-only gh probe, Path A (direct gh filing) and Path B (paste-ready handoff), token hygiene, and proactive surfacing. Read this once the report is drafted and you are deciding how it gets filed.
 version: 1.0.0
+last_changed_at: "2026-06-02T02:43:15-07:00"
 ---
 
 # Issue report — filing flow

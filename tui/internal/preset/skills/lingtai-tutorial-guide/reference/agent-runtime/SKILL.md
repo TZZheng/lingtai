@@ -3,6 +3,7 @@ name: tutorial-guide-agent-runtime
 description: >
   Nested tutorial-guide reference for lessons 4–6: init.json, lingtai-agent run, heartbeat and signal files, TUI runtime wrapping, and system prompt identity.
 version: 1.0.0
+last_changed_at: "2026-06-28T00:01:05-07:00"
 ---
 
 # Tutorial Guide — Agent Runtime Lessons

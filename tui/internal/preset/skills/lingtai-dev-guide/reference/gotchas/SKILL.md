@@ -3,6 +3,7 @@ name: dev-guide-gotchas
 description: >
   Nested lingtai-dev-guide reference for known implementation footguns: Bubble Tea v2 paste, textarea theming, dev-mode rebuilds, editable installs, migrations, localization, authorization gates, config conventions, and rebuild-gate test false-passes.
 version: 1.1.0
+last_changed_at: "2026-06-20T01:30:35-07:00"
 ---
 
 # Gotchas and Known Pitfalls

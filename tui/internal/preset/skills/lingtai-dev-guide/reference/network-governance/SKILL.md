@@ -3,6 +3,7 @@ name: dev-guide-network-governance
 description: >
   Nested lingtai-dev-guide reference for avatar network governance: core rules, health monitoring, CPR, watchdog cadence, role documentation, delegation patterns, workspaces, and peer communication.
 version: 1.0.0
+last_changed_at: "2026-06-02T00:05:51-07:00"
 ---
 
 # Avatar Network Governance — Reference Card

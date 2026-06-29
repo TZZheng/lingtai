@@ -3,6 +3,7 @@ name: dev-guide-architecture
 description: >
   Nested lingtai-dev-guide reference for the project architecture: Go TUI/portal monorepo, Python kernel, MCP addon repos, filesystem IPC, and where per-project/per-machine state lives.
 version: 1.0.0
+last_changed_at: "2026-06-02T00:05:51-07:00"
 ---
 
 # Architecture

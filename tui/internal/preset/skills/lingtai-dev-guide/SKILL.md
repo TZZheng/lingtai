@@ -9,6 +9,7 @@ description: >
   review-ready, or steward a new skill. This is for developers and contributors;
   for end-user lessons, use tutorial-guide.
 version: 2.6.0
+last_changed_at: "2026-06-28T22:46:25-07:00"
 ---
 
 # LingTai Developer Guide

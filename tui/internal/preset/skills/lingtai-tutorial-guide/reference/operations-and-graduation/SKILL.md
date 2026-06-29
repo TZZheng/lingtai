@@ -3,6 +3,7 @@ name: tutorial-guide-operations-and-graduation
 description: >
   Nested tutorial-guide reference for lessons 10–12: TUI commands, lifecycle exercises, addons, external connections, and graduation.
 version: 1.0.0
+last_changed_at: "2026-06-02T00:34:40-07:00"
 ---
 
 # Tutorial Guide — Operations and Graduation Lessons

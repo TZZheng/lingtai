@@ -4,6 +4,7 @@ description: >
   Nested web-browsing reference for auto-tier decisions, per-site tier
   recommendations, known limitations/gotchas, and real-time data endpoints.
 version: 1.0.0
+last_changed_at: "2026-06-01T01:47:09-07:00"
 ---
 
 # Web Browsing Routing and Site Reference

@@ -3,6 +3,7 @@ name: tutorial-guide-communication
 description: >
   Nested tutorial-guide reference for lesson 7: filesystem email, message flow, and external addon bridges.
 version: 1.0.0
+last_changed_at: "2026-06-12T13:46:46-07:00"
 ---
 
 # Tutorial Guide — Communication Lesson

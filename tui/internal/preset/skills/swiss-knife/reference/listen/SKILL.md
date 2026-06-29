@@ -9,6 +9,7 @@ description: >
   *creating* music or audio, use the sibling `minimax-cli` reference (or `dj` for journal-inspired music) instead.
 version: 1.0.0
 tags: [audio, transcribe, whisper, librosa, music-analysis, nested-skill]
+last_changed_at: "2026-06-02T11:16:04-07:00"
 ---
 
 # listen

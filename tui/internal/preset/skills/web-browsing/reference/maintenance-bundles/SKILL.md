@@ -5,6 +5,7 @@ description: >
   dirty-first testing, bundled JSON asset files, deep-dive reference files, and the
   explicit decision flowchart.
 version: 1.0.0
+last_changed_at: "2026-06-01T01:47:09-07:00"
 ---
 
 # Web Browsing Maintenance and Assets Reference

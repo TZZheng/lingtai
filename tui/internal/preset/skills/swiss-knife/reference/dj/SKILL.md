@@ -3,6 +3,7 @@ name: dj
 description: Nested swiss-knife reference for composing one music track that resonates with a project journal entry, on demand. Walks the user's saved presets to find a usable media-creation provider (MiniMax, etc.), reads the journal at ~/.lingtai-tui/brief/projects/<hash>/journal.md, picks a genre that fits the day, generates the audio, and saves it next to the journal under music/ with an index entry. Read this when the user asks for music for a journal day, a project's vibe, session mood, or a specific generated genre — decline honestly when no usable provider is configured.
 version: 1.1.0
 tags: [media-creation, music, journal, on-demand]
+last_changed_at: "2026-06-02T02:10:59-07:00"
 ---
 
 # DJ — On-demand journal-track composer

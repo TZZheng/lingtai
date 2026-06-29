@@ -8,6 +8,7 @@ description: >
   paths and human-specific details, a lightweight pre-publish benchmark/checklist,
   grooming shared-library candidates, and PR-ready skill cleanup.
 version: 1.0.0
+last_changed_at: "2026-06-29T08:41:45Z"
 ---
 
 # Skill Stewardship
@@ -107,9 +108,12 @@ private, machine-, or person-specific details must go.
 Before a skill ships, run a quick "pre-flight" — a benchmark/checklist, not a
 heavy framework:
 
-- [ ] YAML frontmatter parses; has `name` (letters/numbers/hyphens) and a
+- [ ] YAML frontmatter parses; has `name` (letters/numbers/hyphens), a
       `description` that starts with "Use when…" and lists triggers only (no
-      workflow summary).
+      workflow summary), and for LingTai-maintained skills a `last_changed_at`
+      ISO 8601 timestamp. For metadata-only backfills, initialize it from
+      `git log -1 --format=%cI -- path/to/SKILL.md`; for substantive skill
+      edits, update it in the same commit.
 - [ ] Document structure is scannable: overview/core principle, when-to-use,
       steps, related references.
 - [ ] Declared dependencies/cross-linked skills exist and are named correctly.

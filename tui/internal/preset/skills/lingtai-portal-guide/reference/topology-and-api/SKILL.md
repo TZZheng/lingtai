@@ -2,6 +2,7 @@
 name: portal-guide-topology-and-api
 description: Nested lingtai-portal-guide reference for topology tape frames, replay chunks, portal API endpoints, and the Network JSON response.
 version: 1.0.0
+last_changed_at: "2026-06-02T01:46:45-07:00"
 ---
 
 # Topology and API

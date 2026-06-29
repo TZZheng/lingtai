@@ -14,6 +14,7 @@ description: >
   or for one-off factual lookups (just answer those directly).
 version: 1.0.0
 tags: [learning, study, textbook, lecture-notes, html, curriculum, self-paced]
+last_changed_at: "2026-06-08T22:45:29-07:00"
 ---
 
 # Textbook Distillation — Self-Paced Learning Tracks

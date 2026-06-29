@@ -2,6 +2,7 @@
 name: portal-guide-lifecycle-and-recording
 description: Nested lingtai-portal-guide reference for portal lifecycle-state interpretation, heartbeat staleness, recording, and tape reconstruction behavior.
 version: 1.0.0
+last_changed_at: "2026-06-02T01:46:45-07:00"
 ---
 
 # Lifecycle and recording

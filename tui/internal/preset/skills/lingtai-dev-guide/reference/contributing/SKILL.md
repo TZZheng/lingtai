@@ -3,6 +3,7 @@ name: dev-guide-contributing
 description: >
   Nested lingtai-dev-guide reference for contribution workflow: issue/worktree/PR discipline, stale-worktree cleanup, daemon decomposition, portfolio sweeps, repo-specific build/test commands, skill changes, and anatomy maintenance.
 version: 1.1.0
+last_changed_at: "2026-06-24T12:37:00-07:00"
 ---
 
 # Contributing to LingTai

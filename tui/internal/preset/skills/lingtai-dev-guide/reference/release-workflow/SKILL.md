@@ -7,6 +7,7 @@ description: >
   release log, website release-log/blog drafting, and the reusable release blog
   template.
 version: 1.2.0
+last_changed_at: "2026-06-26T02:17:42-07:00"
 ---
 
 # Release Workflow
