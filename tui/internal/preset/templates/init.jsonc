@@ -107,10 +107,6 @@
     // Lifecycle limits
     // -------------------------------------------------------
 
-    // Max uptime in seconds before the agent falls asleep (眠).
-    // 3600 = 1 hour. Set higher for long-running agents.
-    "stamina": 3600,
-
     // Max context window tokens. null = use generic cap (1M tokens).
     // Set this to cap memory usage or force earlier molt.
     "context_limit": null,

@@ -254,8 +254,7 @@ func TestParseEventNotificationMeta(t *testing.T) {
 				"history_tokens": 109121.0,
 				"usage":          0.147519,
 			},
-			"stamina_left_seconds": 35884.5,
-			"injection_seq":        2.0,
+			"injection_seq": 2.0,
 		},
 	}
 	line, _ := json.Marshal(raw)
@@ -272,9 +271,6 @@ func TestParseEventNotificationMeta(t *testing.T) {
 	}
 	if e.Meta.CurrentTime != "2026-05-05T21:10:48-07:00" {
 		t.Errorf("CurrentTime = %q", e.Meta.CurrentTime)
-	}
-	if e.Meta.StaminaLeftSeconds != 35884.5 {
-		t.Errorf("StaminaLeftSeconds = %v", e.Meta.StaminaLeftSeconds)
 	}
 	if e.Meta.InjectionSeq != 2 {
 		t.Errorf("InjectionSeq = %d", e.Meta.InjectionSeq)
@@ -639,8 +635,7 @@ func TestParseEventToolResultHidesMetaBlocksBehindNotificationHint(t *testing.T)
 			"stdout": "done",
 			"stderr": "",
 			"_runtime_pending": map[string]interface{}{
-				"current_time":         "2026-06-21T00:40:00-07:00",
-				"stamina_left_seconds": 35504.9,
+				"current_time": "2026-06-21T00:40:00-07:00",
 				"context": map[string]interface{}{
 					"usage": 0.4,
 				},

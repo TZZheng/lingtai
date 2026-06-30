@@ -1,7 +1,7 @@
 ---
 name: tutorial-guide-memory-and-molt
 description: >
-  Nested tutorial-guide reference for lesson 8: intrinsics, memory layers, molt, charge, stamina, and lifecycle continuity.
+  Nested tutorial-guide reference for lesson 8: intrinsics, memory layers, molt, charge, and lifecycle continuity.
 version: 1.0.0
 last_changed_at: "2026-06-08T22:45:25-07:00"
 ---
@@ -56,4 +56,4 @@ This is the most important concept in the entire tutorial.
 
 **If the agent ignores warnings**, the system forces a molt — but without the charge, the new self wakes up disoriented with only a pointer to the activity log. Avoid this.
 
-**Stamina** is the maximum uptime before the agent auto-sleeps. Combined with molt, this creates the agent's lifecycle: work → consolidate → molt → work again, each turn carrying forward only what matters.
+Lifecycle continuity is managed by explicit sleep/asleep states and molt: work → consolidate → molt → work again, each turn carrying forward only what matters.

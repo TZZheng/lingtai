@@ -25,18 +25,17 @@ func TestSetupPreservesAgentJSONIdentity(t *testing.T) {
 	// Seed a long-lived .agent.json — the agent has molted twice, has a
 	// stable agent_id, language preference, etc.
 	prev := map[string]interface{}{
-		"agent_id":    "20260501-123456-abc1",
-		"agent_name":  "alice",
-		"address":     "alice",
-		"created_at":  "2026-05-01T12:34:56Z",
-		"started_at":  "2026-05-04T07:00:00Z",
-		"molt_count":  float64(3), // JSON numbers unmarshal as float64
-		"stamina":     float64(36000),
-		"language":    "wen",
-		"nickname":    "ah-li",
-		"soul_delay":  float64(120),
-		"soul_voice":  "inner",
-		"state":       "active",
+		"agent_id":   "20260501-123456-abc1",
+		"agent_name": "alice",
+		"address":    "alice",
+		"created_at": "2026-05-01T12:34:56Z",
+		"started_at": "2026-05-04T07:00:00Z",
+		"molt_count": float64(3), // JSON numbers unmarshal as float64
+		"language":   "wen",
+		"nickname":   "ah-li",
+		"soul_delay": float64(120),
+		"soul_voice": "inner",
+		"state":      "active",
 		"capabilities": []interface{}{
 			[]interface{}{"bash", map[string]interface{}{"yolo": true}},
 		},
@@ -81,7 +80,7 @@ func TestSetupPreservesAgentJSONIdentity(t *testing.T) {
 			t.Errorf("%s clobbered: got %v, want %v", key, got[key], prev[key])
 		}
 	}
-	for _, key := range []string{"molt_count", "stamina", "soul_delay"} {
+	for _, key := range []string{"molt_count", "soul_delay"} {
 		if got[key] != prev[key] {
 			t.Errorf("%s clobbered: got %v, want %v", key, got[key], prev[key])
 		}

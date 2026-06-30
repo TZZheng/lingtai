@@ -28,8 +28,7 @@ func TestFormatNotificationMetaFooter(t *testing.T) {
 					HistoryTokens: -1,
 					Usage:         -1.0,
 				},
-				StaminaLeftSeconds: -1,
-				InjectionSeq:       0,
+				InjectionSeq: 0,
 			},
 			want: "",
 		},
@@ -42,33 +41,18 @@ func TestFormatNotificationMetaFooter(t *testing.T) {
 					HistoryTokens: 109121,
 					Usage:         0.147519,
 				},
-				StaminaLeftSeconds: 35884.5, // 9h58m
-				InjectionSeq:       2,
+				InjectionSeq: 2,
 			},
 			// Time format depends on the local TZ database — check the
 			// non-time fragments directly via substring checks below.
-			want: "ctx 14.8% · stamina 9h58m",
+			want: "ctx 14.8%",
 		},
 		{
-			name: "ctx only — stamina/time/seq dropped",
+			name: "ctx only — time/seq dropped",
 			meta: &fs.NotificationMeta{
 				Context: &fs.NotificationMetaContext{Usage: 0.5},
 			},
 			want: "ctx 50.0%",
-		},
-		{
-			name: "minutes-only stamina",
-			meta: &fs.NotificationMeta{
-				StaminaLeftSeconds: 750, // 12m30s → "12m"
-			},
-			want: "stamina 12m",
-		},
-		{
-			name: "seconds-only stamina",
-			meta: &fs.NotificationMeta{
-				StaminaLeftSeconds: 45,
-			},
-			want: "stamina 45s",
 		},
 		{
 			name: "seq only",
@@ -88,9 +72,6 @@ func TestFormatNotificationMetaFooter(t *testing.T) {
 				if !contains(got, "ctx 14.8%") {
 					t.Errorf("missing ctx fragment in %q", got)
 				}
-				if !contains(got, "stamina 9h58m") {
-					t.Errorf("missing stamina fragment in %q", got)
-				}
 				if !contains(got, "seq 2") {
 					t.Errorf("missing seq fragment in %q", got)
 				}
@@ -100,21 +81,6 @@ func TestFormatNotificationMetaFooter(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestFormatStaminaShort(t *testing.T) {
-	cases := map[float64]string{
-		5:     "5s",
-		60:    "1m",
-		750:   "12m",
-		3600:  "1h00m",
-		35884: "9h58m",
-	}
-	for in, want := range cases {
-		if got := formatStaminaShort(in); got != want {
-			t.Errorf("formatStaminaShort(%v) = %q, want %q", in, got, want)
-		}
 	}
 }
 

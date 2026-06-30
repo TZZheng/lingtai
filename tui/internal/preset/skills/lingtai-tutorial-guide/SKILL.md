@@ -51,7 +51,7 @@ Tell the human upfront: "If you would like to jump to any lesson, just let me kn
   location: reference/memory-and-molt/SKILL.md
   description: |
     Lesson 8: kernel intrinsics, the five persistence layers, voluntary molt,
-    the charge/briefing to the next self, forced molt risk, and stamina.
+    the charge/briefing to the next self and forced molt risk.
 - name: tutorial-guide-capabilities
   location: reference/capabilities/SKILL.md
   description: |
@@ -71,7 +71,7 @@ Tell the human upfront: "If you would like to jump to any lesson, just let me kn
 | L1–3: welcome, architecture, `~/.lingtai-tui/`, project directory, working directory, `commands.json`, `/kanban` | `reference/orientation/SKILL.md` |
 | L4–6: `init.json`, `lingtai-agent run`, boot sequence, heartbeat, signal files, TUI as wrapper, `commands.json`, system prompt, identity | `reference/agent-runtime/SKILL.md` |
 | L7: email, message flow, internal mail, external addon bridges | `reference/communication/SKILL.md` |
-| L8: intrinsics, memory layers, molt, charge, stamina, lifecycle continuity | `reference/memory-and-molt/SKILL.md` |
+| L8: intrinsics, memory layers, molt, charge, lifecycle continuity | `reference/memory-and-molt/SKILL.md` |
 | L9: avatar, network explosion, dynamic capabilities, `/viz` | `reference/capabilities/SKILL.md` |
 | L10–12: `commands.json`, keyboard shortcuts, lifecycle exercise, addons, `/mcp`, graduation | `reference/operations-and-graduation/SKILL.md` |
 

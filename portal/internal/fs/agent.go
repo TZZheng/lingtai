@@ -233,7 +233,6 @@ type AgentStatus struct {
 	} `json:"tokens"`
 	Runtime struct {
 		UptimeSeconds float64 `json:"uptime_seconds"`
-		StaminaLeft   float64 `json:"stamina_left"`
 	} `json:"runtime"`
 }
 

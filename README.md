@@ -185,7 +185,7 @@ Credentials live in local `.secrets/` files (never in Git). Unknown external sen
 
 ### TUI
 
-`lingtai-tui` is the main human surface. It gives you setup, model/preset configuration, chat and mail, agent status (token + stamina + heartbeat), avatar and daemon visibility, markdown rendering, a slash-command palette, and upgrade/doctor flows.
+`lingtai-tui` is the main human surface. It gives you setup, model/preset configuration, chat and mail, agent status (token/context + heartbeat), avatar and daemon visibility, markdown rendering, a slash-command palette, and upgrade/doctor flows.
 
 Use `/help` inside the TUI for the complete slash-command reference. The canonical docs live in the bundled [`lingtai-tui-help` skill](tui/internal/preset/skills/lingtai-tui-help/assets/slash-commands.en.md); this README intentionally points there instead of duplicating the command catalog.
 

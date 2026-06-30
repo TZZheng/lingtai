@@ -47,10 +47,9 @@ type SessionEntry struct {
 // underlying state hasn't been computed yet, and older events.jsonl rows
 // pre-dating issue #40 carry no meta at all.
 type NotificationMeta struct {
-	CurrentTime        string                   `json:"current_time,omitempty"`
-	Context            *NotificationMetaContext `json:"context,omitempty"`
-	StaminaLeftSeconds float64                  `json:"stamina_left_seconds,omitempty"`
-	InjectionSeq       int                      `json:"injection_seq,omitempty"`
+	CurrentTime  string                   `json:"current_time,omitempty"`
+	Context      *NotificationMetaContext `json:"context,omitempty"`
+	InjectionSeq int                      `json:"injection_seq,omitempty"`
 }
 
 type NotificationMetaContext struct {
@@ -781,17 +780,14 @@ func parseEventMap(raw map[string]interface{}) *SessionEntry {
 			}
 		}
 		// Issue #40: surface the kernel's build_meta vital signs so the
-		// renderer can show context %, stamina remaining, current time,
-		// and injection_seq alongside the source list. Older events
+		// renderer can show context %, current time, and injection_seq
+		// alongside the source list. Older events
 		// pre-dating the kernel emitter change carry no meta key — the
 		// nil pointer signals "render without footer."
 		if rawMeta, ok := raw["meta"].(map[string]interface{}); ok {
 			meta := &NotificationMeta{}
 			if ct, ok := rawMeta["current_time"].(string); ok {
 				meta.CurrentTime = ct
-			}
-			if sls, ok := rawMeta["stamina_left_seconds"].(float64); ok {
-				meta.StaminaLeftSeconds = sls
 			}
 			if seq, ok := rawMeta["injection_seq"].(float64); ok {
 				meta.InjectionSeq = int(seq)

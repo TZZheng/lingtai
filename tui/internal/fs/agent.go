@@ -281,7 +281,6 @@ type AgentStatus struct {
 		PID           int     `json:"pid"`
 		Running       bool    `json:"running"`
 		UptimeSeconds float64 `json:"uptime_seconds"`
-		StaminaLeft   float64 `json:"stamina_left"`
 	} `json:"runtime"`
 }
 

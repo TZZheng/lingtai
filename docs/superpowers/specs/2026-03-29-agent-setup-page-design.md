@@ -13,7 +13,7 @@
 
 ## Problem
 
-The agent setup page (Step 3/4: "Name your agent") exposes only 7 fields: name, folder, language, stamina, context_limit, soul_delay, molt_pressure. Several important configuration values are hardcoded and invisible to the user:
+The agent setup page (Step 3/4: "Name your agent") exposes only 6 fields: name, folder, language, context_limit, soul_delay, molt_pressure. Several important configuration values are hardcoded and invisible to the user:
 
 - **Covenant, principle, soul flow prompts** — auto-resolved by language, user cannot customize or even see the paths
 - **Comment** — hardcoded inline string ("You are the 本我 orchestrator...") that shouldn't exist — the agent shouldn't be told it's an orchestrator. Remove entirely.
@@ -35,7 +35,6 @@ Add 6 new fields (13 total), organized into sections:
   Language: < en >
 
   ── Runtime ──
-  Stamina: 36000                     (awake time before auto-sleep)
   Context limit: 300000              (max context window)
   Soul delay: 120                    (idle time before soul speaks)
   Molt pressure: 0.8                 (context % to trigger molt)
@@ -72,7 +71,6 @@ Replace terse hints with descriptive ones:
 
 | Field | Old hint | New hint |
 |-------|----------|----------|
-| Stamina | `(seconds)` | `(awake time before auto-sleep)` |
 | Context limit | `(tokens)` | `(max context window)` |
 | Soul delay | `(seconds)` | `(idle time before soul speaks)` |
 | Molt pressure | `(0-1)` | `(context % to trigger molt)` |
@@ -119,7 +117,6 @@ Add new fields to `AgentOpts`:
 ```go
 type AgentOpts struct {
     Language      string
-    Stamina       float64
     ContextLimit  int
     SoulDelay     float64
     MoltPressure  float64
