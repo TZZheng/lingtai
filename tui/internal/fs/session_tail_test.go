@@ -429,11 +429,11 @@ func TestParseEventLLMResponseCarriesTokenUsage(t *testing.T) {
 	}
 }
 
-// Kernel PR #586: the `summary=true` (a-priori) summary is logged as an
+// Kernel PR #586 + #3833: the `summary=true` (a-priori) summary is logged as an
 // `apriori_summary_generated` lifecycle event immediately after the raw
 // tool_result. parseEvent must promote it to a first-class apriori_summary
-// SessionEntry carrying the correlation id and char counts even though the
-// event has no body text.
+// SessionEntry carrying the correlation id, char counts, and (as of #3833) the
+// generated summary text from `generated_summary`.
 func TestParseEventAprioriSummaryGeneratedLifecycle(t *testing.T) {
 	raw := map[string]interface{}{
 		"ts":                     1781258400.0,
@@ -441,6 +441,7 @@ func TestParseEventAprioriSummaryGeneratedLifecycle(t *testing.T) {
 		"api_call_id":            "api_abc",
 		"tool_name":              "bash",
 		"tool_call_id":           "call_77",
+		"generated_summary":      "Build succeeded with 3 warnings.",
 		"original_visible_chars": 48211.0,
 		"summary_chars":          612.0,
 	}
@@ -468,11 +469,43 @@ func TestParseEventAprioriSummaryGeneratedLifecycle(t *testing.T) {
 	if e.Summary.ToolName != "bash" {
 		t.Errorf("Summary.ToolName = %q, want bash", e.Summary.ToolName)
 	}
+	if e.Summary.Text != "Build succeeded with 3 warnings." {
+		t.Errorf("Summary.Text = %q, want the generated_summary text", e.Summary.Text)
+	}
 	if e.Summary.OriginalVisibleChars != 48211 {
 		t.Errorf("Summary.OriginalVisibleChars = %d, want 48211", e.Summary.OriginalVisibleChars)
 	}
 	if e.Summary.SummaryChars != 612 {
 		t.Errorf("Summary.SummaryChars = %d, want 612", e.Summary.SummaryChars)
+	}
+	if e.Summary.Unavailable {
+		t.Errorf("Summary.Unavailable = true, want false for a generated summary")
+	}
+}
+
+// Backward compatibility: pre-#3833 logs emit the generated lifecycle event
+// without `generated_summary`. parseEvent must still promote it, leaving Text
+// empty so the renderer falls back to the metadata-only note.
+func TestParseEventAprioriSummaryGeneratedLifecycleNoText(t *testing.T) {
+	raw := map[string]interface{}{
+		"ts":                     1781258400.0,
+		"type":                   "apriori_summary_generated",
+		"tool_name":              "bash",
+		"tool_call_id":           "call_77",
+		"original_visible_chars": 48211.0,
+		"summary_chars":          612.0,
+	}
+	line, _ := json.Marshal(raw)
+
+	e := parseEvent(line)
+	if e == nil || e.Summary == nil {
+		t.Fatal("parseEvent returned nil/no summary for text-less generated lifecycle")
+	}
+	if e.Summary.Kind != "apriori_generated" {
+		t.Errorf("Summary.Kind = %q, want apriori_generated", e.Summary.Kind)
+	}
+	if e.Summary.Text != "" {
+		t.Errorf("Summary.Text = %q, want empty for a pre-#3833 log", e.Summary.Text)
 	}
 	if e.Summary.Unavailable {
 		t.Errorf("Summary.Unavailable = true, want false for a generated summary")

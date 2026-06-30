@@ -86,9 +86,11 @@ type TokenUsage struct {
 // The kernel surfaces this in two shapes the TUI reads:
 //   - the success/cap/error artifact dict nested in a `tool_result` event's
 //     `result` map (detected by `artifact == lingtai_apriori_tool_result_summary`); or
-//   - a text-less `apriori_summary_generated` / `apriori_summary_cap_refused` /
+//   - an `apriori_summary_generated` / `apriori_summary_cap_refused` /
 //     `apriori_summary_failed` / `apriori_summary_empty` /
 //     `apriori_summary_no_summarizer` lifecycle event keyed by `tool_call_id`.
+//     The generated success event carries the summary text inline via
+//     `generated_summary` (kernel #3833); older logs may lack it.
 //
 // Kind is the `summary_kind` ("apriori_generated", "apriori_cap_refused",
 // "apriori_error") or the lifecycle event name for the text-less path. Text is
@@ -704,9 +706,10 @@ func parseEventMap(raw map[string]interface{}) *SessionEntry {
 	// into a single first-class "apriori_summary" SessionEntry. The kernel logs
 	// the raw tool_result FIRST and this lifecycle event immediately after, so
 	// in stream order the summary entry already lands right after its raw result
-	// — the renderer keys the visual association on tool_call_id. These events
-	// carry the char counts but not the summary text (the text lives on the wire
-	// artifact); the renderer falls back to a metadata-only block in that case.
+	// — the renderer keys the visual association on tool_call_id. The generated
+	// success event carries the char counts and (kernel #3833) the summary text
+	// via `generated_summary`; older logs omit the text and the renderer falls
+	// back to a metadata-only block in that case.
 	summaryLifecycle := ""
 	switch eventType {
 	case "apriori_summary_generated":
@@ -728,8 +731,9 @@ func parseEventMap(raw map[string]interface{}) *SessionEntry {
 	}
 
 	// apriori_summary is the only session type whose body is allowed to be empty
-	// (the lifecycle event carries no summary text — only counts). Build it here
-	// and return early so the shared empty-text guard below does not drop it.
+	// (cap/error lifecycle events, and pre-#3833 logs, carry only counts and no
+	// summary text). Build it here and return early so the shared empty-text
+	// guard below does not drop it.
 	if eventType == "apriori_summary" {
 		return parseAprioriSummaryEvent(raw, summaryLifecycle)
 	}
@@ -892,8 +896,9 @@ func aprioriSummaryFromArtifact(result interface{}) *AprioriSummary {
 
 // parseAprioriSummaryEvent builds an apriori_summary SessionEntry from a kernel
 // `apriori_summary_*` lifecycle event. These events carry the char counts and
-// tool identity but NOT the summary text (the text lives on the wire artifact),
-// so Text stays empty and the renderer shows a metadata-only block.
+// tool identity, and (as of kernel #3833) the generated summary text on the
+// success path via `generated_summary`. Older logs predate that field, so Text
+// stays empty for them and the renderer falls back to a metadata-only block.
 func parseAprioriSummaryEvent(raw map[string]interface{}, kind string) *SessionEntry {
 	ts := ""
 	if tsFloat, ok := raw["ts"].(float64); ok {
@@ -904,6 +909,12 @@ func parseAprioriSummaryEvent(raw map[string]interface{}, kind string) *SessionE
 	s.ToolName, _ = raw["tool_name"].(string)
 	s.OriginalVisibleChars = int(intField(raw, "original_visible_chars"))
 	s.SummaryChars = int(intField(raw, "summary_chars"))
+	// The generated success path carries the model-visible summary text inline
+	// (kernel #3833). Older logs omit it; Text stays empty and the renderer
+	// shows the metadata-only fallback note.
+	if text, _ := raw["generated_summary"].(string); text != "" {
+		s.Text = text
+	}
 	if kind == "apriori_cap_refused" || kind == "apriori_error" {
 		s.Unavailable = true
 	}

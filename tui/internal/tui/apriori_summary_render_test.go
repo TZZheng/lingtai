@@ -112,9 +112,9 @@ func TestRenderMessages_SummaryUnavailableUsesDistinctLabel(t *testing.T) {
 	}
 }
 
-// Lifecycle-event path: counts are present but the generated text is not (it
-// lives on the wire). The block still renders the label, a faint note, and the
-// metadata so it is clear a summary was shown.
+// Lifecycle-event path WITHOUT text (pre-#3833 logs): counts are present but the
+// generated text is not. The block still renders the label, a faint note, and
+// the metadata so it is clear a summary was shown.
 func TestRenderMessages_SummaryLifecycleNoTextStillRenders(t *testing.T) {
 	m := MailModel{width: 100}
 	out := m.renderMessages([]ChatMessage{
@@ -130,6 +130,32 @@ func TestRenderMessages_SummaryLifecycleNoTextStillRenders(t *testing.T) {
 	}
 	if !strings.Contains(out, "500") {
 		t.Fatalf("char counts missing for text-less lifecycle summary:\n%s", out)
+	}
+}
+
+// Lifecycle-event path WITH text (kernel #3833): the generated lifecycle event
+// now carries `generated_summary`, so the block must render the actual summary
+// text the agent saw — not the "summary text is not in the event log" fallback.
+func TestRenderMessages_SummaryLifecycleWithTextRendersActualSummary(t *testing.T) {
+	m := MailModel{width: 100}
+	out := m.renderMessages([]ChatMessage{
+		{Type: "apriori_summary", ApiCallID: "api_1", Timestamp: "2026-06-08T07:08:27Z", Summary: &fs.AprioriSummary{
+			Kind:                 "apriori_generated",
+			ToolName:             "grep",
+			Text:                 "Found 4 TODO markers across 3 files.",
+			OriginalVisibleChars: 30000,
+			SummaryChars:         500,
+		}},
+	})
+	if !strings.Contains(out, i18n.T("mail.apriori_summary_label")) {
+		t.Fatalf("label missing for lifecycle summary with text:\n%s", out)
+	}
+	if !strings.Contains(out, "Found 4 TODO markers across 3 files.") {
+		t.Fatalf("generated summary text missing for lifecycle path:\n%s", out)
+	}
+	// The metadata-only fallback note must NOT appear when text is present.
+	if strings.Contains(out, i18n.TF("mail.apriori_summary_no_text", "500")) {
+		t.Fatalf("fallback no-text note must not render when summary text is present:\n%s", out)
 	}
 }
 
