@@ -151,7 +151,6 @@ type FirstRunModel struct {
 	fieldIdx   int // see agentNameDirFieldCount for field indices
 	// Agent config text inputs
 	agentLangIdx   int // cycle: 0=en, 1=zh, 2=wen
-	staminaInput   textinput.Model
 	ctxLimitInput  textinput.Model
 	soulDelayInput textinput.Model
 	maxRpmInput    textinput.Model
@@ -338,11 +337,6 @@ func NewFirstRunModel(baseDir, globalDir string, hasPresets bool, preselectedRec
 	pki.KeyMap.InsertNewline.SetKeys() // no newlines — single line
 	pki.SetStyles(themedTextareaStyles())
 
-	si := textinput.New()
-	si.CharLimit = 10
-	si.SetWidth(15)
-	si.Prompt = ""
-
 	ci := textinput.New()
 	ci.CharLimit = 10
 	ci.SetWidth(15)
@@ -416,7 +410,6 @@ func NewFirstRunModel(baseDir, globalDir string, hasPresets bool, preselectedRec
 		langCursor:        langCursor,
 		presetKeyInput:    pki,
 		existingKeys:      existingKeys,
-		staminaInput:      si,
 		ctxLimitInput:     ci,
 		soulDelayInput:    sdi,
 		maxRpmInput:       mri,
@@ -1791,9 +1784,9 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 				case 2: // language cycle
 					m.agentLangIdx = (m.agentLangIdx - 1 + len(langs)) % len(langs)
 					m.updatePromptPaths()
-				case 8: // karma
+				case 7: // karma
 					m.karmaIdx = (m.karmaIdx + 1) % 2
-				case 9: // nirvana
+				case 8: // nirvana
 					m.nirvanaIdx = (m.nirvanaIdx + 1) % 2
 				case agentNameDirNextIdx: // Next button → Back
 					m.fieldIdx = agentNameDirBackIdx
@@ -1804,9 +1797,9 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 				case 2: // language cycle
 					m.agentLangIdx = (m.agentLangIdx + 1) % len(langs)
 					m.updatePromptPaths()
-				case 8: // karma
+				case 7: // karma
 					m.karmaIdx = (m.karmaIdx + 1) % 2
-				case 9: // nirvana
+				case 8: // nirvana
 					m.nirvanaIdx = (m.nirvanaIdx + 1) % 2
 				case agentNameDirBackIdx: // Back button → Next
 					m.fieldIdx = agentNameDirNextIdx
@@ -1838,10 +1831,6 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 				if m.fieldIdx == -1 && m.setupMode {
 					// Skip — keep existing agent settings, jump to recipe.
 					// Stash current values for stepRecipe.
-					stamina, _ := strconv.ParseFloat(m.staminaInput.Value(), 64)
-					if stamina <= 0 {
-						stamina = 36000
-					}
 					ctxLimit, _ := strconv.Atoi(m.ctxLimitInput.Value())
 					if ctxLimit <= 0 {
 						ctxLimit = 250000
@@ -1855,7 +1844,6 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 					maxAedAttempts = preset.ClampAedAttempts(maxAedAttempts)
 					opts := preset.AgentOpts{
 						Language:       langs[m.agentLangIdx],
-						Stamina:        stamina,
 						ContextLimit:   ctxLimit,
 						SoulDelay:      soulDelay,
 						MaxRpm:         maxRpm,
@@ -1891,10 +1879,6 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 				if name == "" {
 					name = m.currentPreset().Name
 				}
-				stamina, err := strconv.ParseFloat(m.staminaInput.Value(), 64)
-				if err != nil || stamina <= 0 {
-					stamina = 36000
-				}
 				ctxLimit, err := strconv.Atoi(m.ctxLimitInput.Value())
 				if err != nil || ctxLimit <= 0 {
 					ctxLimit = 250000
@@ -1911,7 +1895,6 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 				maxAedAttempts = preset.ClampAedAttempts(maxAedAttempts)
 				opts := preset.AgentOpts{
 					Language:       langs[m.agentLangIdx],
-					Stamina:        stamina,
 					ContextLimit:   ctxLimit,
 					SoulDelay:      soulDelay,
 					MaxRpm:         maxRpm,
@@ -1983,25 +1966,23 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 				case 1:
 					m.dirInput, cmd = m.dirInput.Update(msg)
 				case 3:
-					m.staminaInput, cmd = m.staminaInput.Update(msg)
-				case 4:
 					m.ctxLimitInput, cmd = m.ctxLimitInput.Update(msg)
-				case 5:
+				case 4:
 					m.soulDelayInput, cmd = m.soulDelayInput.Update(msg)
-				case 6:
+				case 5:
 					m.maxRpmInput, cmd = m.maxRpmInput.Update(msg)
-				case 7:
+				case 6:
 					m.maxAedInput, cmd = m.maxAedInput.Update(msg)
-				case 10:
+				case 9:
 					m.covenantInput, cmd = m.covenantInput.Update(msg)
 					m.covenantDirty = true
-				case 11:
+				case 10:
 					m.principleInput, cmd = m.principleInput.Update(msg)
 					m.principleDirty = true
-				case 12:
+				case 11:
 					m.soulFlowInput, cmd = m.soulFlowInput.Update(msg)
 					m.soulFlowDirty = true
-				case 13:
+				case 12:
 					m.commentInput, cmd = m.commentInput.Update(msg)
 				}
 				return m, cmd
@@ -2181,22 +2162,20 @@ func (m FirstRunModel) Update(msg tea.Msg) (FirstRunModel, tea.Cmd) {
 			case 1:
 				m.dirInput, cmd = m.dirInput.Update(msg)
 			case 3:
-				m.staminaInput, cmd = m.staminaInput.Update(msg)
-			case 4:
 				m.ctxLimitInput, cmd = m.ctxLimitInput.Update(msg)
-			case 5:
+			case 4:
 				m.soulDelayInput, cmd = m.soulDelayInput.Update(msg)
-			case 6:
+			case 5:
 				m.maxRpmInput, cmd = m.maxRpmInput.Update(msg)
-			case 7:
+			case 6:
 				m.maxAedInput, cmd = m.maxAedInput.Update(msg)
-			case 10:
+			case 9:
 				m.covenantInput, cmd = m.covenantInput.Update(msg)
-			case 11:
+			case 10:
 				m.principleInput, cmd = m.principleInput.Update(msg)
-			case 12:
+			case 11:
 				m.soulFlowInput, cmd = m.soulFlowInput.Update(msg)
-			case 13:
+			case 12:
 				m.commentInput, cmd = m.commentInput.Update(msg)
 			}
 		case stepRecipe:
@@ -2786,11 +2765,10 @@ func (m FirstRunModel) View() string {
 			view  string
 		}
 		numFields := []numField{
-			{3, i18n.T("firstrun.stamina"), i18n.T("firstrun.stamina_hint"), m.staminaInput.View()},
-			{4, i18n.T("firstrun.context_limit"), i18n.T("firstrun.context_limit_hint"), m.ctxLimitInput.View()},
-			{5, i18n.T("firstrun.soul_delay"), i18n.T("firstrun.soul_delay_hint"), m.soulDelayInput.View()},
-			{6, i18n.T("firstrun.max_rpm"), i18n.T("firstrun.max_rpm_hint"), m.maxRpmInput.View()},
-			{7, i18n.T("firstrun.max_aed_attempts"), i18n.T("firstrun.max_aed_attempts_hint"), m.maxAedInput.View()},
+			{3, i18n.T("firstrun.context_limit"), i18n.T("firstrun.context_limit_hint"), m.ctxLimitInput.View()},
+			{4, i18n.T("firstrun.soul_delay"), i18n.T("firstrun.soul_delay_hint"), m.soulDelayInput.View()},
+			{5, i18n.T("firstrun.max_rpm"), i18n.T("firstrun.max_rpm_hint"), m.maxRpmInput.View()},
+			{6, i18n.T("firstrun.max_aed_attempts"), i18n.T("firstrun.max_aed_attempts_hint"), m.maxAedInput.View()},
 		}
 		for _, nf := range numFields {
 			hint := StyleFaint.Render(" (" + nf.hint + ")")
@@ -2801,25 +2779,25 @@ func (m FirstRunModel) View() string {
 		b.WriteString("\n  " + sectionStyle.Render("── "+i18n.T("firstrun.section_authority")+" ──") + "\n")
 		karmaVal := boolLabel(m.karmaIdx)
 		karmaHint := StyleFaint.Render(" (" + i18n.T("firstrun.karma_hint") + ")")
-		b.WriteString(cur(8) + i18n.T("firstrun.karma") + ": " + renderToggle(karmaVal, m.fieldIdx == 8) + karmaHint + "\n")
+		b.WriteString(cur(7) + i18n.T("firstrun.karma") + ": " + renderToggle(karmaVal, m.fieldIdx == 7) + karmaHint + "\n")
 		nirvanaVal := boolLabel(m.nirvanaIdx)
 		nirvanaHint := StyleFaint.Render(" (" + i18n.T("firstrun.nirvana_hint") + ")")
-		b.WriteString(cur(9) + i18n.T("firstrun.nirvana") + ": " + renderToggle(nirvanaVal, m.fieldIdx == 9) + nirvanaHint + "\n")
+		b.WriteString(cur(8) + i18n.T("firstrun.nirvana") + ": " + renderToggle(nirvanaVal, m.fieldIdx == 8) + nirvanaHint + "\n")
 
 		// ── Prompts ──
 		b.WriteString("\n  " + sectionStyle.Render("── "+i18n.T("firstrun.section_prompts")+" ──") + "\n")
-		b.WriteString(cur(10) + i18n.T("firstrun.covenant") + ": " + m.covenantInput.View() + "\n")
-		b.WriteString(cur(11) + i18n.T("firstrun.principle") + ": " + m.principleInput.View() + "\n")
-		b.WriteString(cur(12) + i18n.T("firstrun.soul_flow") + ": " + m.soulFlowInput.View() + "\n")
+		b.WriteString(cur(9) + i18n.T("firstrun.covenant") + ": " + m.covenantInput.View() + "\n")
+		b.WriteString(cur(10) + i18n.T("firstrun.principle") + ": " + m.principleInput.View() + "\n")
+		b.WriteString(cur(11) + i18n.T("firstrun.soul_flow") + ": " + m.soulFlowInput.View() + "\n")
 		commentHint := StyleFaint.Render(" (" + i18n.T("firstrun.comment_hint") + ")")
-		b.WriteString(cur(13) + i18n.T("firstrun.comment") + ": " + m.commentInput.View() + commentHint + "\n")
+		b.WriteString(cur(12) + i18n.T("firstrun.comment") + ": " + m.commentInput.View() + commentHint + "\n")
 
 		if m.message != "" {
 			errStyle := lipgloss.NewStyle().Foreground(ColorSuspended)
 			b.WriteString("\n  " + errStyle.Render(m.message) + "\n")
 		}
 
-		// Footer buttons: idx 14 = Back, idx 15 = Next.
+		// Footer buttons: idx 13 = Back, idx 14 = Next.
 		var nameDirFocused wizardFooterButton
 		switch m.fieldIdx {
 		case agentNameDirBackIdx:
@@ -2990,16 +2968,16 @@ func centerText(s string, width int) string {
 
 // agentNameDirFieldCount is the number of fields in stepAgentNameDir,
 // including the Back/Next button slots at the end.
-const agentNameDirFieldCount = 16
+const agentNameDirFieldCount = 15
 
 // Field indices:
 // 0=name, 1=dir, 2=lang,
-// 3=stamina, 4=context_limit, 5=soul_delay, 6=max_rpm, 7=max_aed_attempts,
-// 8=karma, 9=nirvana,
-// 10=covenant, 11=principle, 12=soul_flow, 13=comment
-// 14=Back, 15=Next  (footer buttons; no input is focused here)
-const agentNameDirBackIdx = 14
-const agentNameDirNextIdx = 15
+// 3=context_limit, 4=soul_delay, 5=max_rpm, 6=max_aed_attempts,
+// 7=karma, 8=nirvana,
+// 9=covenant, 10=principle, 11=soul_flow, 12=comment
+// 13=Back, 14=Next  (footer buttons; no input is focused here)
+const agentNameDirBackIdx = 13
+const agentNameDirNextIdx = 14
 
 // runCheckCaps runs `python -m lingtai check-caps` in a goroutine.
 func (m FirstRunModel) runCheckCaps() tea.Cmd {
@@ -3676,12 +3654,10 @@ func (m *FirstRunModel) enterAgentNameDir(p preset.Preset) {
 	}
 
 	// Numeric defaults — overridden by saved init.json values in setup mode below.
-	m.staminaInput.SetValue("36000")
 	m.ctxLimitInput.SetValue("250000")
 	m.soulDelayInput.SetValue("")
 	m.maxRpmInput.SetValue("60")
 	m.maxAedInput.SetValue(strconv.Itoa(preset.DefaultMaxAedAttempts))
-	m.staminaInput.Blur()
 	m.ctxLimitInput.Blur()
 	m.soulDelayInput.Blur()
 	m.maxRpmInput.Blur()
@@ -3709,9 +3685,6 @@ func (m *FirstRunModel) enterAgentNameDir(p preset.Preset) {
 	if m.setupMode && m.setupKeepInitJSON != nil {
 		manifest, _ := m.setupKeepInitJSON["manifest"].(map[string]interface{})
 		if manifest != nil {
-			if v, ok := numberFromJSON(manifest["stamina"]); ok {
-				m.staminaInput.SetValue(formatNumber(v))
-			}
 			if v, ok := numberFromJSON(manifest["context_limit"]); ok {
 				m.ctxLimitInput.SetValue(formatNumber(v))
 			}
@@ -3809,7 +3782,7 @@ func parseOptionalSoulDelay(value string) *float64 {
 }
 
 // formatNumber renders an integer-valued float as "N" (no decimal point), for
-// fields like stamina / context_limit / soul.delay / max_rpm that are conceptually
+// fields like context_limit / soul.delay / max_rpm that are conceptually
 // integers. Falls back to a compact float representation if the value is fractional.
 func formatNumber(v float64) string {
 	if v == float64(int64(v)) {
@@ -3821,7 +3794,6 @@ func formatNumber(v float64) string {
 func (m *FirstRunModel) focusAgentField() tea.Cmd {
 	m.nameInput.Blur()
 	m.dirInput.Blur()
-	m.staminaInput.Blur()
 	m.ctxLimitInput.Blur()
 	m.soulDelayInput.Blur()
 	m.maxRpmInput.Blur()
@@ -3839,24 +3811,22 @@ func (m *FirstRunModel) focusAgentField() tea.Cmd {
 	case 2:
 		return nil // language — cycle selector
 	case 3:
-		return m.staminaInput.Focus()
-	case 4:
 		return m.ctxLimitInput.Focus()
-	case 5:
+	case 4:
 		return m.soulDelayInput.Focus()
-	case 6:
+	case 5:
 		return m.maxRpmInput.Focus()
-	case 7:
+	case 6:
 		return m.maxAedInput.Focus()
-	case 8, 9:
+	case 7, 8:
 		return nil // karma/nirvana — cycle selectors
-	case 10:
+	case 9:
 		return m.covenantInput.Focus()
-	case 11:
+	case 10:
 		return m.principleInput.Focus()
-	case 12:
+	case 11:
 		return m.soulFlowInput.Focus()
-	case 13:
+	case 12:
 		return m.commentInput.Focus()
 	}
 	return nil

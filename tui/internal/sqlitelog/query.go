@@ -19,9 +19,8 @@ import (
 // NotificationBlockMeta mirrors the kernel's build_meta vital signs stored in
 // the meta key of notification_pair_injected and notification_block_injected events.
 type NotificationBlockMeta struct {
-	CurrentTime        string  `json:"current_time,omitempty"`
-	StaminaLeftSeconds float64 `json:"stamina_left_seconds,omitempty"`
-	InjectionSeq       int     `json:"injection_seq,omitempty"`
+	CurrentTime  string `json:"current_time,omitempty"`
+	InjectionSeq int    `json:"injection_seq,omitempty"`
 	// Context sub-fields (may be absent in older events)
 	ContextSystemTokens  int     `json:"context_system_tokens,omitempty"`
 	ContextHistoryTokens int     `json:"context_history_tokens,omitempty"`
@@ -81,9 +80,6 @@ func parseNotificationBlockFields(fieldsJSON string, b *NotificationSummaryEntry
 		m := &NotificationBlockMeta{}
 		if v, ok := f.Meta["current_time"].(string); ok {
 			m.CurrentTime = v
-		}
-		if v, ok := f.Meta["stamina_left_seconds"].(float64); ok {
-			m.StaminaLeftSeconds = v
 		}
 		if v, ok := f.Meta["injection_seq"].(float64); ok {
 			m.InjectionSeq = int(v)
@@ -280,7 +276,7 @@ func parseMetaEnvelope(env map[string]interface{}, s *NotificationBlockSnapshot)
 	if agent, ok := notificationMap(env["agent_meta"]); ok {
 		s.AgentMeta = agent
 		// agent_meta carries the build_meta vital signs (current_time,
-		// context, stamina) used by the Meta footer.
+		// context) used by the Meta footer.
 		s.RawMeta = agent
 	}
 	if guidance, ok := notificationMap(env["guidance"]); ok {
@@ -335,9 +331,6 @@ func parseBlockMeta(m map[string]interface{}) *NotificationBlockMeta {
 	bm := &NotificationBlockMeta{}
 	if v, ok := m["current_time"].(string); ok {
 		bm.CurrentTime = v
-	}
-	if v, ok := m["stamina_left_seconds"].(float64); ok {
-		bm.StaminaLeftSeconds = v
 	}
 	if v, ok := m["injection_seq"].(float64); ok {
 		bm.InjectionSeq = int(v)

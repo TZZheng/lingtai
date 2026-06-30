@@ -1427,7 +1427,6 @@ func llmString(llm map[string]interface{}, key string) string {
 // AgentOpts holds per-agent configuration values set at creation time.
 type AgentOpts struct {
 	Language       string   // "en", "zh", or "wen"
-	Stamina        float64  // max uptime in seconds
 	ContextLimit   int      // token budget
 	SoulDelay      *float64 // nil means omit soul.delay so the kernel default applies
 	MaxRpm         int      // API requests-per-minute cap (cooperative network gate); 0 disables
@@ -1457,7 +1456,6 @@ type AgentOpts struct {
 func DefaultAgentOpts() AgentOpts {
 	return AgentOpts{
 		Language:       "en",
-		Stamina:        36000,
 		ContextLimit:   250000,
 		SoulDelay:      nil,
 		MaxRpm:         60,
@@ -1568,7 +1566,6 @@ func GenerateInitJSONWithOpts(p Preset, agentName, dirName, lingtaiDir, globalDi
 	if opts.SoulDelay != nil {
 		manifest["soul"] = map[string]interface{}{"delay": *opts.SoulDelay}
 	}
-	manifest["stamina"] = opts.Stamina
 	manifest["context_limit"] = opts.ContextLimit
 	// molt_pressure and molt_prompt are intentionally NOT written: the kernel no
 	// longer accepts configurable context.molt thresholds or messages (Jason
@@ -1850,7 +1847,7 @@ func GenerateInitJSONWithOpts(p Preset, agentName, dirName, lingtaiDir, globalDi
 
 	// Build the wizard-controlled subset of .agent.json. Other fields the
 	// kernel populates at runtime (agent_id, created_at, molt_count,
-	// stamina, language, soul_delay, soul_voice, started_at, capabilities,
+	// language, soul_delay, soul_voice, started_at, capabilities,
 	// nickname, etc) must NOT be touched here — re-running /setup against
 	// an existing agent should preserve the agent's identity and history,
 	// not reset it. Without this preservation, molt_count drops to 0 on

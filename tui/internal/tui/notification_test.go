@@ -120,7 +120,7 @@ func TestNotificationModelWithSnapshots(t *testing.T) {
 
 	// Build snapshots with real payload shape the kernel emits
 	snapshotFields := []string{
-		`{"mode":"synthetic_notification_pair","call_id":"notif_abc","sources":["email"],"payload":{"_notification_guidance":"kernel guidance text","notifications":{"email":{"data":{"count":1},"_notification_guidance":"email channel guidance"}}},"meta":{"stamina_left_seconds":3600,"injection_seq":1}}`,
+		`{"mode":"synthetic_notification_pair","call_id":"notif_abc","sources":["email"],"payload":{"_notification_guidance":"kernel guidance text","notifications":{"email":{"data":{"count":1},"_notification_guidance":"email channel guidance"}}},"meta":{"injection_seq":1}}`,
 		`{"mode":"synthetic_notification_pair","call_id":"notif_def","sources":["soul"],"payload":{"_notification_guidance":"kernel guidance 2","notifications":{"soul":{"data":{"voices":[]},"_notification_guidance":"soul channel guidance"}}},"meta":{}}`,
 		`{"mode":"active_tool_result","call_id":"","sources":["email","system"],"payload":{"_notification_guidance":"kernel guidance 3","notifications":{"email":{"data":{"count":2}},"system":{"events":[{"body":"ping"}]}}},"meta":{"injection_seq":2}}`,
 	}
@@ -319,7 +319,7 @@ func TestNotificationModelSnapshotRendersChannelContent(t *testing.T) {
 	}
 
 	fields := []string{
-		`{"mode":"synthetic_notification_pair","call_id":"notif_xyz","sources":["email","system"],"payload":{"_notification_guidance":"global kernel guidance","notifications":{"email":{"data":{"count":3},"_notification_guidance":"email per-channel guidance"},"system":{"events":[{"body":"test event"}],"_notification_guidance":"system per-channel guidance"}}},"meta":{"injection_seq":5,"stamina_left_seconds":7200}}`,
+		`{"mode":"synthetic_notification_pair","call_id":"notif_xyz","sources":["email","system"],"payload":{"_notification_guidance":"global kernel guidance","notifications":{"email":{"data":{"count":3},"_notification_guidance":"email per-channel guidance"},"system":{"events":[{"body":"test event"}],"_notification_guidance":"system per-channel guidance"}}},"meta":{"injection_seq":5}}`,
 	}
 	agentDir := makeNotificationSnapshotDB(t, bin, fields)
 
@@ -362,7 +362,7 @@ func TestNotificationModelSnapshotRendersMetaEnvelopeBlocks(t *testing.T) {
 	}
 
 	fields := []string{
-		`{"mode":"active_tool_result","call_id":"notif_tool","sources":["system"],"_meta":{"tool_meta":{"id":"call_read_123","timestamp":"2026-06-21T07:00:00Z","char_count":1200,"elapsed_ms":42},"agent_meta":{"current_time":"2026-06-21T07:00:00Z","stamina_left_seconds":1234,"active_turn_tool_calls":7,"context":{"usage":0.42,"history_tokens":12345}},"guidance":{"guidance_version":"1","meta_readme":{"tool_meta":"per-result"},"sections":[{"title":"Large result guidance","body":"Summarize the result after reading it."}]},"notification_guidance":"Handle channel payloads through their producer tools.","notifications":{"system":{"events":[{"body":"test event"}]}}}}`,
+		`{"mode":"active_tool_result","call_id":"notif_tool","sources":["system"],"_meta":{"tool_meta":{"id":"call_read_123","timestamp":"2026-06-21T07:00:00Z","char_count":1200,"elapsed_ms":42},"agent_meta":{"current_time":"2026-06-21T07:00:00Z","active_turn_tool_calls":7,"context":{"usage":0.42,"history_tokens":12345}},"guidance":{"guidance_version":"1","meta_readme":{"tool_meta":"per-result"},"sections":[{"title":"Large result guidance","body":"Summarize the result after reading it."}]},"notification_guidance":"Handle channel payloads through their producer tools.","notifications":{"system":{"events":[{"body":"test event"}]}}}}`,
 	}
 	agentDir := makeNotificationSnapshotDB(t, bin, fields)
 
@@ -413,7 +413,7 @@ func TestNotificationModelSnapshotRendersLegacyPayloadBlocks(t *testing.T) {
 	}
 
 	fields := []string{
-		`{"mode":"active_tool_result","call_id":"notif_tool","sources":["system"],"payload":{"_tool":{"tool_name":"read","tool_call_id":"call_read_123","status":"ok","elapsed_ms":42},"_runtime":{"state":{"current_time":"2026-06-21T07:00:00Z","active_turn_tool_calls":7,"context":{"usage":0.42}},"guidance":{"title":"Large result guidance","body":"Summarize the result after reading it."}},"notification_guidance":"Handle channel payloads through their producer tools.","notifications":{"system":{"events":[{"body":"test event"}]}}},"meta":{"current_time":"2026-06-21T07:00:00Z","stamina_left_seconds":4321,"injection_seq":9}}`,
+		`{"mode":"active_tool_result","call_id":"notif_tool","sources":["system"],"payload":{"_tool":{"tool_name":"read","tool_call_id":"call_read_123","status":"ok","elapsed_ms":42},"_runtime":{"state":{"current_time":"2026-06-21T07:00:00Z","active_turn_tool_calls":7,"context":{"usage":0.42}},"guidance":{"title":"Large result guidance","body":"Summarize the result after reading it."}},"notification_guidance":"Handle channel payloads through their producer tools.","notifications":{"system":{"events":[{"body":"test event"}]}}},"meta":{"current_time":"2026-06-21T07:00:00Z","injection_seq":9}}`,
 	}
 	agentDir := makeNotificationSnapshotDB(t, bin, fields)
 

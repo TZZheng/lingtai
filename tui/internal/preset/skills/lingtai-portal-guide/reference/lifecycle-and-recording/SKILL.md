@@ -16,7 +16,7 @@ This is a nested `lingtai-portal-guide` reference. It covers how the portal inte
 | `ACTIVE` | Agent is running and processing |
 | `IDLE` | Agent is running but waiting for input |
 | `STUCK` | Agent encountered an error or is unresponsive |
-| `ASLEEP` | Agent is in sleep mode (`.sleep` signal or stamina exhausted) |
+| `ASLEEP` | Agent is in sleep mode (`.sleep` signal or explicit lifecycle transition) |
 | `SUSPENDED` | Agent process is not running (no heartbeat) |
 
 Heartbeat is the portal's liveness ground truth. `BuildNetwork()` currently calls `IsAlive(..., 2.0)`, so if an agent has a state in `.agent.json` but its `.agent.heartbeat` is older than about 2 seconds, the portal reports it as `SUSPENDED` regardless of the stored state.

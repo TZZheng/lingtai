@@ -53,7 +53,6 @@ cat > "$ORCH_DIR/init.json" << INITEOF
       "daemon": {}
     },
     "soul": {"delay": 30},
-    "stamina": 3600,
     "context_limit": null,
     "max_turns": 500,
     "admin": {"karma": true},

@@ -314,7 +314,6 @@ func TestParseNotificationBlockFieldsMeta(t *testing.T) {
 		"sources": ["email", "soul"],
 		"meta": {
 			"current_time": "2026-06-20T10:00:00-07:00",
-			"stamina_left_seconds": 35884.5,
 			"injection_seq": 3,
 			"context": {
 				"system_tokens": 38398,
@@ -340,9 +339,6 @@ func TestParseNotificationBlockFieldsMeta(t *testing.T) {
 	}
 	if b.Meta.InjectionSeq != 3 {
 		t.Errorf("InjectionSeq = %d, want 3", b.Meta.InjectionSeq)
-	}
-	if b.Meta.StaminaLeftSeconds != 35884.5 {
-		t.Errorf("StaminaLeftSeconds = %v", b.Meta.StaminaLeftSeconds)
 	}
 	if b.Meta.ContextSystemTokens != 38398 {
 		t.Errorf("ContextSystemTokens = %d", b.Meta.ContextSystemTokens)
@@ -468,7 +464,6 @@ func TestParseNotificationBlockSnapshotFields(t *testing.T) {
 		},
 		"meta": {
 			"current_time": "2026-06-20T10:00:00-07:00",
-			"stamina_left_seconds": 3600.0,
 			"injection_seq": 5,
 			"context": {
 				"system_tokens": 1000,
@@ -519,9 +514,6 @@ func TestParseNotificationBlockSnapshotFields(t *testing.T) {
 	if s.Meta.InjectionSeq != 5 {
 		t.Errorf("InjectionSeq = %d, want 5", s.Meta.InjectionSeq)
 	}
-	if s.Meta.StaminaLeftSeconds != 3600.0 {
-		t.Errorf("StaminaLeftSeconds = %v", s.Meta.StaminaLeftSeconds)
-	}
 	if s.Meta.ContextSystemTokens != 1000 {
 		t.Errorf("ContextSystemTokens = %d", s.Meta.ContextSystemTokens)
 	}
@@ -539,7 +531,6 @@ func TestParseNotificationBlockSnapshotFieldsMetaEnvelope(t *testing.T) {
 			"tool_meta": {"id": "call_abc", "char_count": 1200, "elapsed_ms": 42, "synthetic": false},
 			"agent_meta": {
 				"current_time": "2026-06-21T10:00:00-07:00",
-				"stamina_left_seconds": 3600.0,
 				"context": {"system_tokens": 1000, "history_tokens": 5000, "usage": 0.06}
 			},
 			"guidance": {"guidance_version": "1", "meta_readme": {"tool_meta": "per-result"}},
@@ -577,9 +568,6 @@ func TestParseNotificationBlockSnapshotFieldsMetaEnvelope(t *testing.T) {
 	// Vital-signs Meta derived from _meta.agent_meta.
 	if s.Meta == nil {
 		t.Fatal("Meta is nil")
-	}
-	if s.Meta.StaminaLeftSeconds != 3600.0 {
-		t.Errorf("StaminaLeftSeconds = %v", s.Meta.StaminaLeftSeconds)
 	}
 	if s.Meta.ContextSystemTokens != 1000 {
 		t.Errorf("ContextSystemTokens = %d", s.Meta.ContextSystemTokens)

@@ -35,7 +35,7 @@ func DetectOrchestrators(baseDir string) []string {
 }
 
 // PropagateOrchestratorConfig reads the orchestrator's init.json and copies
-// its LLM config, capabilities, and runtime settings (soul delay, stamina,
+// its LLM config, capabilities, and runtime settings (soul delay,
 // context limit, molt pressure) to every other agent in the .lingtai/
 // network. Admin privileges and addons are stripped from non-orchestrators.
 // Skips directories that are not agents (no init.json) and "human".
@@ -113,7 +113,7 @@ func PropagateOrchestratorConfig(baseDir, orchDir string) error {
 				}
 				manifest["soul"] = soulCopy
 			}
-			for _, key := range []string{"stamina", "context_limit"} {
+			for _, key := range []string{"context_limit"} {
 				if v, ok := orchManifest[key]; ok {
 					manifest[key] = v
 				}

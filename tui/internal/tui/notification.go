@@ -424,7 +424,7 @@ func renderNotificationSnapshot(s sqlitelog.NotificationBlockSnapshot, cursor, t
 		"id", "timestamp", "char_count", "elapsed_ms", "status", "spilled_char_count", "synthetic",
 	}, wrapWidth, labelStyle, valueStyle)
 	writeNotificationMapBlock(&sb, "_meta.agent_meta", s.AgentMeta, []string{
-		"current_time", "context", "stamina_left_seconds", "stamina", "active_turn_tool_calls",
+		"current_time", "context", "active_turn_tool_calls",
 		"current_tool_result_chars", "elapsed_ms",
 	}, wrapWidth, labelStyle, valueStyle)
 	writeNotificationMapBlock(&sb, "_meta.guidance", s.Guidance, []string{
@@ -464,7 +464,7 @@ func renderNotificationSnapshot(s sqlitelog.NotificationBlockSnapshot, cursor, t
 		}
 	}
 
-	// ── Meta footer (context%, stamina, time, seq) ──────────────────────────
+	// ── Meta footer (context%, time, seq) ──────────────────────────
 	if s.Meta != nil {
 		if footer := formatBlockMetaFooter(s.Meta); footer != "" {
 			sb.WriteString(notifStyle.Faint(true).Render("    "+footer) + "\n")
@@ -552,7 +552,7 @@ func wrappedNotificationLines(text string, wrapWidth int) []string {
 }
 
 // formatBlockMetaFooter renders the NotificationBlockMeta vital signs as
-// a compact line like "ctx 14.8% · stamina 9h58m · 21:10 PDT · seq 2".
+// a compact line like "ctx 14.8% · 21:10 PDT · seq 2".
 // Returns "" when no displayable fields are present.
 func formatBlockMetaFooter(m *sqlitelog.NotificationBlockMeta) string {
 	if m == nil {
@@ -561,9 +561,6 @@ func formatBlockMetaFooter(m *sqlitelog.NotificationBlockMeta) string {
 	var parts []string
 	if m.ContextUsage > 0 {
 		parts = append(parts, fmt.Sprintf("ctx %.1f%%", m.ContextUsage*100))
-	}
-	if m.StaminaLeftSeconds > 0 {
-		parts = append(parts, "stamina "+formatStaminaShort(m.StaminaLeftSeconds))
 	}
 	if m.CurrentTime != "" {
 		if short := formatCurrentTimeShort(m.CurrentTime); short != "" {

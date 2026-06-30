@@ -516,8 +516,8 @@ func (m *MailModel) shouldShow(e fs.SessionEntry) bool {
 }
 
 // formatNotificationMetaFooter renders the kernel's per-injection vital
-// signs (issue #40) as a single compact line: "ctx 14.7% · stamina 9h58m
-// · 21:10 PDT · seq 2". Returns "" when meta is nil (older events
+// signs (issue #40) as a single compact line: "ctx 14.7% · 21:10 PDT · seq 2".
+// Returns "" when meta is nil (older events
 // pre-dating the kernel emitter change) or carries only sentinel values.
 //
 // Each fragment is independently gated: a sentinel field is silently
@@ -531,9 +531,6 @@ func formatNotificationMetaFooter(meta *fs.NotificationMeta) string {
 	if meta.Context != nil && meta.Context.Usage >= 0 {
 		parts = append(parts, fmt.Sprintf("ctx %.1f%%", meta.Context.Usage*100))
 	}
-	if meta.StaminaLeftSeconds > 0 {
-		parts = append(parts, "stamina "+formatStaminaShort(meta.StaminaLeftSeconds))
-	}
 	if meta.CurrentTime != "" {
 		if short := formatCurrentTimeShort(meta.CurrentTime); short != "" {
 			parts = append(parts, short)
@@ -546,18 +543,6 @@ func formatNotificationMetaFooter(meta *fs.NotificationMeta) string {
 		return ""
 	}
 	return strings.Join(parts, " · ")
-}
-
-// formatStaminaShort renders seconds as "9h58m" / "12m" / "45s".
-func formatStaminaShort(seconds float64) string {
-	s := int(seconds)
-	if s < 60 {
-		return fmt.Sprintf("%ds", s)
-	}
-	if s < 3600 {
-		return fmt.Sprintf("%dm", s/60)
-	}
-	return fmt.Sprintf("%dh%02dm", s/3600, (s%3600)/60)
 }
 
 // formatCurrentTimeShort renders an ISO-8601 timestamp as "HH:MM TZ"

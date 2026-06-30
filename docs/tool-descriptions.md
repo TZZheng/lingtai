@@ -38,7 +38,7 @@ Identity, pad, context, and name. lingtai (灵台): your evolving character — 
 ### system_tool
 
 **English:**
-Runtime, stamina, synchronization, and karma. Self-actions: 'show' (identity/runtime/usage), 'nap' (timed or indefinite pause), 'sleep' (go asleep), 'refresh' (rebirth with reloaded tools). Karma actions on other agents (require admin.karma): 'interrupt' (interrupt), 'lull' (put to sleep), 'cpr' (resuscitate asleep agent). Nirvana action (requires admin.nirvana): 'nirvana' (permanently destroy).
+Runtime, synchronization, and karma. Self-actions: 'show' (identity/runtime/usage), 'nap' (timed or indefinite pause), 'sleep' (go asleep), 'refresh' (rebirth with reloaded tools). Karma actions on other agents (require admin.karma): 'interrupt' (interrupt), 'lull' (put to sleep), 'cpr' (resuscitate asleep agent). Nirvana action (requires admin.nirvana): 'nirvana' (permanently destroy).
 
 **中文:**
 运行时、精力、同步与业力。自身操作：'show'（观己/身份/运行时/用量）、'nap'（小憩/定时或无限暂停）、'sleep'（入眠）、'refresh'（沐浴/重载工具重启会话）。业力操作（需要 admin.karma）：'interrupt'（打断）、'lull'（催眠他人）、'cpr'（唤醒沉睡者）。涅槃操作（需要 admin.nirvana）：'nirvana'（涅槃/永久销毁）。
