@@ -29,6 +29,93 @@ func VenvPython(venvDir string) string {
 	return filepath.Join(venvDir, "bin", "python")
 }
 
+type runtimeEnvMarkerState string
+
+const (
+	runtimeEnvMarkerMissing  runtimeEnvMarkerState = "missing"
+	runtimeEnvMarkerMatch    runtimeEnvMarkerState = "match"
+	runtimeEnvMarkerMismatch runtimeEnvMarkerState = "mismatch"
+	runtimeEnvMarkerUnknown  runtimeEnvMarkerState = "unknown"
+)
+
+type runtimeEnvMarkerCheck struct {
+	Status      string `json:"status"`
+	Detail      string `json:"detail"`
+	StampStatus string `json:"stamp_status"`
+}
+
+func runtimeEnvMarkerStateForVenv(venvPath string, runner CommandRunner) (runtimeEnvMarkerState, error) {
+	check, err := runRuntimeEnvMarkerCommand(venvPath, runner, "check")
+	if err != nil {
+		return runtimeEnvMarkerUnknown, err
+	}
+	switch runtimeEnvMarkerState(check.Status) {
+	case runtimeEnvMarkerMissing, runtimeEnvMarkerMatch, runtimeEnvMarkerMismatch:
+		return runtimeEnvMarkerState(check.Status), nil
+	case "error", runtimeEnvMarkerUnknown:
+		if check.Detail != "" {
+			return runtimeEnvMarkerUnknown, fmt.Errorf("%s", check.Detail)
+		}
+		return runtimeEnvMarkerUnknown, fmt.Errorf("kernel marker check returned %q", check.Status)
+	default:
+		return runtimeEnvMarkerUnknown, fmt.Errorf("kernel marker check returned unsupported status %q", check.Status)
+	}
+}
+
+func runRuntimeEnvMarkerCommand(venvPath string, runner CommandRunner, action string) (runtimeEnvMarkerCheck, error) {
+	if runner == nil {
+		runner = timeoutCommandRunner{timeout: 3 * time.Second}
+	}
+	res := runner.Run(VenvPython(venvPath), "-m", "lingtai.venv_resolve", "env-marker", action, "--venv", venvPath)
+	if res.Err != nil {
+		detail := strings.TrimSpace(res.Stderr)
+		if detail == "" {
+			detail = strings.TrimSpace(res.Stdout)
+		}
+		if detail == "" {
+			detail = res.Err.Error()
+		}
+		return runtimeEnvMarkerCheck{}, fmt.Errorf("kernel marker %s failed: %s", action, lastNonEmptyLine(detail))
+	}
+	var check runtimeEnvMarkerCheck
+	if err := json.Unmarshal([]byte(strings.TrimSpace(res.Stdout)), &check); err != nil {
+		return runtimeEnvMarkerCheck{}, fmt.Errorf("kernel marker %s returned invalid JSON: %w", action, err)
+	}
+	if check.Status == "" {
+		return runtimeEnvMarkerCheck{}, fmt.Errorf("kernel marker %s returned no status", action)
+	}
+	return check, nil
+}
+
+func writeRuntimeEnvMarker(venvPath string, runner CommandRunner) error {
+	check, err := runRuntimeEnvMarkerCommand(venvPath, runner, "stamp")
+	if err != nil {
+		return err
+	}
+	if runtimeEnvMarkerState(check.Status) == runtimeEnvMarkerMatch {
+		return nil
+	}
+	if check.Detail != "" {
+		return fmt.Errorf("%s", check.Detail)
+	}
+	return fmt.Errorf("kernel marker stamp returned %q", check.Status)
+}
+
+func writeRuntimeEnvMarkerIfVenvDirExists(venvPath string, runner CommandRunner) {
+	if _, err := os.Stat(venvPath); err != nil {
+		return
+	}
+	_ = writeRuntimeEnvMarker(venvPath, runner)
+}
+
+func removeRuntimeVenvIfEnvMismatch(venvPath string, runner CommandRunner) error {
+	state, _ := runtimeEnvMarkerStateForVenv(venvPath, runner)
+	if state != runtimeEnvMarkerMismatch {
+		return nil
+	}
+	return os.RemoveAll(venvPath)
+}
+
 // LingtaiCmd returns the Python interpreter path for running lingtai.
 // Callers should invoke as: LingtaiCmd(dir), "-m", "lingtai", "run", agentDir
 func LingtaiCmd(globalDir string) string {
@@ -46,10 +133,16 @@ func LingtaiCmd(globalDir string) string {
 }
 
 // NeedsVenv returns true if no working runtime venv exists
-// or if lingtai is not importable inside it.
+// or if lingtai is not importable inside it. Existing legacy venvs without
+// an environment marker are accepted after the import probe succeeds.
 func NeedsVenv(globalDir string) bool {
-	python := VenvPython(RuntimeVenvDir(globalDir))
+	venvPath := RuntimeVenvDir(globalDir)
+	python := VenvPython(venvPath)
 	if _, err := os.Stat(python); err != nil {
+		return true
+	}
+	markerState, _ := runtimeEnvMarkerStateForVenv(venvPath, nil)
+	if markerState == runtimeEnvMarkerMismatch {
 		return true
 	}
 	// Venv exists — verify lingtai is importable. A working PyPI install may
@@ -58,6 +151,9 @@ func NeedsVenv(globalDir string) bool {
 	// recreating the whole venv here.
 	if err := exec.Command(python, "-c", "import lingtai").Run(); err != nil {
 		return true
+	}
+	if markerState == runtimeEnvMarkerMissing {
+		_ = writeRuntimeEnvMarker(venvPath, nil)
 	}
 	return false
 }
@@ -83,6 +179,9 @@ func ensureVenv(globalDir string, quiet bool, progress ProgressFunc) error {
 		return nil
 	}
 	venvPath := RuntimeVenvDir(globalDir)
+	if err := removeRuntimeVenvIfEnvMismatch(venvPath, nil); err != nil {
+		return fmt.Errorf("failed to remove stale runtime venv: %w", err)
+	}
 	uvCmd := findUV()
 
 	// Step 1: create venv
@@ -155,6 +254,7 @@ func ensureVenv(globalDir string, quiet bool, progress ProgressFunc) error {
 	if err := verify.Run(); err != nil {
 		return fmt.Errorf("lingtai installed but import failed — check for missing dependencies: %w", err)
 	}
+	_ = writeRuntimeEnvMarker(venvPath, nil)
 
 	// Step 4: symlink lingtai-agent CLI into ~/.local/bin so it's on PATH
 	linkLingtaiCLI(venvPath)
@@ -749,9 +849,22 @@ func (r *DoctorReport) checkPythonRuntime(globalDir string, opts DoctorOptions) 
 	if _, err := opts.Stat(python); err != nil {
 		r.add(DoctorWarn, "Python runtime venv missing or incomplete at %s", venvPath)
 		needsEnsure = true
-	} else if _, err := pythonLingtaiVersion(opts.Runner, python); err != nil {
-		r.add(DoctorWarn, "Python runtime venv exists but cannot import lingtai: %v", err)
-		needsEnsure = true
+	} else {
+		markerState, markerErr := runtimeEnvMarkerStateForVenv(venvPath, opts.Runner)
+		if markerState == runtimeEnvMarkerMismatch {
+			r.add(DoctorWarn, "Python runtime venv environment marker does not match this host; recreating %s", venvPath)
+			needsEnsure = true
+		} else {
+			if markerErr != nil {
+				r.add(DoctorWarn, "Python runtime venv environment marker could not be verified; leaving it in place unless the runtime itself is unusable: %v", markerErr)
+			}
+			if _, err := pythonLingtaiVersion(opts.Runner, python); err != nil {
+				r.add(DoctorWarn, "Python runtime venv exists but cannot import lingtai: %v", err)
+				needsEnsure = true
+			} else {
+				writeRuntimeEnvMarkerIfVenvDirExists(venvPath, opts.Runner)
+			}
+		}
 	}
 	if needsEnsure {
 		r.add(DoctorInfo, "Creating Python runtime venv...")
@@ -764,6 +877,7 @@ func (r *DoctorReport) checkPythonRuntime(globalDir string, opts DoctorOptions) 
 			return
 		}
 		r.add(DoctorOK, "Python runtime venv created")
+		writeRuntimeEnvMarkerIfVenvDirExists(venvPath, opts.Runner)
 	}
 	upgrade := UpgradePythonRuntime(globalDir, opts.ForcePython, &UpgradeRuntimeOptions{
 		HTTPClient: opts.HTTPClient,
@@ -778,6 +892,8 @@ func (r *DoctorReport) checkPythonRuntime(globalDir string, opts DoctorOptions) 
 	}
 	if !upgrade.Healthy {
 		r.Healthy = false
+	} else {
+		writeRuntimeEnvMarkerIfVenvDirExists(venvPath, opts.Runner)
 	}
 }
 
@@ -1054,7 +1170,8 @@ func UpgradePythonRuntime(globalDir string, force bool, opts *UpgradeRuntimeOpti
 		opts.HTTPClient = &http.Client{Timeout: 5 * time.Second}
 	}
 	result := UpgradeRuntimeResult{Healthy: true}
-	python := VenvPython(RuntimeVenvDir(globalDir))
+	venvPath := RuntimeVenvDir(globalDir)
+	python := VenvPython(venvPath)
 	if _, err := opts.Stat(python); err != nil {
 		result.add(DoctorWarn, "Python runtime venv not found at %s", python)
 		return result
@@ -1082,6 +1199,7 @@ func UpgradePythonRuntime(globalDir string, force bool, opts *UpgradeRuntimeOpti
 			editable, source := isEditableLingtaiInstall(opts.Runner, python)
 			if editable && dev.isEditableForKernel(source) {
 				result.add(DoctorOK, "Python lingtai already editable for local dev checkout (%s); skipping reinstall", dev.KernelSrc)
+				writeRuntimeEnvMarkerIfVenvDirExists(venvPath, opts.Runner)
 				return result
 			}
 			result.add(DoctorInfo, "Local dev checkout detected at %s; installing lingtai editable to replace the %s runtime",
@@ -1100,6 +1218,7 @@ func UpgradePythonRuntime(globalDir string, force bool, opts *UpgradeRuntimeOpti
 			}
 			result.Updated = true
 			result.add(DoctorOK, "Python lingtai runtime switched to editable dev install")
+			writeRuntimeEnvMarkerIfVenvDirExists(venvPath, opts.Runner)
 			return result
 		}
 	}
@@ -1118,6 +1237,7 @@ func UpgradePythonRuntime(globalDir string, force bool, opts *UpgradeRuntimeOpti
 		} else {
 			result.add(DoctorOK, "Python lingtai is an editable install; skipping upgrade")
 		}
+		writeRuntimeEnvMarkerIfVenvDirExists(venvPath, opts.Runner)
 		return result
 	}
 
@@ -1125,12 +1245,14 @@ func UpgradePythonRuntime(globalDir string, force bool, opts *UpgradeRuntimeOpti
 	if err != nil {
 		result.add(DoctorWarn, "Could not check latest Python lingtai on PyPI: %v", err)
 		if !force {
+			writeRuntimeEnvMarkerIfVenvDirExists(venvPath, opts.Runner)
 			return result
 		}
 	} else {
 		result.add(DoctorInfo, "Latest Python lingtai on PyPI: %s", latest)
 		if !force && installed == latest {
 			result.add(DoctorOK, "Python lingtai runtime is up to date")
+			writeRuntimeEnvMarkerIfVenvDirExists(venvPath, opts.Runner)
 			return result
 		}
 	}
@@ -1156,6 +1278,7 @@ func UpgradePythonRuntime(globalDir string, force bool, opts *UpgradeRuntimeOpti
 	}
 	result.Updated = true
 	result.add(DoctorOK, "Python lingtai runtime verified after upgrade")
+	writeRuntimeEnvMarkerIfVenvDirExists(venvPath, opts.Runner)
 	return result
 }
 

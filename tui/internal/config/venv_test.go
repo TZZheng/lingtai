@@ -1,7 +1,9 @@
 package config
 
 import (
+	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -28,6 +30,96 @@ func assertNoMutatingCalls(t *testing.T, calls []string) {
 		if mutatingCall(call) {
 			t.Fatalf("expected no install/brew/pip/uv install commands, but ran: %q (all: %#v)", call, calls)
 		}
+	}
+}
+
+func mkdirTestVenv(t *testing.T, venvPath string) {
+	t.Helper()
+	if err := os.MkdirAll(venvPath, 0o755); err != nil {
+		t.Fatalf("mkdir venv: %v", err)
+	}
+}
+
+func TestRuntimeEnvMarkerMissingIsLegacy(t *testing.T) {
+	venvPath := filepath.Join(t.TempDir(), "venv")
+	runner := commandRunnerFunc(func(string, ...string) CommandResult {
+		return CommandResult{Stdout: `{"status":"missing"}` + "\n"}
+	})
+	state, err := runtimeEnvMarkerStateForVenv(venvPath, runner)
+	if err != nil {
+		t.Fatalf("missing marker should not error: %v", err)
+	}
+	if state != runtimeEnvMarkerMissing {
+		t.Fatalf("state = %s, want %s", state, runtimeEnvMarkerMissing)
+	}
+}
+
+func TestRuntimeEnvMarkerDetectsDelegatedMismatch(t *testing.T) {
+	venvPath := filepath.Join(t.TempDir(), "venv")
+	runner := commandRunnerFunc(func(string, ...string) CommandResult {
+		return CommandResult{Stdout: `{"status":"mismatch","detail":"platform mismatch"}` + "\n"}
+	})
+
+	state, err := runtimeEnvMarkerStateForVenv(venvPath, runner)
+	if err != nil {
+		t.Fatalf("mismatched marker should not error: %v", err)
+	}
+	if state != runtimeEnvMarkerMismatch {
+		t.Fatalf("state = %s, want %s", state, runtimeEnvMarkerMismatch)
+	}
+}
+
+func TestRuntimeEnvMarkerMismatchRemovesManagedVenv(t *testing.T) {
+	venvPath := filepath.Join(t.TempDir(), "venv")
+	mkdirTestVenv(t, venvPath)
+	if err := os.WriteFile(filepath.Join(venvPath, "sentinel"), []byte("stale"), 0o644); err != nil {
+		t.Fatalf("write sentinel: %v", err)
+	}
+	runner := commandRunnerFunc(func(string, ...string) CommandResult {
+		return CommandResult{Stdout: `{"status":"mismatch"}` + "\n"}
+	})
+
+	if err := removeRuntimeVenvIfEnvMismatch(venvPath, runner); err != nil {
+		t.Fatalf("remove mismatched venv: %v", err)
+	}
+	if _, err := os.Stat(venvPath); !os.IsNotExist(err) {
+		t.Fatalf("mismatched managed venv should be removed, stat err=%v", err)
+	}
+}
+
+func TestRuntimeEnvMarkerCheckFailureDoesNotRemoveManagedVenv(t *testing.T) {
+	venvPath := filepath.Join(t.TempDir(), "venv")
+	mkdirTestVenv(t, venvPath)
+	if err := os.WriteFile(filepath.Join(venvPath, "sentinel"), []byte("keep"), 0o644); err != nil {
+		t.Fatalf("write sentinel: %v", err)
+	}
+	runner := commandRunnerFunc(func(string, ...string) CommandResult {
+		return CommandResult{Err: errors.New("timeout"), Stderr: "timed out"}
+	})
+
+	if err := removeRuntimeVenvIfEnvMismatch(venvPath, runner); err != nil {
+		t.Fatalf("checker failure should not surface as delete error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(venvPath, "sentinel")); err != nil {
+		t.Fatalf("checker failure must leave managed venv intact: %v", err)
+	}
+}
+
+func TestRuntimeEnvMarkerInvalidOutputDoesNotRemoveManagedVenv(t *testing.T) {
+	venvPath := filepath.Join(t.TempDir(), "venv")
+	mkdirTestVenv(t, venvPath)
+	if err := os.WriteFile(filepath.Join(venvPath, "sentinel"), []byte("keep"), 0o644); err != nil {
+		t.Fatalf("write sentinel: %v", err)
+	}
+	runner := commandRunnerFunc(func(string, ...string) CommandResult {
+		return CommandResult{Stdout: "not-json\n"}
+	})
+
+	if err := removeRuntimeVenvIfEnvMismatch(venvPath, runner); err != nil {
+		t.Fatalf("invalid checker output should not surface as delete error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(venvPath, "sentinel")); err != nil {
+		t.Fatalf("invalid checker output must leave managed venv intact: %v", err)
 	}
 }
 
