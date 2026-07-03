@@ -7,8 +7,8 @@ description: >
   triggered/executable SKILL.md files, de-privatizing and parameterizing local
   paths and human-specific details, a lightweight pre-publish benchmark/checklist,
   grooming shared-library candidates, and PR-ready skill cleanup.
-version: 1.0.0
-last_changed_at: "2026-06-29T08:41:45Z"
+version: 1.0.1
+last_changed_at: "2026-07-03T08:05:00Z"
 ---
 
 # Skill Stewardship
@@ -56,6 +56,14 @@ shared-library candidate (§5) until the pattern repeats.
 
 LingTai utility skills use progressive disclosure: a short **router** SKILL.md at
 the root plus focused **nested references** under `reference/<topic>/SKILL.md`.
+
+Read/context limits are a design signal, not a global hard-cap issue to keep
+open forever. Do not encode an old tool threshold as a blanket character limit,
+and do not paste dense material into the root just because a reader might need
+it later. The root should carry only the progressive-disclosure link; the
+related/reference file carries the detail and can be loaded on demand. For the
+current mechanics (frontmatter, layout, validator, and limit-aware structure),
+load `skills-manual` rather than duplicating that manual here.
 
 - Keep the router compact: a nested-reference catalog, a routing table, and
   cross-links. Detailed procedures live in the nested files, not the router.
@@ -115,7 +123,8 @@ heavy framework:
       `git log -1 --format=%cI -- path/to/SKILL.md`; for substantive skill
       edits, update it in the same commit.
 - [ ] Document structure is scannable: overview/core principle, when-to-use,
-      steps, related references.
+      steps, related references. Root routers contain links, not bulk; dense
+      content lives in related/nested reference files.
 - [ ] Declared dependencies/cross-linked skills exist and are named correctly.
 - [ ] Any commands/snippets were actually executed and produce the claimed output
       (the skill-benchmark practice caught real API breakage this way).
@@ -150,8 +159,9 @@ Bundle skill changes into a reviewable PR with:
 ## Related references
 
 - `skills-manual` — generic skill authoring: frontmatter spec, trigger syntax,
-  file layout, testing skills. Defer to it for mechanics; this reference covers
-  LingTai-specific stewardship.
+  file layout, testing skills, and current limit-aware router/reference
+  structure. Defer to it for mechanics; this reference covers LingTai-specific
+  stewardship and links to the manual instead of copying it.
 - `reference/pr-review-deliverables/SKILL.md` — review gates and the HTML
   explainer for a skill-changing PR.
 - `reference/contributing/SKILL.md` — issue → worktree → PR → merge loop and the

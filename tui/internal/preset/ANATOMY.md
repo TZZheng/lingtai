@@ -17,6 +17,8 @@ related_files:
   - tui/internal/preset/preset_allowed_revoke_test.go
   - tui/internal/preset/preset_propagate_test.go
   - tui/internal/preset/preset_agent_json_merge_test.go
+  - tui/internal/preset/skills/lingtai-dev-guide/SKILL.md
+  - tui/internal/preset/skills/lingtai-dev-guide/reference/skill-stewardship/SKILL.md
 maintenance: |
   Keep related_files as repo-relative paths to real files. Include neighboring
   ANATOMY.md files so the anatomy graph stays connected rather than isolated;
@@ -51,6 +53,7 @@ The preset package owns the atomic `{llm, capabilities}` bundle layer — loadin
 | `ResolveRefsWithAuth(refs, keys, auth)` / `ResolveRefs(refs, keys)` | `tui/internal/preset/preset.go` | health-check: Source, Exists, HasKey (+ `CodexAuthRef`) for each preset path; credential validity requires configured `api_key_env`, Codex OAuth, or Claude Code CLI auth for `claude-agent-sdk`. For codex, when `AuthState.CodexAuthDir` is set, validity is judged per-preset against the preset's own `manifest.llm.codex_auth_path` token file (empty → legacy `codex-auth.json` fallback) so multiple Codex accounts are independent; without the dir it falls back to the global `CodexOAuthConfigured` bool |
 | `Validate()` | `tui/internal/preset/preset.go:282` | mirrors kernel-side validation; `summary` non-empty, `tier` 1..5, `llm.provider`/`model` non-empty |
 | `//go:embed` directives | `tui/internal/preset/preset.go:16-47` | covenant, principle, procedures, templates, soul, recipe_assets, skills |
+| `skills/lingtai-dev-guide/` | `tui/internal/preset/skills/lingtai-dev-guide/SKILL.md:1`, `tui/internal/preset/skills/lingtai-dev-guide/reference/skill-stewardship/SKILL.md:1` | Bundled developer guide utility skill and its skill-stewardship nested reference, including the rule that skill authors keep routers lean and link dense content through progressive disclosure rather than encoding stale hard caps. |
 | `CopyBundle` | `tui/internal/preset/recipe_apply.go:59` | copies `.recipe/` (replace) + recipe skill library sibling (merge) + `.lingtai/` (merge) into project |
 | `RecipeNeedsApply` | `tui/internal/preset/recipe_apply.go:133` | diffs `.recipe/` vs last-applied snapshot under `.tui-asset/.recipe/` |
 | `ApplyRecipe` | `tui/internal/preset/recipe_apply.go:179` | writes `.prompt` + patches `skills.paths` per agent; snapshots `.recipe/` |

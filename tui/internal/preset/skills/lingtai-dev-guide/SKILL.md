@@ -8,8 +8,8 @@ description: >
   publication-bound release workflow, run a runtime self-check, get a PR
   review-ready, or steward a new skill. This is for developers and contributors;
   for end-user lessons, use tutorial-guide.
-version: 2.6.0
-last_changed_at: "2026-06-28T22:46:25-07:00"
+version: 2.6.1
+last_changed_at: "2026-07-03T08:05:00Z"
 ---
 
 # LingTai Developer Guide
@@ -42,6 +42,11 @@ stays short on purpose; the detailed procedures live under `reference/<topic>/`.
   refreshed, and a live in-situ probe confirms the new behaviour. For kernel
   fixes, always identify the actual import path and git HEAD first; do not
   assume the repo you edited is the one this agent imports.
+- **Skill-size/progressive-disclosure rule:** when writing or updating skills,
+  treat read/context limits as a reason to keep the router lean and link onward,
+  not as a reason to paste large content into `SKILL.md`. Put dense material in
+  related/nested reference files and link to `skills-manual` for current
+  authoring mechanics and limit-aware structure.
 
 ## ANATOMY frontmatter contract
 
@@ -193,7 +198,7 @@ drill-down files, not standalone top-level skills.
 | Navigate Go TUI/portal code structurally | `lingtai-tui-anatomy` |
 | Navigate Python kernel code structurally | `lingtai-kernel-anatomy` |
 | Develop, register, or troubleshoot MCP servers/addons | `mcp-manual` first, then `lingtai-kernel-anatomy` `reference/mcp-protocol.md` |
-| Author or publish skills | `skills-manual` |
+| Author or publish skills, including limit-aware router/reference structure | `skills-manual`, then `reference/skill-stewardship/SKILL.md` for LingTai-dev stewardship |
 | Customize, export, or package project methodology as a recipe | `lingtai-recipe` |
 | Work on portal APIs, topology recording, replay, or `.portal/` state | `lingtai-portal-guide` |
 | Prepare for a consequential molt during long dev work | `psyche-manual` |

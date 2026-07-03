@@ -394,6 +394,7 @@ func TestBuildSkillFolderEntries_DevGuideNestedReferences(t *testing.T) {
 		"reference/runtime-self-check/SKILL.md",
 		"reference/pr-review-deliverables/SKILL.md",
 		"reference/skill-stewardship/SKILL.md",
+		"Skill-size/progressive-disclosure rule",
 	} {
 		if !strings.Contains(rootBody, want) {
 			t.Errorf("lingtai-dev-guide root missing %q", want)
@@ -502,6 +503,9 @@ func TestBuildSkillFolderEntries_DevGuideNestedReferences(t *testing.T) {
 		"router",
 		"nested-reference",
 		"skills-manual",
+		"Read/context limits",
+		"progressive-disclosure link",
+		"related/reference file",
 		"de-priv",
 	} {
 		if !strings.Contains(stewardshipBody, want) {
