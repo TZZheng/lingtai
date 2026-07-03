@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -84,6 +85,32 @@ func TestRuntimeEnvMarkerMismatchRemovesManagedVenv(t *testing.T) {
 	}
 	if _, err := os.Stat(venvPath); !os.IsNotExist(err) {
 		t.Fatalf("mismatched managed venv should be removed, stat err=%v", err)
+	}
+}
+
+func TestRuntimeEnvMarkerLocalPlatformMismatchRemovesManagedVenvWhenPythonCannotRun(t *testing.T) {
+	venvPath := filepath.Join(t.TempDir(), "venv")
+	mkdirTestVenv(t, venvPath)
+	if err := os.WriteFile(filepath.Join(venvPath, "sentinel"), []byte("stale"), 0o644); err != nil {
+		t.Fatalf("write sentinel: %v", err)
+	}
+	markerOS := "windows"
+	if runtime.GOOS == markerOS {
+		markerOS = "darwin"
+	}
+	marker := `{"schema":"lingtai.runtime-env","schema_version":1,"lingtai_env_version":1,"os":"` + markerOS + `","arch":"` + runtime.GOARCH + `","python":{}}` + "\n"
+	if err := os.WriteFile(filepath.Join(venvPath, runtimeEnvMarkerFileName), []byte(marker), 0o644); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	runner := commandRunnerFunc(func(string, ...string) CommandResult {
+		return CommandResult{Err: errors.New("exec format error"), Stderr: "cannot execute"}
+	})
+
+	if err := removeRuntimeVenvIfEnvMismatch(venvPath, runner); err != nil {
+		t.Fatalf("remove platform-mismatched venv: %v", err)
+	}
+	if _, err := os.Stat(venvPath); !os.IsNotExist(err) {
+		t.Fatalf("platform-mismatched managed venv should be removed, stat err=%v", err)
 	}
 }
 

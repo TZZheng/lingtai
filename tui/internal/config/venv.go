@@ -44,7 +44,38 @@ type runtimeEnvMarkerCheck struct {
 	StampStatus string `json:"stamp_status"`
 }
 
+type runtimeEnvMarkerFile struct {
+	Schema            string `json:"schema"`
+	SchemaVersion     int    `json:"schema_version"`
+	LingtaiEnvVersion int    `json:"lingtai_env_version"`
+	OS                string `json:"os"`
+	Arch              string `json:"arch"`
+}
+
+const (
+	runtimeEnvMarkerFileName = ".lingtai-env.json"
+	runtimeEnvMarkerSchema   = "lingtai.runtime-env"
+)
+
+func runtimeEnvMarkerPlatformMismatch(venvPath string) bool {
+	raw, err := os.ReadFile(filepath.Join(venvPath, runtimeEnvMarkerFileName))
+	if err != nil {
+		return false
+	}
+	var marker runtimeEnvMarkerFile
+	if err := json.Unmarshal(raw, &marker); err != nil {
+		return false
+	}
+	if marker.Schema != runtimeEnvMarkerSchema || marker.SchemaVersion != 1 || marker.LingtaiEnvVersion != 1 {
+		return false
+	}
+	return marker.OS != runtime.GOOS || marker.Arch != runtime.GOARCH
+}
+
 func runtimeEnvMarkerStateForVenv(venvPath string, runner CommandRunner) (runtimeEnvMarkerState, error) {
+	if runtimeEnvMarkerPlatformMismatch(venvPath) {
+		return runtimeEnvMarkerMismatch, nil
+	}
 	check, err := runRuntimeEnvMarkerCommand(venvPath, runner, "check")
 	if err != nil {
 		return runtimeEnvMarkerUnknown, err
