@@ -370,6 +370,85 @@ func TestComputeNetworkActivity_StatusRuntimeLastProgressWindow(t *testing.T) {
 	}
 }
 
+func TestHasStatusActivity_FutureTimestampFreshness(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+
+	cases := []struct {
+		name   string
+		status map[string]interface{}
+		mtime  time.Time
+		want   bool
+	}{
+		{
+			name: "standalone modest future last_progress_at clamps to now",
+			status: map[string]interface{}{
+				"runtime": map[string]interface{}{
+					"last_progress_at": now.Add(30 * time.Second).Unix(),
+				},
+			},
+			mtime: now.Add(-2 * networkRecentProgressWindow),
+			want:  true,
+		},
+		{
+			name: "standalone far future last_progress_at ignored",
+			status: map[string]interface{}{
+				"runtime": map[string]interface{}{
+					"last_progress_at": now.Add(24 * time.Hour).Unix(),
+				},
+			},
+			mtime: now,
+			want:  false,
+		},
+		{
+			name: "active turn modest future started_at clamps to now",
+			status: map[string]interface{}{
+				"active_turn": map[string]interface{}{
+					"kind":       "tool",
+					"id":         "turn-1",
+					"started_at": now.Add(30 * time.Second).Unix(),
+				},
+			},
+			mtime: now.Add(-2 * networkActiveTurnCap),
+			want:  true,
+		},
+		{
+			name: "active turn far future started_at does not hide fresh mtime",
+			status: map[string]interface{}{
+				"active_turn": map[string]interface{}{
+					"kind":       "tool",
+					"id":         "turn-2",
+					"started_at": now.Add(24 * time.Hour).Unix(),
+				},
+			},
+			mtime: now,
+			want:  true,
+		},
+		{
+			name: "active turn far future started_at ignored without fresh evidence",
+			status: map[string]interface{}{
+				"active_turn": map[string]interface{}{
+					"kind":       "tool",
+					"id":         "turn-3",
+					"started_at": now.Add(24 * time.Hour).Unix(),
+				},
+			},
+			mtime: now.Add(-2 * networkActiveTurnCap),
+			want:  false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			agentDir := t.TempDir()
+			writeStatus(t, agentDir, tc.status, tc.mtime)
+
+			if got := hasStatusActivity(agentDir, now); got != tc.want {
+				t.Fatalf("hasStatusActivity = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestComputeNetworkActivity_StatusEvidenceRequiresFreshHeartbeat(t *testing.T) {
 	base := t.TempDir()
 	agentDir := writeActivityAgent(t, base, "alice", "IDLE", false)

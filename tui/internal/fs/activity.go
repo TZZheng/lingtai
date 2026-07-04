@@ -22,6 +22,7 @@ const (
 const (
 	networkActiveTurnCap        = 600 * time.Second
 	networkRecentProgressWindow = 90 * time.Second
+	networkFutureTimestampGrace = 2 * time.Minute
 )
 
 // NetworkActivity is the project-level activity summary for non-human agents.
@@ -177,17 +178,19 @@ func hasStatusActivity(agentDir string, now time.Time) bool {
 		return false
 	}
 	if status.ActiveTurn != nil {
-		freshAt := mtime
+		candidates := []time.Time{mtime}
 		if status.ActiveTurn.StartedAt.OK {
-			freshAt = laterTime(freshAt, unixSeconds(status.ActiveTurn.StartedAt.Value))
+			candidates = append(candidates, unixSeconds(status.ActiveTurn.StartedAt.Value))
 		}
 		if status.Runtime.LastProgressAt.OK {
-			freshAt = laterTime(freshAt, unixSeconds(status.Runtime.LastProgressAt.Value))
+			candidates = append(candidates, unixSeconds(status.Runtime.LastProgressAt.Value))
 		}
+		freshAt := latestStatusFreshnessTime(now, candidates...)
 		return within(now, freshAt, networkActiveTurnCap)
 	}
 	if status.Runtime.LastProgressAt.OK {
-		return within(now, unixSeconds(status.Runtime.LastProgressAt.Value), networkRecentProgressWindow)
+		freshAt := latestStatusFreshnessTime(now, unixSeconds(status.Runtime.LastProgressAt.Value))
+		return within(now, freshAt, networkRecentProgressWindow)
 	}
 	return false
 }
@@ -209,11 +212,31 @@ func readNetworkStatusSnapshot(agentDir string) (networkStatusSnapshot, time.Tim
 	return status, info.ModTime(), true
 }
 
-func laterTime(a, b time.Time) time.Time {
-	if b.After(a) {
-		return b
+func latestStatusFreshnessTime(now time.Time, candidates ...time.Time) time.Time {
+	var latest time.Time
+	for _, candidate := range candidates {
+		t, ok := statusFreshnessTime(now, candidate)
+		if !ok {
+			continue
+		}
+		if t.After(latest) {
+			latest = t
+		}
 	}
-	return a
+	return latest
+}
+
+func statusFreshnessTime(now, t time.Time) (time.Time, bool) {
+	if t.IsZero() {
+		return time.Time{}, false
+	}
+	if t.After(now) {
+		if t.Sub(now) > networkFutureTimestampGrace {
+			return time.Time{}, false
+		}
+		return now, true
+	}
+	return t, true
 }
 
 func unixSeconds(v float64) time.Time {
