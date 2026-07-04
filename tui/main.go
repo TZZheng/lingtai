@@ -23,7 +23,6 @@ import (
 	"github.com/anthropics/lingtai-tui/internal/postman"
 	"github.com/anthropics/lingtai-tui/internal/preset"
 	"github.com/anthropics/lingtai-tui/internal/process"
-	"github.com/anthropics/lingtai-tui/internal/timemachine"
 	"github.com/anthropics/lingtai-tui/internal/tui"
 )
 
@@ -58,14 +57,6 @@ func main() {
 		}
 		if arg == "suspend" {
 			suspendMain()
-			return
-		}
-		if arg == "timemachine" {
-			if len(os.Args) < 3 {
-				fmt.Fprintf(os.Stderr, "Usage: lingtai-tui timemachine <lingtaiDir>\n")
-				os.Exit(1)
-			}
-			timemachine.Run(os.Args[2])
 			return
 		}
 		if arg == "postman" {
@@ -321,13 +312,6 @@ func main() {
 		// Resolve human location in background (ipinfo.io, cached 1h)
 		humanDir := filepath.Join(lingtaiDir, "human")
 		go fs.UpdateHumanLocation(humanDir)
-
-		// Time machine is no longer auto-launched on TUI startup. The daemon
-		// remains available as a hidden/manual subcommand for one release:
-		//   lingtai-tui timemachine <lingtaiDir>
-		// (see the subcommand dispatch near the top of main). The package,
-		// migration, and tests are retained; only the default auto-launch was
-		// removed. See issue #526.
 	}
 	// If needsFirstRun: welcome page goroutine handles everything
 
