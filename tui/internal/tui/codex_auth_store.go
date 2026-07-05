@@ -82,6 +82,9 @@ func readCodexTokenFile(path string) (CodexTokens, bool) {
 	if json.Unmarshal(data, &tokens) != nil || tokens.RefreshToken == "" {
 		return CodexTokens{}, false
 	}
+	if strings.TrimSpace(tokens.Email) == "" {
+		tokens.Email = extractEmailFromJWT(tokens.AccessToken)
+	}
 	return tokens, true
 }
 
