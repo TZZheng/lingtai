@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -192,5 +193,66 @@ func TestLoginModel_PoolWeightIgnoredOnVirtualRow(t *testing.T) {
 	// No pool file should have been created.
 	if w := codexPoolWeights(globalDir); len(w) != 0 {
 		t.Errorf("virtual-row pool edit must not write the pool file; got %v", w)
+	}
+}
+
+// TestLoginModel_CorruptPoolFileWarns guards N5: a malformed codex-auth-pool.json
+// must surface a visible warning in the credentials view (and set the model's
+// poolCorrupt flag) instead of silently rendering every account as "not in
+// pool". The bad file must be left untouched.
+func TestLoginModel_CorruptPoolFileWarns(t *testing.T) {
+	t.Setenv("LINGTAI_TUI_DIR", "")
+	_, globalDir := withTempCodexHome(t)
+
+	acctPath := filepath.Join(globalDir, codexAuthSubdir, "work.json")
+	writeCodexTokenAt(t, acctPath, "work@example.com")
+
+	// Write a malformed pool file.
+	poolFile := codexPoolPath(globalDir)
+	badContent := []byte("{not valid json")
+	if err := os.WriteFile(poolFile, badContent, 0o644); err != nil {
+		t.Fatalf("seed malformed pool: %v", err)
+	}
+
+	m := NewLoginModel("", globalDir)
+	if !m.poolCorrupt {
+		t.Fatal("model should flag a malformed pool file as corrupt")
+	}
+
+	m.width = 100
+	view := m.View()
+	if !strings.Contains(view, i18n.T("login.codex_pool_corrupt")) {
+		t.Errorf("view should warn about the corrupt pool file; view=%q", view)
+	}
+
+	// The corrupt file must not have been clobbered.
+	got, err := os.ReadFile(poolFile)
+	if err != nil {
+		t.Fatalf("read pool file back: %v", err)
+	}
+	if string(got) != string(badContent) {
+		t.Errorf("corrupt pool file must be preserved verbatim; got %q", string(got))
+	}
+}
+
+// TestLoginModel_MissingPoolFileNoWarn pins that the N5 warning is scoped to
+// CORRUPT files: a missing pool file stays quiet (no warning, poolCorrupt false),
+// preserving the existing no-pool UX.
+func TestLoginModel_MissingPoolFileNoWarn(t *testing.T) {
+	t.Setenv("LINGTAI_TUI_DIR", "")
+	_, globalDir := withTempCodexHome(t)
+
+	acctPath := filepath.Join(globalDir, codexAuthSubdir, "work.json")
+	writeCodexTokenAt(t, acctPath, "work@example.com")
+
+	m := NewLoginModel("", globalDir)
+	if m.poolCorrupt {
+		t.Fatal("a missing pool file must not be flagged corrupt")
+	}
+
+	m.width = 100
+	view := m.View()
+	if strings.Contains(view, i18n.T("login.codex_pool_corrupt")) {
+		t.Errorf("no corrupt warning should show for a missing pool file; view=%q", view)
 	}
 }

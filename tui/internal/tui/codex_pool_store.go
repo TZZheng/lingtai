@@ -193,6 +193,19 @@ func codexPoolWeights(globalDir string) map[string]int {
 	return out
 }
 
+// codexPoolFileCorrupt reports whether the pool file exists but fails to parse.
+// A missing file is NOT corrupt (returns false) — that is the normal "no pool
+// yet" state. Used by the credentials UI to warn the user that a malformed pool
+// file is being ignored for display (and won't be overwritten), instead of
+// silently rendering every account as "not in pool".
+func codexPoolFileCorrupt(globalDir string) bool {
+	if _, err := os.Stat(codexPoolPath(globalDir)); err != nil {
+		return false // missing (or unstattable) — not a parse-corruption case
+	}
+	_, err := loadCodexPool(globalDir)
+	return err != nil
+}
+
 // codexPoolMembership reports an account's real pool state for absPath: inPool
 // is true only when the pool file actually records the account, and weight is
 // its stored weight (meaningful only when inPool). An account absent from the
@@ -209,8 +222,17 @@ func codexPoolMembership(weights map[string]int, absPath string) (inPool bool, w
 // setCodexPoolWeight records weight for the token file at absPath and persists
 // the pool file, creating it on first edit (the lazy-write policy). The account
 // is added if absent, updated in place if present. Other accounts and their
-// weights are preserved. absPath is converted to a stable ref via
-// codexPoolRefForPath before storage so only relative/`~/` refs are written.
+// weights are preserved in their original order.
+//
+// Entries are matched by RESOLVED ABSOLUTE token path, not by ref string, so a
+// weight edit lands on the right account even when the stored ref used a
+// different style (relative vs "~/"/absolute) — e.g. because LINGTAI_TUI_DIR
+// changed between edits. To stay robust against a pool that already contains
+// more than one entry resolving to the same token (a duplicate produced before
+// this fix), the save collapses all such entries into a single account: the
+// first occurrence keeps its slot but adopts the current output ref style
+// (codexPoolRefForPath) and the new weight; any later duplicates are dropped.
+// The result always holds at most one account per resolved absolute token.
 func setCodexPoolWeight(globalDir, absPath string, weight int) error {
 	if weight < 0 {
 		weight = 0
@@ -220,13 +242,27 @@ func setCodexPoolWeight(globalDir, absPath string, weight int) error {
 		// A malformed pool file must not be silently overwritten — surface it.
 		return err
 	}
+
 	ref := codexPoolRefForPath(globalDir, absPath)
-	for i := range pool.Accounts {
-		if resolveCodexPoolRef(globalDir, pool.Accounts[i].Path) == absPath {
-			pool.Accounts[i].Weight = weight
-			return saveCodexPool(globalDir, pool)
+	deduped := make([]codexPoolAccount, 0, len(pool.Accounts))
+	applied := false
+	for _, acct := range pool.Accounts {
+		if resolveCodexPoolRef(globalDir, acct.Path) == absPath {
+			if applied {
+				// A second (or later) entry for the same token — drop it so the
+				// pool holds a single account for this abs path.
+				continue
+			}
+			// First match: normalize its ref style and set the new weight.
+			deduped = append(deduped, codexPoolAccount{Path: ref, Weight: weight})
+			applied = true
+			continue
 		}
+		deduped = append(deduped, acct)
 	}
-	pool.Accounts = append(pool.Accounts, codexPoolAccount{Path: ref, Weight: weight})
+	if !applied {
+		deduped = append(deduped, codexPoolAccount{Path: ref, Weight: weight})
+	}
+	pool.Accounts = deduped
 	return saveCodexPool(globalDir, pool)
 }

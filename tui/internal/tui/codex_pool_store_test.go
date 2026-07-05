@@ -241,3 +241,104 @@ func TestSetCodexPoolWeight_ClampsNegative(t *testing.T) {
 		t.Errorf("negative weight should clamp to 0; got %d", w)
 	}
 }
+
+// TestSetCodexPoolWeight_DedupesSameAbsToken guards N2: a pool that already
+// holds two entries resolving to the SAME absolute token (e.g. one relative ref
+// and one absolute ref left behind after LINGTAI_TUI_DIR changed between edits)
+// must collapse to a single account on the next weight edit — not update one and
+// leave the stale duplicate distorting the effective weight.
+func TestSetCodexPoolWeight_DedupesSameAbsToken(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINGTAI_TUI_DIR", dir)
+
+	work := filepath.Join(dir, codexAuthSubdir, "work.json")
+	other := filepath.Join(dir, codexAuthSubdir, "home.json")
+
+	// Seed a pool with a duplicate for `work` (relative + absolute refs both
+	// resolving to `work`) plus an unrelated account. Weights differ so we can
+	// tell which survived.
+	seeded := codexPool{
+		Version: codexPoolVersion,
+		Accounts: []codexPoolAccount{
+			{Path: "codex-auth/work.json", Weight: 2}, // relative → work
+			{Path: other, Weight: 7},                  // unrelated (absolute)
+			{Path: work, Weight: 9},                   // absolute → work (duplicate)
+		},
+	}
+	if err := saveCodexPool(dir, seeded); err != nil {
+		t.Fatalf("seed pool: %v", err)
+	}
+
+	// Precondition: two entries currently resolve to `work`.
+	pre, err := loadCodexPool(dir)
+	if err != nil {
+		t.Fatalf("load seeded pool: %v", err)
+	}
+	dupes := 0
+	for _, a := range pre.Accounts {
+		if resolveCodexPoolRef(dir, a.Path) == work {
+			dupes++
+		}
+	}
+	if dupes != 2 {
+		t.Fatalf("precondition: expected 2 duplicate entries for work; got %d", dupes)
+	}
+
+	// Edit the weight for `work` — should collapse the duplicates into one.
+	if err := setCodexPoolWeight(dir, work, 5); err != nil {
+		t.Fatalf("set work weight: %v", err)
+	}
+
+	pool, err := loadCodexPool(dir)
+	if err != nil {
+		t.Fatalf("reload pool: %v", err)
+	}
+	matches := 0
+	for _, a := range pool.Accounts {
+		if resolveCodexPoolRef(dir, a.Path) == work {
+			matches++
+			if a.Weight != 5 {
+				t.Errorf("deduped work weight = %d, want 5", a.Weight)
+			}
+		}
+	}
+	if matches != 1 {
+		t.Fatalf("expected exactly 1 entry for work after dedup; got %d (%#v)", matches, pool.Accounts)
+	}
+	// The unrelated account must survive untouched.
+	if w := codexPoolWeights(dir)[other]; w != 7 {
+		t.Errorf("unrelated account weight = %d, want 7 (preserved)", w)
+	}
+	// codexPoolWeights (map keyed by abs path) must agree.
+	if w := codexPoolWeights(dir)[work]; w != 5 {
+		t.Errorf("resolved work weight = %d, want 5", w)
+	}
+}
+
+// TestCodexPoolFileCorrupt guards N5's detection helper: a malformed pool file
+// reports corrupt=true, a missing one reports false, and a valid one reports
+// false.
+func TestCodexPoolFileCorrupt(t *testing.T) {
+	t.Setenv("LINGTAI_TUI_DIR", "")
+
+	missing := t.TempDir()
+	if codexPoolFileCorrupt(missing) {
+		t.Error("a missing pool file must not be reported corrupt")
+	}
+
+	bad := t.TempDir()
+	if err := os.WriteFile(codexPoolPath(bad), []byte("{not json"), 0o644); err != nil {
+		t.Fatalf("seed malformed pool: %v", err)
+	}
+	if !codexPoolFileCorrupt(bad) {
+		t.Error("a malformed pool file must be reported corrupt")
+	}
+
+	good := t.TempDir()
+	if err := setCodexPoolWeight(good, filepath.Join(good, codexAuthSubdir, "w.json"), 1); err != nil {
+		t.Fatalf("seed valid pool: %v", err)
+	}
+	if codexPoolFileCorrupt(good) {
+		t.Error("a valid pool file must not be reported corrupt")
+	}
+}

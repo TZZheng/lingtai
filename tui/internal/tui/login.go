@@ -122,6 +122,11 @@ type LoginModel struct {
 	// membership lives entirely in the pool file — editing weights here never
 	// rewrites presets.
 	poolWeights map[string]int
+	// poolCorrupt is true when codex-auth-pool.json exists but fails to parse.
+	// The credentials view then shows a warning that pool weights can't be read
+	// (so accounts render as "not in pool") and that the bad file will NOT be
+	// clobbered. A missing pool file is not corrupt and sets this false.
+	poolCorrupt bool
 }
 
 // NewSetupCredentialsModel opens the credential manager as a /setup subpage.
@@ -240,6 +245,10 @@ func NewLoginModel(orchDir, globalDir string) LoginModel {
 	// missing/broken pool file yields an empty map — every account then reads
 	// as not-in-pool, which is exactly the truth.
 	m.poolWeights = codexPoolWeights(globalDir)
+	// A malformed (present-but-unparseable) pool file is surfaced as a warning
+	// rather than silently degrading to "everything not in pool"; a missing file
+	// stays quiet.
+	m.poolCorrupt = codexPoolFileCorrupt(globalDir)
 
 	return m
 }
@@ -1018,6 +1027,15 @@ func (m LoginModel) View() string {
 			}
 			b.WriteString(line + "\n")
 		}
+	}
+
+	// A malformed pool file is surfaced explicitly: without this, every account
+	// silently reads as "not in pool" and the user has no idea their weights are
+	// being ignored. The message also reassures that the bad file is preserved,
+	// not overwritten. Rendered in the alert color and independent of the
+	// hasCodexOAuth() gate so the warning shows even if no account row is present.
+	if m.poolCorrupt {
+		b.WriteString("\n  " + lipgloss.NewStyle().Foreground(ColorStuck).Render(i18n.T("login.codex_pool_corrupt")) + "\n")
 	}
 
 	// One-line explanation tying the two Codex affordances to their presets, so
