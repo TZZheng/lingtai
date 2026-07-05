@@ -79,13 +79,13 @@ func readCodexTokenFile(path string) (CodexTokens, bool) {
 		return CodexTokens{}, false
 	}
 	var tokens CodexTokens
-	if json.Unmarshal(data, &tokens) != nil || tokens.RefreshToken == "" {
+	if json.Unmarshal(data, &tokens) != nil {
 		return CodexTokens{}, false
 	}
 	if strings.TrimSpace(tokens.Email) == "" {
 		tokens.Email = extractEmailFromJWT(tokens.AccessToken)
 	}
-	return tokens, true
+	return tokens, strings.TrimSpace(tokens.RefreshToken) != ""
 }
 
 // codexAuthPathValid reports whether the token file at the given absolute path

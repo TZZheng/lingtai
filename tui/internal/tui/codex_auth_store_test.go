@@ -108,6 +108,30 @@ func TestReadCodexTokenFileDerivesEmailFromAccessToken(t *testing.T) {
 	}
 }
 
+func TestReadCodexTokenFileKeepsEmailForInvalidRefresh(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "codex-auth.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	tok := CodexTokens{
+		AccessToken: fakeCodexAccessTokenWithEmail(t, "invalid@example.com"),
+		ExpiresAt:   9999999999,
+	}
+	data, _ := json.Marshal(tok)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write token: %v", err)
+	}
+
+	got, ok := readCodexTokenFile(path)
+	if ok {
+		t.Fatal("token file without refresh_token should remain invalid")
+	}
+	if got.Email != "invalid@example.com" {
+		t.Fatalf("invalid token file should still keep derived email for display; got %q", got.Email)
+	}
+}
+
 // TestListCodexAccounts_LegacyAndPerAccount verifies enumeration surfaces the
 // legacy file (as a legacy account with empty ref) plus per-account files.
 func TestListCodexAccounts_LegacyAndPerAccount(t *testing.T) {
