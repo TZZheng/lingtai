@@ -64,6 +64,26 @@ func hasChatTailHint(m MailModel) bool {
 	return strings.Contains(m.View(), i18n.T("mail.jump_bottom_hint"))
 }
 
+func TestMailChatTailHintStyleReadableOnDarkBackground(t *testing.T) {
+	prevTheme := ActiveTheme()
+	SetTheme(ThemeInkDark())
+	t.Cleanup(func() {
+		SetTheme(prevTheme)
+	})
+
+	got := colorToHex(chatTailHintStyle().GetForeground())
+	want := colorToHex(ColorTextDim)
+	if got != want {
+		t.Fatalf("chat-tail hint foreground = %s, want readable secondary text %s", got, want)
+	}
+	if got == colorToHex(ColorTextFaint) {
+		t.Fatalf("chat-tail hint foreground must not use faintest text color %s on dark backgrounds", got)
+	}
+	if chatTailHintStyle().GetFaint() {
+		t.Fatal("chat-tail hint style must not rely on ANSI faint rendering for dark-background readability")
+	}
+}
+
 func TestMailCtrlEndKeyRepresentation(t *testing.T) {
 	ctrlEndKey(t)
 }

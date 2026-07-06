@@ -1408,7 +1408,7 @@ func (m MailModel) viewportWithChatTailHint() string {
 	if lipgloss.Width(text) > maxHintWidth {
 		text = ansi.Truncate(text, maxHintWidth, "…")
 	}
-	hint := StyleFaint.Render(" " + text + " ")
+	hint := chatTailHintStyle().Render(" " + text + " ")
 	hintWidth := lipgloss.Width(hint)
 	if hintWidth <= 0 || hintWidth > m.width {
 		return view
@@ -1437,6 +1437,10 @@ func (m MailModel) viewportWithChatTailHint() string {
 	}
 	lines[row] = prefix + hint + strings.Repeat(" ", suffix)
 	return strings.Join(lines, "\n")
+}
+
+func chatTailHintStyle() lipgloss.Style {
+	return StyleSubtle
 }
 
 // humanName returns the human's display name. Prefers nickname from .agent.json,
