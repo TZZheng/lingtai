@@ -431,8 +431,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// registration haven't run yet for this launch. The startup
 		// reconciliation in main.go covers subsequent launches, but the
 		// very first launch after rehydration needs this hook too.
-		if preset.RecipeNeedsApply(a.projectDir) {
-			humanDir := filepath.Join(a.projectDir, ".lingtai", "human")
+		//
+		// a.projectDir is the .lingtai/ dir (main.go passes lingtaiDir to
+		// NewApp); the recipe resolvers want the parent project root that
+		// contains both .recipe/ and .lingtai/, so derive it here.
+		projectRoot := filepath.Dir(a.projectDir)
+		if preset.RecipeNeedsApply(projectRoot) {
+			humanDir := filepath.Join(a.projectDir, "human")
 			haddr := "human"
 			if humanNode, err := fs.ReadAgent(humanDir); err == nil && humanNode.Address != "" {
 				haddr = humanNode.Address
@@ -444,7 +449,23 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			subst := func(tmpl string) string {
 				return SubstituteGreetPlaceholders(tmpl, haddr, humanDir, lang, "120")
 			}
-			_, _ = preset.ApplyRecipe(a.projectDir, lang, subst)
+			applied, err := preset.ApplyRecipe(projectRoot, lang, subst)
+			if err != nil {
+				// Recipe materialization failed (.prompt writes,
+				// init.json/skills.paths parse/write, snapshot copy, …).
+				// Launching now would boot the agent with stale/partial
+				// prompt + skill state, which is worse than not launching.
+				// Block the launch and surface a persistent, localized mail
+				// warning so the failure is visible, not silent.
+				fmt.Fprintf(os.Stderr, "warning: recipe re-apply failed before first-run launch (applied %d): %v\n", applied, err)
+				a.currentView = appViewMail
+				humanDir := filepath.Join(a.projectDir, "human")
+				addr := humanAddr(a.projectDir)
+				a.mail = NewMailModel(humanDir, addr, a.projectDir, a.orchDir, a.orchName, a.tuiConfig.MailPageSize, a.globalDir, a.tuiConfig.Language, a.tuiConfig.Insights, a.tuiConfig.ToolCallTruncate)
+				a.mail.messages = append(a.mail.messages, ChatMessage{From: i18n.T("mail.system_sender"), Body: i18n.TF("mail.recipe_reapply_failed", err), Type: "mail"})
+				return a, tea.Batch(a.mail.Init(), a.sendSize())
+			}
+			fmt.Fprintf(os.Stderr, "recipe re-applied before first-run launch (%d agent(s))\n", applied)
 		}
 
 		// Launch the agent
