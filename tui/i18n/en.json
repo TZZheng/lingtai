@@ -138,6 +138,7 @@
   "mail.cpr_all_with_failures": "Revived %d agent(s); %d failed: %s",
   "mail.lang_moved": "Agent language is now in /settings. Change it there, then /refresh.",
   "mail.launch_failed": "Failed to launch agent: %s",
+  "mail.recipe_reapply_failed": "Recipe re-apply failed before launch; agent was not launched: %s",
   "mail.editor_hint": "Input box scrolls at this size. Use pgup/pgdn or mouse wheel here; ctrl+e opens vim/editor.",
   "mail.meta_hidden_hint": "_meta hidden — use /notification to see the meta block",
   "mail.token_usage_footer": "tokens: input %s · cache miss %s · output %s · cache rate %s",

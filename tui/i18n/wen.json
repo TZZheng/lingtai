@@ -138,6 +138,7 @@
   "mail.cpr_all_with_failures": "已苏 %d 灵；%d 灵不就：%s",
   "mail.lang_moved": "器灵言已移至 /settings。请于彼处改之，后 /refresh。",
   "mail.launch_failed": "启灵失败：%s",
+  "mail.recipe_reapply_failed": "启灵前重施丹方未果，器灵未启：%s",
   "mail.editor_hint": "输入之框已可内滚：于此滚轮，或按 pgup/pgdn；ctrl+e 启 vim/编辑器。",
   "mail.meta_hidden_hint": "_meta 已隐 —— 用 /notification 以观 meta 之块",
   "mail.token_usage_footer": "字符：入 %s · 未中缓存 %s · 出 %s · 缓存中率 %s",
