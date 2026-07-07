@@ -98,7 +98,13 @@ func migrateAgentInitContextPresetRepairOnly(lingtaiDir string) error {
 		initPath := filepath.Join(agentDir, "init.json")
 		data, err := os.ReadFile(initPath)
 		if err != nil {
-			continue // non-agent dir (library/asset) or unreadable — skip
+			if os.IsNotExist(err) {
+				continue // non-agent dir (library/asset) — skip
+			}
+			// Unreadable init.json may still need repair; fail the
+			// migration so it re-runs instead of stranding the agent.
+			errs = append(errs, fmt.Errorf("%s: read init.json: %w", name, err))
+			continue
 		}
 		var init map[string]interface{}
 		if err := json.Unmarshal(data, &init); err != nil {

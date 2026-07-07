@@ -883,9 +883,17 @@ func cleanMain() {
 // survivors are listed in the returned error: deleting a live agent's
 // working directory strands the process and destroys state it is still
 // writing (issue #488). force skips the survivor guard, not the suspend
-// attempt.
+// attempt; it also overrides a failed agent discovery, which otherwise
+// refuses to remove anything because live agents could be hiding in an
+// unlistable directory.
 func cleanProject(lingtaiDir string, force bool, waitTimeout time.Duration) error {
-	agents, _ := fs.DiscoverAgents(lingtaiDir)
+	agents, err := fs.DiscoverAgents(lingtaiDir)
+	if err != nil {
+		if !force {
+			return fmt.Errorf("Cannot list agents under %s: %v\nNot removing it: a live agent could be hiding in there. Fix the error, or re-run with --force to delete anyway.", lingtaiDir, err)
+		}
+		fmt.Fprintf(os.Stderr, "Warning: cannot list agents under %s (%v); removing anyway (--force)\n", lingtaiDir, err)
+	}
 
 	// Signal all agents at once (touch .suspend in every folder)
 	var alive []string
@@ -920,9 +928,25 @@ func cleanProject(lingtaiDir string, force bool, waitTimeout time.Duration) erro
 		}
 	}
 
-	// Survivor guard: refuse to delete a live agent's body.
+	// Survivor guard: refuse to delete a live agent's body. Re-discover
+	// before checking so agents that appeared during the wait window are
+	// guarded too, not just the ones signaled above.
+	guarded := append([]string(nil), alive...)
+	if current, err := fs.DiscoverAgents(lingtaiDir); err == nil {
+		seen := make(map[string]bool, len(guarded))
+		for _, dir := range guarded {
+			seen[dir] = true
+		}
+		for _, agent := range current {
+			if !agent.IsHuman && !seen[agent.WorkingDir] {
+				guarded = append(guarded, agent.WorkingDir)
+			}
+		}
+	} else if !force {
+		return fmt.Errorf("Cannot re-list agents under %s before deleting: %v\nNot removing it. Fix the error, or re-run with --force to delete anyway.", lingtaiDir, err)
+	}
 	var survivors []string
-	for _, dir := range alive {
+	for _, dir := range guarded {
 		if fs.IsAlive(dir, 3.0) {
 			survivors = append(survivors, dir)
 		}

@@ -43,6 +43,19 @@ func makeDirReadOnly(t *testing.T, dir string) {
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
 }
 
+// makeFileUnreadable strips all permissions from p so os.ReadFile fails
+// with a non-IsNotExist error, and restores them on cleanup.
+func makeFileUnreadable(t *testing.T, p string) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("running as root — unreadable files are still readable")
+	}
+	if err := os.Chmod(p, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(p, 0o644) })
+}
+
 func legacyAddonsInit() map[string]interface{} {
 	return map[string]interface{}{
 		"manifest": map[string]interface{}{"agent_name": "x"},
@@ -131,6 +144,58 @@ func TestM039WriteFailurePropagates(t *testing.T) {
 	err := migrateAgentInitContextPresetRepairOnly(lingtaiDir)
 	if err == nil {
 		t.Fatal("expected error when init.json cannot be rewritten, got nil")
+	}
+	if !strings.Contains(err.Error(), "alice") {
+		t.Errorf("error should name the failing agent, got: %v", err)
+	}
+}
+
+func TestM028ReadFailurePropagates(t *testing.T) {
+	lingtaiDir := filepath.Join(t.TempDir(), ".lingtai")
+	initPath := writeErrTestInit(t, lingtaiDir, "alice", legacyAddonsInit())
+	makeFileUnreadable(t, initPath)
+
+	err := migrateAddonsToMCP(lingtaiDir)
+	if err == nil {
+		t.Fatal("expected error when init.json exists but cannot be read, got nil")
+	}
+	if !strings.Contains(err.Error(), "alice") {
+		t.Errorf("error should name the failing agent, got: %v", err)
+	}
+}
+
+func TestM030ReadFailurePropagates(t *testing.T) {
+	lingtaiDir := filepath.Join(t.TempDir(), ".lingtai")
+	initPath := writeErrTestInit(t, lingtaiDir, "alice", map[string]interface{}{
+		"manifest": map[string]interface{}{
+			"preset": map[string]interface{}{
+				"active": "~/.lingtai-tui/presets/minimax.json",
+			},
+		},
+	})
+	makeFileUnreadable(t, initPath)
+
+	err := migratePresetDirSplit(lingtaiDir)
+	if err == nil {
+		t.Fatal("expected error when init.json exists but cannot be read, got nil")
+	}
+	if !strings.Contains(err.Error(), "alice") {
+		t.Errorf("error should name the failing agent, got: %v", err)
+	}
+}
+
+func TestM039ReadFailurePropagates(t *testing.T) {
+	lingtaiDir := filepath.Join(t.TempDir(), ".lingtai")
+	initPath := writeErrTestInit(t, lingtaiDir, "alice", map[string]interface{}{
+		"manifest": map[string]interface{}{
+			"context_limit": float64(200000),
+		},
+	})
+	makeFileUnreadable(t, initPath)
+
+	err := migrateAgentInitContextPresetRepairOnly(lingtaiDir)
+	if err == nil {
+		t.Fatal("expected error when init.json exists but cannot be read, got nil")
 	}
 	if !strings.Contains(err.Error(), "alice") {
 		t.Errorf("error should name the failing agent, got: %v", err)

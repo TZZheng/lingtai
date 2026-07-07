@@ -98,7 +98,12 @@ var addonSpecs = map[string]addonSpec{
 func convertAddonsInInitFile(initPath, agentDir, globalDir string) error {
 	data, err := os.ReadFile(initPath)
 	if err != nil {
-		return nil // no init.json — not an agent dir
+		if os.IsNotExist(err) {
+			return nil // no init.json — not an agent dir
+		}
+		// init.json exists but cannot be read: the file may still be in
+		// legacy form, so the migration must not be considered complete.
+		return fmt.Errorf("read init.json: %w", err)
 	}
 	var doc map[string]interface{}
 	if err := json.Unmarshal(data, &doc); err != nil {

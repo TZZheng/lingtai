@@ -172,6 +172,13 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 		_ = os.Remove(tmpName)
 		return err
 	}
+	// Make the rename itself durable by syncing the parent directory.
+	// Best-effort: some filesystems reject fsync on directories, and the
+	// rename cannot be undone at this point anyway.
+	if dir, err := os.Open(filepath.Dir(path)); err == nil {
+		_ = dir.Sync()
+		_ = dir.Close()
+	}
 	return nil
 }
 

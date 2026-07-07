@@ -58,6 +58,12 @@ func migratePresetDirSplit(lingtaiDir string) error {
 		initPath := filepath.Join(agentDir, "init.json")
 		data, err := os.ReadFile(initPath)
 		if err != nil {
+			if os.IsNotExist(err) {
+				continue // no init.json — not an agent dir
+			}
+			// Unreadable init.json may still hold legacy preset refs;
+			// fail the migration so it re-runs instead of stranding it.
+			errs = append(errs, fmt.Errorf("%s: read init.json: %w", name, err))
 			continue
 		}
 		var init map[string]interface{}
