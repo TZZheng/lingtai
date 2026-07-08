@@ -3,10 +3,9 @@ package process
 import "github.com/anthropics/lingtai-tui/internal/processscan"
 
 // AgentProcess is a single `lingtai run <agentDir>` process discovered by
-// scanning `ps`. The command field holds the trimmed ps line; pid is parsed
-// from the leading column. Used by FindAgentProcesses /
+// scanning the process table. Used by FindAgentProcesses /
 // TerminateAgentProcesses so callers can both detect and act on lingering
-// interpreters.
+// interpreters while preserving the full agent dir.
 type AgentProcess = processscan.AgentProcess
 
 func parsePSOutput(out, abs string) []AgentProcess {

@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/anthropics/lingtai-tui/internal/processscan"
 )
 
 func purgeMain() {
@@ -18,54 +20,7 @@ func purgeMain() {
 		filterDir, _ = filepath.Abs(os.Args[2])
 	}
 
-	out, err := exec.Command("wmic", "process", "where",
-		"commandline like '%lingtai run%'",
-		"get", "processid,commandline", "/format:list").Output()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error listing processes: %v\n", err)
-		os.Exit(1)
-	}
-
-	type proc struct {
-		pid   string
-		agent string
-		dir   string
-	}
-
-	var procs []proc
-	var cmdline, pid string
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "CommandLine=") {
-			cmdline = strings.TrimPrefix(line, "CommandLine=")
-		}
-		if strings.HasPrefix(line, "ProcessId=") {
-			pid = strings.TrimPrefix(line, "ProcessId=")
-			if cmdline != "" && strings.Contains(cmdline, "lingtai run") {
-				agentDir := ""
-				agent := "unknown"
-				if idx := strings.Index(cmdline, "lingtai run "); idx >= 0 {
-					agentDir = cmdline[idx+len("lingtai run "):]
-					agentDir = strings.TrimSpace(strings.Split(agentDir, " ")[0])
-					agent = filepath.Base(agentDir)
-				}
-
-				// Filter by dir if specified
-				if filterDir != "" {
-					lingtaiPrefix := filepath.Join(filterDir, ".lingtai") + string(filepath.Separator)
-					if !strings.HasPrefix(agentDir, lingtaiPrefix) {
-						cmdline = ""
-						pid = ""
-						continue
-					}
-				}
-
-				procs = append(procs, proc{pid: pid, agent: agent, dir: agentDir})
-			}
-			cmdline = ""
-			pid = ""
-		}
-	}
+	procs := purgeProcsFromAgentProcesses(processscan.FindAllAgentProcesses(), filterDir, os.Getpid())
 
 	if len(procs) == 0 {
 		if filterDir != "" {
@@ -82,7 +37,7 @@ func purgeMain() {
 	}
 	fmt.Printf("%-8s %-30s %s\n", "PID", "AGENT", "DIRECTORY")
 	for _, p := range procs {
-		fmt.Printf("%-8s %-30s %s\n", p.pid, p.agent, p.dir)
+		fmt.Printf("%-8d %-30s %s\n", p.pid, p.agent, p.dir)
 	}
 	fmt.Printf("\n%d process(es) in %s. Kill all? [y/N] ", len(procs), scope)
 
@@ -96,7 +51,7 @@ func purgeMain() {
 
 	killed := 0
 	for _, p := range procs {
-		cmd := exec.Command("taskkill", "/F", "/PID", p.pid)
+		cmd := exec.Command("taskkill", "/F", "/PID", fmt.Sprint(p.pid))
 		if cmd.Run() == nil {
 			killed++
 		}

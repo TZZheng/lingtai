@@ -19,6 +19,9 @@ related_files:
   - tui/list_common_test.go
   - tui/list_unix.go
   - tui/list_windows.go
+  - tui/list_windows_test.go
+  - tui/purge_common.go
+  - tui/purge_common_test.go
   - tui/purge_unix.go
   - tui/purge_windows.go
   - tui/suspend_unix.go
@@ -42,14 +45,14 @@ This folder is the self-contained Go module for the `lingtai-tui` terminal UI bi
 
 - **`tui/main.go:33-1138`** — single-file `package main`. The version stamp (`tui/main.go:31`, set via `-ldflags`), welcome/help text, Rust toolchain startup guidance (`tui/main.go:688-756`), and interactive entry (`tui/main.go:33-96`). After parsing subcommands, it runs global migrations, checks invariants (init.json all-or-nothing, exactly-one-orchestrator), handles upgrade prompts and first-run wizard routing, then launches Bubble Tea.
 - **`tui/main.go:35-96`** — subcommand dispatch. Each subcommand returns early; the fallthrough path starts the interactive TUI.
-- **`list_common.go` / `list_unix.go` / `list_windows.go`** — `lingtai-tui list` process discovery and decentralized contact-book-style rendering. Platform files find running `lingtai run` processes; `list_common.go` parses `--detailed` / `--admin`, reads each agent's `.agent.json` for role/name/state/admin metadata, and prints simple/detailed/admin tables without writing a central address book. Treat this command as the progressive-disclosure entry point for finding local companions or running-agent inventory before resorting to filesystem scans.
+- **`list_common.go` / `list_unix.go` / `list_windows.go`** — `lingtai-tui list` process discovery and decentralized contact-book-style rendering. Platform files call shared `processscan` discovery (`tui/list_unix.go:13-19`, `tui/list_windows.go:13-19`); `list_common.go` parses `--detailed` / `--admin`, converts processscan records into display rows (`tui/list_common.go:69-115`), reads each agent's `.agent.json` for role/name/state/admin metadata, and prints simple/detailed/admin tables without writing a central address book. Treat this command as the progressive-disclosure entry point for finding local companions or running-agent inventory before resorting to filesystem scans.
 - **`upgrade.go`** — startup TUI binary upgrade flow: after install-method routing (`tui/main.go:113-119`), Homebrew installs keep the existing prompt that detects other running TUI windows, puts affected agents to sleep, stops old TUI processes, and runs `brew upgrade` before asking the user to relaunch; source/user-local installs get a separate explicit `[y/N]` prompt that routes through the source updater backend (`install.sh --update`). Unknown installs are not mutated at startup (version-only).
 - **`tui/main.go:688-756`** — `maybePromptRustToolchain` / `markRustPromptSeen`: one-time optional Rust/Cargo startup prompt. Only prompts on an interactive TTY when the managed runtime is on the Python file-search fallback and no `cargo` is on PATH. Writes the `~/.lingtai-tui/runtime/rust-toolchain-prompted` marker on decline/install/skip — including when the probe errors or reports an unsupported runtime — so the Python probe never re-spawns on every launch.
 - **`tui/main.go:824-972`** — `cleanMain`/`cleanProject`: suspend agents in `.lingtai/` (10s timeout), then `os.RemoveAll`. Refuses to delete while any agent heartbeat is still fresh after the timeout, when agents cannot be listed, or when an agent appeared during the wait (re-discovered before deleting) — unless `--force` is given (issue #488).
 - **`tui/main.go:974-1022`** — `postmanMain`: parse `--port`, collect watch directories, call `postman.Run`.
-- **`tui/purge_unix.go:17-122`** — `purgeMain` (unix): `ps aux | grep "lingtai run"`, SIGTERM → SIGKILL survivors. Build tag `!windows`.
+- **`tui/purge_common.go:9-39` / `tui/purge_unix.go:17-75`** — `purgeMain` (unix): shared processscan-to-purge-target filtering, then SIGTERM → SIGKILL survivors. Build tag `!windows`.
 - **`purge_windows.go`** — `purgeMain` (windows): equivalent via Windows process enumeration.
-- **`tui/list_unix.go:15-141`** — `listMain` (unix): enumerate running agents with uptime, phantom detection (`.lingtai/` deleted but process still running). Build tag `!windows`.
+- **`tui/list_unix.go:13-68`** — `listMain` (unix): enumerate running agents with uptime, phantom detection (`.lingtai/` deleted but process still running). Build tag `!windows`.
 - **`list_windows.go`** — `listMain` (windows): equivalent.
 - **`tui/suspend_unix.go:14-86`** — `suspendMain` (unix): discover agents via `.agent.json`, write `.suspend` files, wait 5s. Build tag `!windows`.
 - **`suspend_windows.go`** — `suspendMain` (windows): equivalent.
@@ -103,7 +106,7 @@ This folder is the self-contained Go module for the `lingtai-tui` terminal UI bi
 
 ## Notes
 
-- **Finding companions / local agent inventory:** use `lingtai-tui list --detailed [dir]` as the first stop before hand-walking `.lingtai/` trees.  `--admin` adds admin flags when the decision depends on karma/nirvana privileges.  The command surface is owned by `tui/list_common.go:43-59`, live metadata comes from `.agent.json` via `tui/list_common.go:71-98`, platform process discovery is in `tui/list_unix.go:13-80` and `tui/list_windows.go:13-80`, and the rendered simple/detailed/admin tables are built in `tui/list_common.go:222-260`.
+- **Finding companions / local agent inventory:** use `lingtai-tui list --detailed [dir]` as the first stop before hand-walking `.lingtai/` trees.  `--admin` adds admin flags when the decision depends on karma/nirvana privileges.  The command surface is owned by `tui/list_common.go:117-145`, live metadata comes from `.agent.json` via `tui/list_common.go:147-174`, platform process discovery is in `tui/list_unix.go:13-43` and `tui/list_windows.go:13-43`, and the rendered simple/detailed/admin tables are built in `tui/list_common.go:327-421`.
 - **Binary naming is `lingtai-tui`, never `lingtai`.** `lingtai` is the Python agent CLI inside the runtime venv.
 - **`main.go` is intentionally flat** — every subcommand's `*Main()` function is defined inline in `main.go` or platform-specific `*_unix.go`/`*_windows.go` files. Don't refactor subcommands into `internal/` packages; the flat `main.go` is the contract.
 - **Platform shims follow the `//go:build !windows` pattern.** Unix is the primary target; Windows files mirror the same function signatures. Every subcommand (`purge`, `list`, `suspend`) plus `countRunningAgents` and TUI-process upgrade helpers have paired platform files.

@@ -6,15 +6,17 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // AgentProcess is a single `lingtai run <agentDir>` process discovered by
-// scanning `ps`. The command field holds the trimmed ps line; pid is parsed
-// from the leading column. Used by FindAgentProcesses so callers can both
-// detect and act on lingering interpreters.
+// scanning the process table. AgentDir is parsed from the final run argument
+// so paths containing spaces remain intact.
 type AgentProcess struct {
-	PID     int
-	Command string
+	PID      int
+	Uptime   string
+	AgentDir string
+	Command  string
 }
 
 // ParsePSOutput extracts AgentProcess records from `ps -eo pid=,command=`
@@ -27,27 +29,51 @@ type AgentProcess struct {
 func ParsePSOutput(out, abs string) []AgentProcess {
 	var results []AgentProcess
 	for _, line := range strings.Split(out, "\n") {
-		if !strings.Contains(line, "lingtai run") {
-			continue
-		}
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-		if !commandMatchesAgentDir(trimmed, abs) {
-			continue
-		}
-		// Split off the leading pid column. ps emits "  1234 python ..." so
-		// Fields collapses leading whitespace; we take the first token.
-		fields := strings.Fields(trimmed)
-		if len(fields) < 2 {
+		fields, command, ok := splitLeadingFields(line, 1)
+		if !ok {
 			continue
 		}
 		pid, err := strconv.Atoi(fields[0])
 		if err != nil {
 			continue
 		}
-		results = append(results, AgentProcess{PID: pid, Command: trimmed})
+		agentDir, ok := agentDirForCommand(command, abs)
+		if !ok {
+			continue
+		}
+		results = append(results, AgentProcess{
+			PID:      pid,
+			AgentDir: agentDir,
+			Command:  strings.TrimSpace(command),
+		})
+	}
+	return results
+}
+
+// ParsePSListOutput extracts all LingTai agent processes from
+// `ps -eo pid=,etime=,command=` output. The command column may contain spaces,
+// so only the leading pid and etime fields are split.
+func ParsePSListOutput(out string) []AgentProcess {
+	var results []AgentProcess
+	for _, line := range strings.Split(out, "\n") {
+		fields, command, ok := splitLeadingFields(line, 2)
+		if !ok {
+			continue
+		}
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		agentDir, ok := ExtractAgentDir(command)
+		if !ok {
+			continue
+		}
+		results = append(results, AgentProcess{
+			PID:      pid,
+			Uptime:   fields[1],
+			AgentDir: agentDir,
+			Command:  strings.TrimSpace(command),
+		})
 	}
 	return results
 }
@@ -66,10 +92,12 @@ func ParseWMICOutput(out, abs string) []AgentProcess {
 		}
 		pidText := strings.TrimPrefix(line, "ProcessId=")
 		pid, err := strconv.Atoi(strings.TrimSpace(pidText))
-		if err == nil && commandMatchesProcess(cmdline, abs) {
+		agentDir, ok := agentDirForCommand(cmdline, abs)
+		if err == nil && ok {
 			results = append(results, AgentProcess{
-				PID:     pid,
-				Command: strings.TrimSpace(cmdline),
+				PID:      pid,
+				AgentDir: agentDir,
+				Command:  strings.TrimSpace(cmdline),
 			})
 		}
 		cmdline = ""
@@ -77,35 +105,148 @@ func ParseWMICOutput(out, abs string) []AgentProcess {
 	return results
 }
 
-func commandMatchesProcess(command, abs string) bool {
+func agentDirForCommand(command, abs string) (string, bool) {
 	if abs == "" {
-		lower := strings.ToLower(command)
-		return strings.Contains(lower, "-m lingtai run ") ||
-			strings.Contains(lower, "lingtai-agent run ")
+		return ExtractAgentDir(command)
 	}
-	return commandMatchesAgentDir(command, abs)
+	if commandMatchesAgentDir(command, abs) {
+		return abs, true
+	}
+	return "", false
+}
+
+// ExtractAgentDir returns the argument after a supported LingTai launch marker.
+// The launcher passes the agent directory as the final argv element; when ps
+// or WMIC joins argv back into text, taking the rest after the marker preserves
+// spaces inside that directory.
+func ExtractAgentDir(command string) (string, bool) {
+	rest, ok := agentDirRestAfterMarker(command)
+	if !ok {
+		return "", false
+	}
+	agentDir := extractAgentDirFromRest(rest)
+	if strings.TrimSpace(agentDir) == "" {
+		return "", false
+	}
+	return agentDir, true
 }
 
 func commandMatchesAgentDir(command, abs string) bool {
-	if !strings.Contains(strings.ToLower(command), "lingtai run") {
+	rest, ok := agentDirRestAfterMarker(command)
+	if !ok {
 		return false
 	}
 	candidates := []string{abs, filepath.ToSlash(abs)}
 	for _, candidate := range candidates {
-		for _, arg := range []string{candidate, `"` + candidate + `"`} {
-			needle := "lingtai run " + arg
-			if commandContainsArg(command, needle) {
-				return true
-			}
+		if restMatchesAgentCandidate(rest, candidate) {
+			return true
 		}
 	}
 	return false
 }
 
-func commandContainsArg(command, needle string) bool {
-	cmd := strings.ToLower(command)
-	n := strings.ToLower(needle)
-	return strings.Contains(cmd, n+" ") || strings.Contains(cmd, n+"\t") || strings.HasSuffix(cmd, n)
+var launchMarkers = []string{
+	"-m lingtai run ",
+	"lingtai-agent.exe run ",
+	"lingtai-agent run ",
+	"lingtai.exe run ",
+	"lingtai run ",
+}
+
+func agentDirRestAfterMarker(command string) (string, bool) {
+	lower := strings.ToLower(command)
+	for _, marker := range launchMarkers {
+		start := 0
+		for {
+			idx := strings.Index(lower[start:], marker)
+			if idx < 0 {
+				break
+			}
+			idx += start
+			if hasLaunchMarkerBoundary(command, idx) {
+				return strings.TrimSpace(command[idx+len(marker):]), true
+			}
+			start = idx + 1
+		}
+	}
+	return "", false
+}
+
+func hasLaunchMarkerBoundary(command string, idx int) bool {
+	if idx == 0 {
+		return true
+	}
+	prev := rune(command[idx-1])
+	return unicode.IsSpace(prev) || prev == '/' || prev == '\\' || prev == '"' || prev == '\''
+}
+
+func extractAgentDirFromRest(rest string) string {
+	rest = strings.TrimSpace(rest)
+	if value, _, ok := splitQuoted(rest); ok {
+		return value
+	}
+	return rest
+}
+
+func restMatchesAgentCandidate(rest, candidate string) bool {
+	rest = strings.TrimSpace(rest)
+	candidate = strings.TrimSpace(candidate)
+	if rest == "" || candidate == "" {
+		return false
+	}
+	if value, tail, ok := splitQuoted(rest); ok {
+		if !strings.EqualFold(value, candidate) {
+			return false
+		}
+		return strings.TrimSpace(tail) == "" || startsWithWhitespace(tail)
+	}
+	if strings.EqualFold(rest, candidate) {
+		return true
+	}
+	if len(rest) <= len(candidate) {
+		return false
+	}
+	if !strings.EqualFold(rest[:len(candidate)], candidate) {
+		return false
+	}
+	return unicode.IsSpace(rune(rest[len(candidate)]))
+}
+
+func splitQuoted(s string) (value, tail string, ok bool) {
+	if s == "" || (s[0] != '"' && s[0] != '\'') {
+		return "", "", false
+	}
+	quote := s[0]
+	body := s[1:]
+	end := strings.IndexByte(body, quote)
+	if end < 0 {
+		return strings.TrimSpace(body), "", true
+	}
+	return strings.TrimSpace(body[:end]), body[end+1:], true
+}
+
+func startsWithWhitespace(s string) bool {
+	return s != "" && unicode.IsSpace(rune(s[0]))
+}
+
+func splitLeadingFields(line string, count int) ([]string, string, bool) {
+	rest := strings.TrimLeftFunc(line, unicode.IsSpace)
+	fields := make([]string, 0, count)
+	for len(fields) < count {
+		if rest == "" {
+			return nil, "", false
+		}
+		idx := strings.IndexFunc(rest, unicode.IsSpace)
+		if idx < 0 {
+			return nil, "", false
+		}
+		fields = append(fields, rest[:idx])
+		rest = strings.TrimLeftFunc(rest[idx:], unicode.IsSpace)
+	}
+	if strings.TrimSpace(rest) == "" {
+		return nil, "", false
+	}
+	return fields, rest, true
 }
 
 // FindAgentProcesses returns all running `lingtai run <agentDir>` processes
@@ -126,6 +267,19 @@ func FindAgentProcesses(agentDir string) []AgentProcess {
 	return ParsePSOutput(string(out), abs)
 }
 
+// FindAllAgentProcesses returns every visible LingTai agent process. On Unix it
+// uses `etime` as a display-only uptime string.
+func FindAllAgentProcesses() []AgentProcess {
+	if runtime.GOOS == "windows" {
+		return findAgentProcessesWindows("")
+	}
+	out, err := exec.Command("ps", "-eo", "pid=,etime=,command=").Output()
+	if err != nil {
+		return nil
+	}
+	return ParsePSListOutput(string(out))
+}
+
 func findAgentProcessesWindows(abs string) []AgentProcess {
 	out, err := windowsAgentProcessOutput()
 	if err != nil {
@@ -143,7 +297,7 @@ func windowsAgentProcessOutput() ([]byte, error) {
 		"wmic",
 		"process",
 		"where",
-		"commandline like '%lingtai run%'",
+		"commandline like '%lingtai%run%'",
 		"get",
 		"processid,commandline",
 		"/format:list",
@@ -151,7 +305,7 @@ func windowsAgentProcessOutput() ([]byte, error) {
 	if err == nil {
 		return out, nil
 	}
-	script := `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*lingtai run*' } | ForEach-Object { "CommandLine=$($_.CommandLine)"; "ProcessId=$($_.ProcessId)"; "" }`
+	script := `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*lingtai*run*' } | ForEach-Object { "CommandLine=$($_.CommandLine)"; "ProcessId=$($_.ProcessId)"; "" }`
 	return exec.Command(
 		"powershell.exe",
 		"-NoProfile",
@@ -161,8 +315,8 @@ func windowsAgentProcessOutput() ([]byte, error) {
 	).Output()
 }
 
-// IsAgentRunning returns true if any `python -m lingtai run <agentDir>`
-// (or `lingtai-agent run <agentDir>`) process exists on this machine.
+// IsAgentRunning returns true if any supported `lingtai run <agentDir>` launch
+// form is visible on this machine.
 func IsAgentRunning(agentDir string) bool {
 	return len(FindAgentProcesses(agentDir)) > 0
 }

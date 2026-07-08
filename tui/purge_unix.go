@@ -6,12 +6,12 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/anthropics/lingtai-tui/internal/processscan"
 )
 
 func purgeMain() {
@@ -21,54 +21,7 @@ func purgeMain() {
 		filterDir, _ = filepath.Abs(os.Args[2])
 	}
 
-	out, err := exec.Command("ps", "aux").Output()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error running ps: %v\n", err)
-		os.Exit(1)
-	}
-
-	type proc struct {
-		pid   int
-		agent string
-		dir   string
-	}
-
-	var procs []proc
-	for _, line := range strings.Split(string(out), "\n") {
-		if !strings.Contains(line, "lingtai run") || strings.Contains(line, "grep") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		pid, err := strconv.Atoi(fields[1])
-		if err != nil || pid == os.Getpid() {
-			continue
-		}
-
-		var agentDir string
-		for i, f := range fields {
-			if f == "run" && i+1 < len(fields) {
-				agentDir = fields[i+1]
-				break
-			}
-		}
-
-		// Filter by dir if specified
-		if filterDir != "" {
-			lingtaiPrefix := filepath.Join(filterDir, ".lingtai") + string(filepath.Separator)
-			if !strings.HasPrefix(agentDir, lingtaiPrefix) {
-				continue
-			}
-		}
-
-		procs = append(procs, proc{
-			pid:   pid,
-			agent: filepath.Base(agentDir),
-			dir:   agentDir,
-		})
-	}
+	procs := purgeProcsFromAgentProcesses(processscan.FindAllAgentProcesses(), filterDir, os.Getpid())
 
 	if len(procs) == 0 {
 		if filterDir != "" {

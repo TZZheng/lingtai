@@ -16,9 +16,14 @@ func TestAgentDirFromWindowsCommandLine(t *testing.T) {
 			want: `C:\Users\Raw Lee\project\.lingtai\contract-agent`,
 		},
 		{
-			name: "unquoted path",
-			cmd:  `C:\Python\python.exe -m lingtai run C:\Users\rawle\project\.lingtai\contract-agent`,
-			want: `C:\Users\rawle\project\.lingtai\contract-agent`,
+			name: "unquoted path with spaces",
+			cmd:  `C:\Python\python.exe -m lingtai run C:\Users\Raw Lee\project\.lingtai\contract agent`,
+			want: `C:\Users\Raw Lee\project\.lingtai\contract agent`,
+		},
+		{
+			name: "direct console script",
+			cmd:  `C:\Python\Scripts\lingtai.exe run "C:\Users\Raw Lee\project\.lingtai\contract-agent"`,
+			want: `C:\Users\Raw Lee\project\.lingtai\contract-agent`,
 		},
 		{
 			name: "non lingtai command",

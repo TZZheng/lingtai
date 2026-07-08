@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/anthropics/lingtai-tui/internal/fs"
+	"github.com/anthropics/lingtai-tui/internal/processscan"
 	uitui "github.com/anthropics/lingtai-tui/internal/tui"
 )
 
@@ -63,6 +64,54 @@ type listJSONProc struct {
 	ReadError  string             `json:"read_error,omitempty"`
 	Heartbeat  fs.HeartbeatStatus `json:"heartbeat"`
 	LockExists bool               `json:"lock_exists"`
+}
+
+func listProcsFromAgentProcesses(found []processscan.AgentProcess, filterDir string, selfPID int) []listProc {
+	procs := make([]listProc, 0, len(found))
+	for _, proc := range found {
+		if proc.PID == selfPID {
+			continue
+		}
+		agentDir := proc.AgentDir
+		if agentDir == "" {
+			var ok bool
+			agentDir, ok = processscan.ExtractAgentDir(proc.Command)
+			if !ok {
+				continue
+			}
+		}
+		if !agentDirInFilter(agentDir, filterDir) {
+			continue
+		}
+		procs = append(procs, listProc{
+			PID:     fmt.Sprint(proc.PID),
+			Uptime:  proc.Uptime,
+			Agent:   filepath.Base(agentDir),
+			Project: projectFromAgentDir(agentDir),
+			Dir:     agentDir,
+		})
+	}
+	return procs
+}
+
+func agentDirInFilter(agentDir, filterDir string) bool {
+	if filterDir == "" {
+		return true
+	}
+	lingtaiDir := filepath.Join(filterDir, ".lingtai")
+	if strings.HasPrefix(agentDir, lingtaiDir+string(filepath.Separator)) {
+		return true
+	}
+	return strings.HasPrefix(filepath.ToSlash(agentDir), filepath.ToSlash(lingtaiDir)+"/")
+}
+
+func projectFromAgentDir(agentDir string) string {
+	slashDir := filepath.ToSlash(agentDir)
+	idx := strings.Index(slashDir, "/.lingtai/")
+	if idx < 0 {
+		return ""
+	}
+	return agentDir[:idx]
 }
 
 func parseListArgs(args []string) (listOptions, error) {

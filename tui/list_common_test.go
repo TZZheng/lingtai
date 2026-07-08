@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/anthropics/lingtai-tui/internal/processscan"
 )
 
 func TestParseListArgsModesAndDir(t *testing.T) {
@@ -22,6 +24,50 @@ func TestParseListArgsModesAndDir(t *testing.T) {
 	want, _ := filepath.Abs("./project")
 	if opts.FilterDir != want {
 		t.Fatalf("FilterDir=%q, want %q", opts.FilterDir, want)
+	}
+}
+
+func TestListProcsFromAgentProcessesPreservesSpacesAndFilter(t *testing.T) {
+	root := t.TempDir()
+	project := filepath.Join(root, "Project With Spaces")
+	agentDir := filepath.Join(project, ".lingtai", "agent A")
+	otherProject := filepath.Join(root, "Other Project")
+	otherAgentDir := filepath.Join(otherProject, ".lingtai", "agent B")
+	if err := os.MkdirAll(agentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got := listProcsFromAgentProcesses([]processscan.AgentProcess{
+		{PID: 111, Uptime: "00:01:02", AgentDir: agentDir},
+		{PID: 222, Uptime: "00:02:03", AgentDir: otherAgentDir},
+		{PID: 333, Uptime: "00:03:04", AgentDir: agentDir},
+	}, project, 333)
+
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1: %+v", len(got), got)
+	}
+	proc := got[0]
+	if proc.PID != "111" || proc.Uptime != "00:01:02" {
+		t.Fatalf("unexpected pid/uptime: %+v", proc)
+	}
+	if proc.Agent != "agent A" || proc.Project != project || proc.Dir != agentDir {
+		t.Fatalf("space-containing path was not preserved: %+v", proc)
+	}
+	if phantoms := detectPhantomDirs(got, ""); phantoms[project] {
+		t.Fatalf("existing project with spaces should not be phantom: %+v", phantoms)
+	}
+}
+
+func TestCollapseListProcsKeepsDistinctSpacePaths(t *testing.T) {
+	root := t.TempDir()
+	dirA := filepath.Join(root, "Project With Spaces", ".lingtai", "agent A")
+	dirB := filepath.Join(root, "Project With Spaces", ".lingtai", "agent B")
+	got := collapseListProcsByAgentDir([]listProc{
+		{PID: "111", Agent: "agent A", Dir: dirA},
+		{PID: "222", Agent: "agent B", Dir: dirB},
+	})
+	if len(got) != 2 {
+		t.Fatalf("distinct full dirs should not collapse, got %+v", got)
 	}
 }
 

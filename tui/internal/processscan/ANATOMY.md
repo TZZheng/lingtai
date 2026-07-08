@@ -3,6 +3,12 @@ related_files:
   - tui/ANATOMY.md
   - tui/internal/migrate/ANATOMY.md
   - tui/internal/processscan/check.go
+  - tui/list_common.go
+  - tui/list_unix.go
+  - tui/list_windows.go
+  - tui/purge_common.go
+  - tui/purge_unix.go
+  - tui/purge_windows.go
   - tui/internal/process/check.go
   - tui/internal/process/check_test.go
   - tui/internal/migrate/m036_sqlite_log_backfill.go
@@ -24,18 +30,23 @@ maintenance: |
 
 | Component | File | Purpose |
 |---|---|---|
-| `AgentProcess` | `tui/internal/processscan/check.go:10` | parsed `ps` record for a matching `lingtai run <agentDir>` interpreter |
-| `ParsePSOutput` | `tui/internal/processscan/check.go:20` | unit-testable parser for `ps -eo pid=,command=` output; guards against prefix-sibling false positives |
-| `FindAgentProcesses` | `tui/internal/processscan/check.go:60` | shells out to `ps`, normalizes the requested agent dir, and parses matches |
-| `IsAgentRunning` | `tui/internal/processscan/check.go:75` | boolean convenience wrapper used by launch/migration boundaries |
+| `AgentProcess` | `tui/internal/processscan/check.go:15` | parsed process-table record with PID, optional uptime, full agent dir, and command text |
+| `ParsePSOutput` | `tui/internal/processscan/check.go:29` | unit-testable parser for `ps -eo pid=,command=` output scoped to one agent dir |
+| `ParsePSListOutput` | `tui/internal/processscan/check.go:56` | unit-testable parser for `ps -eo pid=,etime=,command=` output listing every agent process |
+| `ParseWMICOutput` | `tui/internal/processscan/check.go:81` | Windows WMIC/PowerShell list parser with the same agent-dir extraction rules |
+| `ExtractAgentDir` | `tui/internal/processscan/check.go:122` | launch-marker parser that takes the final run argument intact so spaces survive |
+| `FindAgentProcesses` | `tui/internal/processscan/check.go:255` | shells out to process listing, normalizes one requested agent dir, and parses matches |
+| `FindAllAgentProcesses` | `tui/internal/processscan/check.go:272` | shells out to process listing and returns all visible agent processes for list/purge |
+| `IsAgentRunning` | `tui/internal/processscan/check.go:320` | boolean convenience wrapper used by launch/migration boundaries |
 
 ## Composition
 
-- **Upstream callers:** `tui/internal/process/check.go` re-exports this package for existing launch/refresh callers; `tui/internal/migrate/m036_sqlite_log_backfill.go` calls it directly to skip running agents before attempting offline SQLite rebuilds.
-- **External dependency:** host `ps -eo pid=,command=`. Errors fail closed to “no match”; the kernel workdir lock remains the authoritative safety gate for SQLite rebuilds.
+- **Upstream callers:** `tui/internal/process/check.go` re-exports this package for launch/refresh callers; `tui/internal/migrate/m036_sqlite_log_backfill.go` calls it directly to skip running agents before attempting offline SQLite rebuilds; `lingtai-tui list` and `purge` consume all-process scans via `tui/list_common.go:69-115` and `tui/purge_common.go:15-39`.
+- **External dependency:** host `ps -eo pid=,command=` for one-dir checks, `ps -eo pid=,etime=,command=` for all-process list/purge, and WMIC/PowerShell on Windows. Errors fail closed to “no match”; the kernel workdir lock remains the authoritative safety gate for SQLite rebuilds.
 
 ## Invariants
 
-1. Match only exact `lingtai run <absAgentDir>` command arguments, allowing extra trailing args but rejecting prefix siblings such as `<absAgentDir>-old`.
-2. Keep this package free of imports back into TUI logic packages (`migrate`, `process`, `tui`) so it remains safe for low-level reuse.
-3. Treat `ps` detection as advisory. Callers that need correctness under races must also rely on their own hard gate (for example, the kernel offline workdir lock in SQLite rebuilds).
+1. Match supported launch forms (`python -m lingtai run`, `lingtai run`, `lingtai-agent run`) and preserve the full final agent-dir argument, including spaces.
+2. For one-dir checks, match only exact `<absAgentDir>` command arguments, allowing extra trailing args but rejecting prefix siblings such as `<absAgentDir>-old`.
+3. Keep this package free of imports back into TUI logic packages (`migrate`, `process`, `tui`) so it remains safe for low-level reuse.
+4. Treat process-table detection as advisory. Callers that need correctness under races must also rely on their own hard gate (for example, the kernel offline workdir lock in SQLite rebuilds).

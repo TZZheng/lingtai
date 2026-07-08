@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/anthropics/lingtai-tui/internal/processscan"
 )
@@ -17,30 +16,7 @@ func listMain() {
 		listUsageError(err)
 	}
 
-	var procs []listProc
-	for _, proc := range processscan.FindWindowsAgentProcesses("") {
-		cmdline := proc.Command
-		agentDir := agentDirFromWindowsCommandLine(cmdline)
-		agent := "unknown"
-		if agentDir != "" {
-			agent = filepath.Base(agentDir)
-		}
-
-		// Filter by dir if specified.
-		if opts.FilterDir != "" {
-			lingtaiPrefix := filepath.Join(opts.FilterDir, ".lingtai") + string(filepath.Separator)
-			if !strings.HasPrefix(agentDir, lingtaiPrefix) {
-				continue
-			}
-		}
-
-		project := ""
-		if idx := strings.Index(agentDir, `\.lingtai\`); idx >= 0 {
-			project = agentDir[:idx]
-		}
-
-		procs = append(procs, listProc{PID: fmt.Sprint(proc.PID), Agent: agent, Dir: agentDir, Project: project})
-	}
+	procs := listProcsFromAgentProcesses(processscan.FindAllAgentProcesses(), opts.FilterDir, os.Getpid())
 
 	if len(procs) == 0 {
 		if opts.JSON {
@@ -92,26 +68,9 @@ func detectPhantomDirs(procs []listProc, filterDir string) map[string]bool {
 }
 
 func agentDirFromWindowsCommandLine(cmdline string) string {
-	lower := strings.ToLower(cmdline)
-	idx := strings.Index(lower, "lingtai run ")
-	if idx < 0 {
+	agentDir, ok := processscan.ExtractAgentDir(cmdline)
+	if !ok {
 		return ""
 	}
-	rest := strings.TrimSpace(cmdline[idx+len("lingtai run "):])
-	if rest == "" {
-		return ""
-	}
-	if strings.HasPrefix(rest, `"`) {
-		rest = strings.TrimPrefix(rest, `"`)
-		end := strings.Index(rest, `"`)
-		if end < 0 {
-			return strings.TrimSpace(rest)
-		}
-		return strings.TrimSpace(rest[:end])
-	}
-	fields := strings.Fields(rest)
-	if len(fields) == 0 {
-		return ""
-	}
-	return strings.Trim(fields[0], `"`)
+	return agentDir
 }
