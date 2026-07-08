@@ -55,6 +55,21 @@ old_go_dl_base="$GO_DL_BASE"
 GO_DL_BASE="https://example.test/go"
 assert_eq "https://example.test/go/go1.26.1.linux-amd64.tar.gz" "$(go_toolchain_download_url 1.26.1 linux amd64)" "Go toolchain download URL"
 GO_DL_BASE="$old_go_dl_base"
+assert_eq "20.18.0" "$(normalize_node_version v20.18.0)" "node version normalization"
+if portal_node_supported 20.18.0; then
+  fail "Node 20.18 should not satisfy portal requirement"
+fi
+portal_node_supported 20.19.0 || fail "Node 20.19 should satisfy portal requirement"
+if portal_node_supported 22.11.0; then
+  fail "Node 22.11 should not satisfy portal requirement"
+fi
+portal_node_supported 22.12.0 || fail "Node 22.12 should satisfy portal requirement"
+portal_node_supported 23.0.0 || fail "Node 23 should satisfy portal requirement"
+assert_eq "node-v22.12.0-linux-x64.tar.gz" "$(node_toolchain_archive_name 22.12.0 linux x64)" "Node toolchain archive name"
+old_node_dl_base="$NODE_DL_BASE"
+NODE_DL_BASE="https://example.test/node"
+assert_eq "https://example.test/node/v22.12.0/node-v22.12.0-linux-x64.tar.gz" "$(node_toolchain_download_url 22.12.0 linux x64)" "Node toolchain download URL"
+NODE_DL_BASE="$old_node_dl_base"
 assert_eq "v1.2.3" "$(version_for_checkout "$repo" "v1.2.3")" "exact tag version"
 assert_eq "v1.2.3" "$(version_for_checkout "$repo" "refs/tags/v1.2.3")" "exact full tag ref version"
 assert_eq 'quote\"slash\\' "$(json_escape 'quote"slash\')" "json quote/backslash escaping"

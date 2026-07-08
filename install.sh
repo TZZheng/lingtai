@@ -32,6 +32,8 @@ API_BASE="https://api.github.com/repos/${REPO_SLUG}"
 DOWNLOAD_BASE="https://github.com/${REPO_SLUG}/releases/download"
 RAW_INSTALL_URL="https://raw.githubusercontent.com/${REPO_SLUG}/main/install.sh"
 GO_DL_BASE="${LINGTAI_GO_DL_BASE:-https://go.dev/dl}"  # official Go toolchain downloads
+NODE_DL_BASE="${LINGTAI_NODE_DL_BASE:-https://nodejs.org/dist}"
+NODE_TOOLCHAIN_VERSION="${LINGTAI_NODE_VERSION:-22.12.0}"
 
 TMPDIR="${TMPDIR:-/tmp}"
 BUILD_DIR="$TMPDIR/lingtai-install-$$"
@@ -686,14 +688,19 @@ build_from_source() {
   PORTAL_BUILT=0
   if [[ "$SKIP_PORTAL" == "1" ]]; then
     note "Skipping portal (--skip-portal)."
-  elif command -v npm &>/dev/null; then
-    say "Building lingtai-portal ($VERSION) ..."
-    (cd "$BUILD_DIR/portal/web" && npm ci --silent && npm run build --silent)
-    (cd "$BUILD_DIR/portal" && CGO_ENABLED=0 go build -ldflags "-X main.version=$VERSION" -o "$BUILD_DIR/lingtai-portal" .)
-    PORTAL_BUILT=1
   else
-    note "Skipping portal — npm not found; to include it, install npm and re-run:"
-    suggest_install npm
+    if ensure_node_for_portal; then
+      say "Building lingtai-portal ($VERSION) ..."
+      if (cd "$BUILD_DIR/portal/web" && npm ci --silent && npm run build --silent) &&          (cd "$BUILD_DIR/portal" && CGO_ENABLED=0 go build -ldflags "-X main.version=$VERSION" -o "$BUILD_DIR/lingtai-portal" .); then
+        PORTAL_BUILT=1
+      else
+        warn "Skipping portal — portal build failed; continuing with lingtai-tui only."
+        note "$(portal_node_requirement_note)"
+      fi
+    else
+      warn "Skipping portal — could not prepare a supported Node.js/npm toolchain."
+      note "$(portal_node_requirement_note)"
+    fi
   fi
 
   # Install binaries.
@@ -831,6 +838,108 @@ ensure_go_for_source() {
   fi
   install_go_toolchain "$required"
 }
+
+normalize_node_version() {
+  local version="${1#v}"
+  if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    printf '%s.%s.%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+    return 0
+  fi
+  return 1
+}
+
+installed_node_version() {
+  command -v node &>/dev/null || return 1
+  node --version 2>/dev/null | sed -n 's/^v\([0-9][0-9.]*\)$/\1/p' | head -1
+}
+
+portal_node_supported() {
+  local version major minor patch
+  version="$(normalize_node_version "$1")" || return 1
+  IFS=. read -r major minor patch <<<"$version"
+  if (( major == 20 )); then
+    (( minor >= 19 ))
+    return
+  fi
+  if (( major == 22 )); then
+    (( minor >= 12 ))
+    return
+  fi
+  (( major > 22 ))
+}
+
+portal_node_requirement_note() {
+  echo "Node.js 20.19+ or 22.12+ is required to build lingtai-portal. The installer can use an official temporary Node toolchain; if that download fails, upgrade Node and re-run the installer to add the portal binary."
+}
+
+node_toolchain_arch() {
+  case "$(detect_arch)" in
+    amd64) echo "x64" ;;
+    arm64) echo "arm64" ;;
+    *) echo "unsupported" ;;
+  esac
+}
+
+node_toolchain_archive_name() {
+  local version="$1" os="$2" arch="$3"
+  printf 'node-v%s-%s-%s.tar.gz\n' "$version" "$os" "$arch"
+}
+
+node_toolchain_download_url() {
+  local version="$1" os="$2" arch="$3"
+  printf '%s/v%s/%s\n' "${NODE_DL_BASE%/}" "$version" "$(node_toolchain_archive_name "$version" "$os" "$arch")"
+}
+
+install_node_toolchain() {
+  local version="${1:-$NODE_TOOLCHAIN_VERSION}" os arch root archive url dirname installed
+  os="$(detect_os)"
+  arch="$(node_toolchain_arch)"
+  if [[ "$os" == "unsupported" || "$arch" == "unsupported" ]]; then
+    warn "Automatic Node.js toolchain download is unsupported on $(uname -s)/$(uname -m)."
+    return 1
+  fi
+  command -v curl &>/dev/null || { warn "curl is required to download Node.js $version"; return 1; }
+  command -v tar &>/dev/null || { warn "tar is required to extract Node.js $version"; return 1; }
+
+  root="$BUILD_DIR/node-toolchain"
+  archive="$root/$(node_toolchain_archive_name "$version" "$os" "$arch")"
+  dirname="node-v${version}-${os}-${arch}"
+  rm -rf "$root"
+  mkdir -p "$root"
+  url="$(node_toolchain_download_url "$version" "$os" "$arch")"
+
+  say "Downloading Node.js $version toolchain for portal build ($os/$arch) ..."
+  if ! curl -fsSL --retry 3 --max-time 300 -o "$archive" "$url"; then
+    warn "Node.js download failed from $url"
+    return 1
+  fi
+  if ! tar -xzf "$archive" -C "$root"; then
+    warn "Node.js archive extraction failed"
+    return 1
+  fi
+  export PATH="$root/$dirname/bin:$PATH"
+  installed="$(installed_node_version || true)"
+  if [[ -z "$installed" ]] || ! portal_node_supported "$installed"; then
+    warn "Downloaded Node.js toolchain is ${installed:-unavailable}, expected $version or another supported version"
+    return 1
+  fi
+}
+
+ensure_node_for_portal() {
+  local installed
+  installed="$(installed_node_version || true)"
+  if [[ -n "$installed" ]] && portal_node_supported "$installed" && command -v npm &>/dev/null; then
+    note "Using Node.js $installed for portal build."
+    return 0
+  fi
+  if [[ -n "$installed" ]]; then
+    warn "Node.js $installed is not supported for portal build; using official Node.js $NODE_TOOLCHAIN_VERSION for this build."
+  else
+    warn "Node.js is not available; using official Node.js $NODE_TOOLCHAIN_VERSION for the portal build."
+  fi
+  install_node_toolchain "$NODE_TOOLCHAIN_VERSION"
+}
+
 
 # ensure_build_deps checks/installs non-Go source-build dependencies. Go is
 # validated after the source tree is available, because tui/go.mod declares the
