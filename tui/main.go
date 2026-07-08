@@ -131,7 +131,10 @@ func main() {
 	// locale rather than the i18n default. tuiCfg is reused below.
 	config.MigrateLegacyLanguage(globalDir)
 	tuiCfg := config.LoadTUIConfig(globalDir)
-	i18n.SetLang(tuiCfg.Language)
+	if err := i18n.SetLang(tuiCfg.Language); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: invalid configured language %q: %v; continuing with %q\n", tuiCfg.Language, err, i18n.Lang())
+		tuiCfg.Language = i18n.Lang()
+	}
 
 	// Test Codex OAuth validity on every launch across ALL stored accounts
 	// (legacy ~/.lingtai-tui/codex-auth.json plus per-account files under

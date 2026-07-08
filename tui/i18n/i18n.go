@@ -11,36 +11,89 @@ import (
 var localeFS embed.FS
 
 var (
-	mu      sync.RWMutex
-	lang    = "en"
-	strings map[string]string
+	mu             sync.RWMutex
+	lang           = "en"
+	activeStrings  map[string]string
+	englishStrings map[string]string
+
+	cacheMu sync.RWMutex
+	cache   = map[string]map[string]string{}
 )
 
-func init() { load("en") }
+var supportedLocales = map[string]bool{
+	"en":  true,
+	"zh":  true,
+	"wen": true,
+}
 
-func SetLang(l string) {
+func init() {
+	m, err := load("en")
+	if err != nil {
+		panic(err)
+	}
+	activeStrings = m
+	englishStrings = m
+	cache["en"] = m
+}
+
+func SetLang(l string) error {
+	m, err := cachedLocale(l)
+	if err != nil {
+		return err
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	lang = l
-	load(l)
+	activeStrings = m
+	return nil
 }
 
-func load(l string) {
+func cachedLocale(l string) (map[string]string, error) {
+	if !supportedLocales[l] {
+		return nil, fmt.Errorf("unsupported language %q", l)
+	}
+	cacheMu.RLock()
+	m, ok := cache[l]
+	cacheMu.RUnlock()
+	if ok {
+		return m, nil
+	}
+
+	m, err := load(l)
+	if err != nil {
+		return nil, err
+	}
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	if cached, ok := cache[l]; ok {
+		return cached, nil
+	}
+	cache[l] = m
+	return m, nil
+}
+
+func load(l string) (map[string]string, error) {
+	if !supportedLocales[l] {
+		return nil, fmt.Errorf("unsupported language %q", l)
+	}
 	data, err := localeFS.ReadFile(l + ".json")
 	if err != nil {
-		return
+		return nil, fmt.Errorf("load language %q: %w", l, err)
 	}
 	var m map[string]string
 	if err := json.Unmarshal(data, &m); err != nil {
-		return
+		return nil, fmt.Errorf("parse language %q: %w", l, err)
 	}
-	strings = m
+	return m, nil
 }
 
 func T(key string) string {
 	mu.RLock()
 	defer mu.RUnlock()
-	if s, ok := strings[key]; ok {
+	if s, ok := activeStrings[key]; ok {
+		return s
+	}
+	if s, ok := englishStrings[key]; ok {
 		return s
 	}
 	return key
@@ -53,15 +106,14 @@ func TF(key string, args ...any) string {
 // TIn looks up a key in a specific locale without changing global state.
 // Falls back to the current TUI locale if the requested locale is unavailable.
 func TIn(locale, key string) string {
-	data, err := localeFS.ReadFile(locale + ".json")
+	m, err := cachedLocale(locale)
 	if err != nil {
 		return T(key)
 	}
-	var m map[string]string
-	if err := json.Unmarshal(data, &m); err != nil {
-		return T(key)
-	}
 	if s, ok := m[key]; ok {
+		return s
+	}
+	if s, ok := englishStrings[key]; ok {
 		return s
 	}
 	return key

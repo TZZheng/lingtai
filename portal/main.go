@@ -42,6 +42,11 @@ func main() {
 	flag.StringVar(&lang, "lang", "en", "Language (en, zh, wen)")
 	flag.Parse()
 
+	if err := i18n.SetLang(lang); err != nil {
+		fmt.Fprintf(os.Stderr, "invalid --lang %q: %v\n", lang, err)
+		os.Exit(1)
+	}
+
 	// Resolve project directory
 	if dir == "" {
 		dir, _ = os.Getwd()
@@ -53,9 +58,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "No .lingtai/ found in %s\n", dir)
 		os.Exit(1)
 	}
-
-	// Set language
-	i18n.SetLang(lang)
 
 	// Run migrations
 	if err := migrate.Run(lingtaiDir); err != nil {
