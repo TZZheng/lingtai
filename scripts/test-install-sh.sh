@@ -82,6 +82,131 @@ assert_eq '\u0001' "$(json_escape $'\001')" "json generic control-byte escaping"
 assert_eq "$tmp/prefix/bin" "$(bin_dir_for_prefix "$tmp/prefix")" "bin dir from prefix"
 assert_eq "$tmp/prefix/bin" "$(bin_dir_for_prefix "$tmp/prefix/")" "bin dir from slash-suffixed prefix"
 
+# --- uv bootstrap: no uv, system python3 too old (jammy scenario) -------------
+# Simulates Ubuntu jammy: python3 exists but reports 3.10 and there is no uv on
+# PATH. ensure_uv must download the official installer (via a fake curl) and run
+# it (a fake installer that drops a uv binary into UV_INSTALL_DIR), and
+# ensure_python must then succeed by resolving the bootstrapped uv.
+(
+  fakebin="$tmp/uv-fakebin"
+  fakehome="$tmp/uv-home"
+  mkdir -p "$fakebin" "$fakehome/.local/bin"
+
+  # Fake python3 reporting 3.10: sys.version_info check in python_ok fails.
+  cat > "$fakebin/python3" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"version_info >= (3, 11)"*) exit 1 ;;  # too old
+  *"import venv"*)             exit 0 ;;
+esac
+exit 0
+SH
+  chmod +x "$fakebin/python3"
+
+  # Fake curl: the -o argument names the file the uv installer is written to.
+  # Emit an installer that copies a real uv stub into UV_INSTALL_DIR.
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+out=""
+prev=""
+for a in "$@"; do
+  [[ "$prev" == "-o" ]] && out="$a"
+  prev="$a"
+done
+[[ -n "$out" ]] || { echo "fake curl: no -o target" >&2; exit 1; }
+cat > "$out" <<'INSTALLER'
+#!/usr/bin/env sh
+dir="${UV_INSTALL_DIR:?UV_INSTALL_DIR must be set}"
+mkdir -p "$dir"
+cat > "$dir/uv" <<'UVSTUB'
+#!/usr/bin/env bash
+echo "uv 0.0.0-fake"
+UVSTUB
+chmod +x "$dir/uv"
+INSTALLER
+exit 0
+SH
+  chmod +x "$fakebin/curl"
+
+  # Isolate PATH so no real uv (typically under ~/.local/bin) is reachable; only
+  # the fake python3/curl plus system coreutils are visible.
+  export PATH="$fakebin:/usr/bin:/bin"
+  export HOME="$fakehome"
+  export UV_INSTALL_DIR="$fakehome/.local/bin"
+  BUILD_DIR="$tmp/uv-build"
+  UV_INSTALLER_URL="https://example.invalid/uv/install.sh"
+
+  # Preconditions: python_ok fails (too old), find_uv finds nothing yet.
+  if python_ok; then fail "fake python3 3.10 should make python_ok fail"; fi
+  if find_uv >/dev/null 2>&1; then fail "no uv should exist before bootstrap"; fi
+
+  ensure_uv >/dev/null || fail "ensure_uv should bootstrap uv via fake curl/installer"
+  bootstrapped="$(find_uv)" || fail "find_uv should locate bootstrapped uv"
+  assert_eq "$UV_INSTALL_DIR/uv" "$bootstrapped" "find_uv resolves bootstrapped uv path"
+  [[ -x "$bootstrapped" ]] || fail "bootstrapped uv should be executable"
+
+  ensure_python || fail "ensure_python should succeed once uv is bootstrapped"
+)
+
+# --- ensure_python drives the bootstrap itself from a clean state ------------
+# Same jammy scenario, but exercise ensure_python end-to-end (no prior ensure_uv
+# call): it must bootstrap uv and succeed without a usable system Python.
+(
+  fakebin="$tmp/uv-fakebin2"
+  fakehome="$tmp/uv-home2"
+  mkdir -p "$fakebin" "$fakehome/.local/bin"
+  cat > "$fakebin/python3" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"version_info >= (3, 11)"*) exit 1 ;;
+  *"import venv"*)             exit 0 ;;
+esac
+exit 0
+SH
+  chmod +x "$fakebin/python3"
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+out=""; prev=""
+for a in "$@"; do [[ "$prev" == "-o" ]] && out="$a"; prev="$a"; done
+[[ -n "$out" ]] || { echo "fake curl: no -o target" >&2; exit 1; }
+cat > "$out" <<'INSTALLER'
+#!/usr/bin/env sh
+dir="${UV_INSTALL_DIR:?}"; mkdir -p "$dir"
+printf '#!/usr/bin/env bash\necho uv-fake\n' > "$dir/uv"; chmod +x "$dir/uv"
+INSTALLER
+exit 0
+SH
+  chmod +x "$fakebin/curl"
+  export PATH="$fakebin:/usr/bin:/bin"
+  export HOME="$fakehome"
+  export UV_INSTALL_DIR="$fakehome/.local/bin"
+  BUILD_DIR="$tmp/uv-build2"
+  UV_INSTALLER_URL="https://example.invalid/uv/install.sh"
+
+  ensure_python || fail "ensure_python should bootstrap uv end-to-end on jammy-like systems"
+  find_uv >/dev/null 2>&1 || fail "ensure_python should leave a resolvable uv behind"
+)
+
+# --- uv bootstrap idempotency: existing uv is reused, no download ------------
+(
+  fakebin="$tmp/uv-existing"
+  mkdir -p "$fakebin"
+  cat > "$fakebin/uv" <<'SH'
+#!/usr/bin/env bash
+echo "uv 9.9.9-preinstalled"
+SH
+  chmod +x "$fakebin/uv"
+  # A curl that always fails: reuse path must not invoke it.
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+echo "fake curl should not be called when uv exists" >&2
+exit 22
+SH
+  chmod +x "$fakebin/curl"
+  export PATH="$fakebin:$PATH"
+  assert_eq "$fakebin/uv" "$(ensure_uv)" "ensure_uv reuses an existing uv without downloading"
+)
+
 REF=""
 VERSION=""
 UPDATE_MODE=0
