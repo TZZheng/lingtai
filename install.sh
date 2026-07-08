@@ -33,6 +33,7 @@ DOWNLOAD_BASE="https://github.com/${REPO_SLUG}/releases/download"
 RAW_INSTALL_URL="https://raw.githubusercontent.com/${REPO_SLUG}/main/install.sh"
 GO_DL_BASE="${LINGTAI_GO_DL_BASE:-https://go.dev/dl}"  # official Go toolchain downloads
 NODE_DL_BASE="${LINGTAI_NODE_DL_BASE:-https://nodejs.org/dist}"
+UV_INSTALLER_URL="${LINGTAI_UV_INSTALLER_URL:-https://astral.sh/uv/install.sh}"  # official uv bootstrap installer
 NODE_TOOLCHAIN_VERSION="${LINGTAI_NODE_VERSION:-22.12.0}"
 
 TMPDIR="${TMPDIR:-/tmp}"
@@ -443,6 +444,64 @@ find_uv() {
   return 1
 }
 
+# ensure_uv resolves an executable uv, bootstrapping it if necessary. uv can
+# download its own Python toolchain (uv venv --python 3.13), which is the only
+# reliable way to get Python 3.11+ on distros whose system packages are older
+# (e.g. Ubuntu jammy ships Python 3.10). If uv is already present it is reused;
+# otherwise the official installer is downloaded to a temp file and run with an
+# explicit UV_INSTALL_DIR so the result lands in a known location. On success it
+# echoes the uv path and returns 0; on failure it warns loudly and returns 1
+# without aborting the overall install.
+ensure_uv() {
+  local uv installer rc
+  uv="$(find_uv 2>/dev/null || true)"
+  if [[ -n "$uv" ]]; then
+    echo "$uv"
+    return 0
+  fi
+
+  if ! command -v curl &>/dev/null; then
+    warn "curl is required to bootstrap uv but was not found."
+    return 1
+  fi
+
+  local install_dir="${UV_INSTALL_DIR:-$HOME/.local/bin}"
+  say "Bootstrapping uv (for a self-contained Python runtime) ..."
+  mkdir -p "$install_dir"
+
+  installer="$BUILD_DIR/uv-install.sh"
+  mkdir -p "$BUILD_DIR"
+  # Download to a temp file first so the script is fetched (and can be inspected)
+  # before it is executed, rather than piping an unseen body straight into sh.
+  if ! curl -fsSL --retry 3 --max-time 120 -o "$installer" "$UV_INSTALLER_URL"; then
+    warn "failed to download the uv installer from $UV_INSTALLER_URL"
+    return 1
+  fi
+
+  # UV_INSTALL_DIR pins where the uv binary lands; UV_NO_MODIFY_PATH keeps the
+  # installer from editing shell rc files during a one-shot install.
+  UV_INSTALL_DIR="$install_dir" UV_NO_MODIFY_PATH=1 sh "$installer" >/dev/null 2>&1
+  rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    warn "the uv installer exited with status $rc"
+    return 1
+  fi
+
+  # The freshly-installed uv may not be on PATH yet; find_uv also probes
+  # ~/.local/bin, and we fold in an explicit install_dir check for custom dirs.
+  uv="$(find_uv 2>/dev/null || true)"
+  if [[ -z "$uv" && -x "$install_dir/uv" ]]; then
+    uv="$install_dir/uv"
+  fi
+  if [[ -z "$uv" || ! -x "$uv" ]]; then
+    warn "uv installer ran but no executable uv was found under $install_dir."
+    return 1
+  fi
+  say "Bootstrapped uv at $uv."
+  echo "$uv"
+  return 0
+}
+
 # python_ok reports whether a python3 with venv support and >=3.11 is present.
 python_ok() {
   command -v python3 &>/dev/null || return 1
@@ -451,21 +510,34 @@ python_ok() {
   return 0
 }
 
-# ensure_python makes a usable python3 available. On apt systems it can install
-# python3/python3-venv/python3-pip. uv can bootstrap its own Python, so uv alone
-# is also sufficient.
+# ensure_python makes a usable Python interpreter available for the runtime venv.
+# uv is preferred because it can download its own Python 3.13 toolchain, which is
+# the only reliable path on distros whose packages are too old (Ubuntu jammy ships
+# Python 3.10, so `apt install python3` does NOT yield a usable interpreter here).
+# Order of preference:
+#   1. an existing uv                       -> done (uv downloads Python itself)
+#   2. an already-adequate system python3   -> done
+#   3. bootstrap uv via the official installer (needs curl) -> done
+#   4. apt-install python3/venv/pip and re-check python_ok (for distros where it
+#      actually yields Python 3.11+, or where curl is unavailable for step 3)
 ensure_python() {
-  if [[ -n "$(find_uv)" ]] 2>/dev/null || find_uv >/dev/null 2>&1; then
+  if find_uv >/dev/null 2>&1; then
     return 0  # uv can download Python itself
   fi
   if python_ok; then
     return 0
   fi
+  # Try to bootstrap uv before falling back to system packages: on jammy the apt
+  # python3 is 3.10, so uv is the only way to reach Python 3.11+.
+  if ensure_uv >/dev/null; then
+    return 0
+  fi
   if command -v apt-get &>/dev/null; then
     apt_install "Python 3.11+ with venv/pip" python3 python3-venv python3-pip || return 1
     python_ok && return 0
+    warn "apt-installed python3 is still older than 3.11 (or lacks venv); uv bootstrap is required."
   fi
-  warn "Python 3.11+ (with venv and pip) is required for the runtime venv. Install it with:"
+  warn "Python 3.11+ (via uv or system packages) is required for the runtime venv. Install uv or Python 3.11+ with:"
   suggest_install python3
   return 1
 }
