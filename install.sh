@@ -440,6 +440,7 @@ apt_install() {
 
 find_uv() {
   if command -v uv &>/dev/null; then command -v uv; return 0; fi
+  [[ -n "${UV_INSTALL_DIR:-}" && -x "$UV_INSTALL_DIR/uv" ]] && { echo "$UV_INSTALL_DIR/uv"; return 0; }
   [[ -x "$HOME/.local/bin/uv" ]] && { echo "$HOME/.local/bin/uv"; return 0; }
   return 1
 }
@@ -597,10 +598,25 @@ ensure_runtime_venv() {
 
     if [[ -z "$py" ]]; then
       if [[ -n "$uv" ]]; then
-        "$uv" venv --python 3.13 "$venv_dir" || { warn "uv venv failed; falling back to python3 -m venv"; uv=""; }
+        if ! "$uv" venv --python 3.13 "$venv_dir"; then
+          if python_ok; then
+            warn "uv venv failed; falling back to python3 -m venv"
+            uv=""
+          else
+            warn "uv venv failed and no Python 3.11+ with venv/ensurepip is available; skipping runtime setup."
+            warn "Install uv or Python with venv/ensurepip support, then re-run the installer."
+            return 0
+          fi
+        fi
       fi
       if [[ ! -x "$venv_dir/bin/python" && ! -x "$venv_dir/bin/python3" && -z "$uv" ]]; then
-        python3 -m venv "$venv_dir" || { warn "failed to create venv"; return 0; }
+        if python_ok; then
+          python3 -m venv "$venv_dir" || { warn "failed to create venv"; return 0; }
+        else
+          warn "Cannot create runtime venv: uv is unavailable and no Python 3.11+ with venv/ensurepip is available."
+          warn "Install uv or Python with venv/ensurepip support, then re-run the installer."
+          return 0
+        fi
       fi
       if [[ -x "$venv_dir/bin/python" ]]; then
         py="$venv_dir/bin/python"

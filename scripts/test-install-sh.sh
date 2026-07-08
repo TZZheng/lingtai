@@ -230,6 +230,68 @@ SH
   find_uv >/dev/null 2>&1 || fail "ensure_python should leave uv available after ensurepip-missing bootstrap"
 )
 
+# --- find_uv honors custom UV_INSTALL_DIR -----------------------------------
+# ensure_uv can install into UV_INSTALL_DIR, so subsequent find_uv calls must
+# probe that directory even when it is not on PATH and not ~/.local/bin.
+(
+  fakehome="$tmp/uv-home-custom-dir"
+  custom_uv_dir="$tmp/uv-custom-dir"
+  mkdir -p "$fakehome" "$custom_uv_dir"
+  cat > "$custom_uv_dir/uv" <<'SH'
+#!/usr/bin/env bash
+echo uv-custom
+SH
+  chmod +x "$custom_uv_dir/uv"
+  export PATH="/usr/bin:/bin"
+  export HOME="$fakehome"
+  export UV_INSTALL_DIR="$custom_uv_dir"
+
+  assert_eq "$custom_uv_dir/uv" "$(find_uv)" "find_uv should probe UV_INSTALL_DIR"
+)
+
+# --- runtime venv does not fall back to Python without ensurepip -------------
+# If uv is present but cannot create the venv, do not fall back to a system
+# Python that python_ok rejects (e.g. WSL/Ubuntu Python with venv but no
+# ensurepip). That fallback produces confusing ensurepip errors or stale venvs.
+(
+  fakebin="$tmp/runtime-no-ensurepip-bin"
+  fakehome="$tmp/runtime-no-ensurepip-home"
+  fake_uv_dir="$tmp/runtime-no-ensurepip-uv"
+  mkdir -p "$fakebin" "$fakehome" "$fake_uv_dir"
+  cat > "$fake_uv_dir/uv" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1" == "venv" ]]; then
+  echo "fake uv venv failed" >&2
+  exit 42
+fi
+if [[ "$1" == "pip" ]]; then exit 43; fi
+echo uv-fake
+SH
+  chmod +x "$fake_uv_dir/uv"
+  cat > "$fakebin/python3" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  *"version_info >= (3, 11)"*) exit 0 ;;
+  *"import venv, ensurepip"*)   exit 1 ;;
+  *"-m venv"*)                  touch "$fakehome/fallback-invoked"; exit 1 ;;
+esac
+exit 0
+SH
+  chmod +x "$fakebin/python3"
+  export PATH="$fakebin:/usr/bin:/bin"
+  export HOME="$fakehome"
+  export UV_INSTALL_DIR="$fake_uv_dir"
+  export SKIP_VENV=0
+
+  out="$(ensure_runtime_venv "$fakehome/bin" 2>&1)"
+  case "$out" in
+    *"no Python 3.11+ with venv/ensurepip is available"*) ;;
+    *) fail "runtime venv should warn when uv fails and system Python lacks ensurepip; output: $out" ;;
+  esac
+  [[ ! -e "$fakehome/fallback-invoked" ]] || fail "ensure_runtime_venv fell back to rejected system python"
+  [[ ! -d "$fakehome/.lingtai-tui/runtime/venv" ]] || fail "ensure_runtime_venv left a stale venv after uv failure"
+)
+
 # --- uv bootstrap idempotency: existing uv is reused, no download ------------
 (
   fakebin="$tmp/uv-existing"
