@@ -36,13 +36,13 @@ maintenance: |
 | `ParseWMICOutput` | `tui/internal/processscan/check.go:81` | Windows WMIC/PowerShell list parser with the same agent-dir extraction rules |
 | `ExtractAgentDir` | `tui/internal/processscan/check.go:122` | launch-marker parser that takes the final run argument intact so spaces survive |
 | `FindAgentProcesses` | `tui/internal/processscan/check.go:262` | shells out to process listing, normalizes one requested agent dir, and parses matches |
-| `FindAllAgentProcesses` | `tui/internal/processscan/check.go:279` | shells out to process listing and returns all visible agent processes for list/purge |
-| `IsAgentRunning` | `tui/internal/processscan/check.go:327` | boolean convenience wrapper used by launch/migration boundaries |
+| `FindAllAgentProcesses` | `tui/internal/processscan/check.go:281` | shells out to process listing and returns all visible agent processes for list/purge, or the scan-command error |
+| `IsAgentRunning` | `tui/internal/processscan/check.go:333` | boolean convenience wrapper used by launch/migration boundaries |
 
 ## Composition
 
 - **Upstream callers:** `tui/internal/process/check.go` re-exports this package for launch/refresh callers; `tui/internal/migrate/m036_sqlite_log_backfill.go` calls it directly to skip running agents before attempting offline SQLite rebuilds; `lingtai-tui list` and `purge` consume all-process scans via `tui/list_common.go:69-115` and `tui/purge_common.go:15-39`.
-- **External dependency:** host `ps -eo pid=,command=` for one-dir checks, `ps -eo pid=,etime=,command=` for all-process list/purge, and WMIC/PowerShell on Windows. Errors fail closed to “no match”; the kernel workdir lock remains the authoritative safety gate for SQLite rebuilds.
+- **External dependency:** host `ps -eo pid=,command=` for one-dir checks, `ps -eo pid=,etime=,command=` for all-process list/purge, and WMIC/PowerShell on Windows. One-dir check errors fail closed to “no match” (advisory boundary); all-process scan errors are returned from `FindAllAgentProcesses` so `list`/`purge` fail loud instead of reporting an empty process table. The kernel workdir lock remains the authoritative safety gate for SQLite rebuilds.
 
 ## Invariants
 

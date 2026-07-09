@@ -275,16 +275,22 @@ func FindAgentProcesses(agentDir string) []AgentProcess {
 }
 
 // FindAllAgentProcesses returns every visible LingTai agent process. On Unix it
-// uses `etime` as a display-only uptime string.
-func FindAllAgentProcesses() []AgentProcess {
+// uses `etime` as a display-only uptime string. A process-scan command failure
+// is returned as an error, never as an empty result, so callers can tell
+// "nothing running" apart from "scan failed".
+func FindAllAgentProcesses() ([]AgentProcess, error) {
 	if runtime.GOOS == "windows" {
-		return findAgentProcessesWindows("")
+		out, err := windowsAgentProcessOutput()
+		if err != nil {
+			return nil, err
+		}
+		return ParseWMICOutput(string(out), ""), nil
 	}
 	out, err := exec.Command("ps", "-eo", "pid=,etime=,command=").Output()
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return ParsePSListOutput(string(out))
+	return ParsePSListOutput(string(out)), nil
 }
 
 func findAgentProcessesWindows(abs string) []AgentProcess {

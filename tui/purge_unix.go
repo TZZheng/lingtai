@@ -21,7 +21,12 @@ func purgeMain() {
 		filterDir, _ = filepath.Abs(os.Args[2])
 	}
 
-	procs := purgeProcsFromAgentProcesses(processscan.FindAllAgentProcesses(), filterDir, os.Getpid())
+	found, err := processscan.FindAllAgentProcesses()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error running ps: %v\n", err)
+		os.Exit(1)
+	}
+	procs := purgeProcsFromAgentProcesses(found, filterDir, os.Getpid())
 
 	if len(procs) == 0 {
 		if filterDir != "" {

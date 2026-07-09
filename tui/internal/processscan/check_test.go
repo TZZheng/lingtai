@@ -196,3 +196,14 @@ func TestCommandMatchesAgentDirEOLAndArgBoundary(t *testing.T) {
 		t.Fatal("quoted spaced arg-boundary match should remain supported")
 	}
 }
+
+func TestFindAllAgentProcessesReturnsScanError(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // no ps / wmic / powershell reachable
+	procs, err := FindAllAgentProcesses()
+	if err == nil {
+		t.Fatalf("expected an error when the process-scan command is unavailable, got procs=%v", procs)
+	}
+	if len(procs) != 0 {
+		t.Fatalf("expected no processes alongside the error, got %v", procs)
+	}
+}

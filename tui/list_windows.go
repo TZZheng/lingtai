@@ -16,7 +16,12 @@ func listMain() {
 		listUsageError(err)
 	}
 
-	procs := listProcsFromAgentProcesses(processscan.FindAllAgentProcesses(), opts.FilterDir, os.Getpid())
+	found, err := processscan.FindAllAgentProcesses()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error listing processes: %v\n", err)
+		os.Exit(1)
+	}
+	procs := listProcsFromAgentProcesses(found, opts.FilterDir, os.Getpid())
 
 	if len(procs) == 0 {
 		if opts.JSON {
