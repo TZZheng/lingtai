@@ -1105,10 +1105,10 @@ func codexPreset() Preset {
 		Manifest: map[string]interface{}{
 			"llm": map[string]interface{}{
 				// Use gpt-5.6-sol as the default after successful live testing.
-				// The other named GPT-5.6 routes and the generic GPT-5.6 model
-				// remain selectable for accounts where they are enabled. The
-				// complete curated list lives in preset_editor.go's
-				// providerModels.
+				// The other named GPT-5.6 routes remain selectable for accounts
+				// where they are enabled. The complete curated model list lives
+				// in preset_editor.go's providerModels; the bare gpt-5.6 alias
+				// is intentionally omitted.
 				"provider": "codex", "model": "gpt-5.6-sol",
 				"api_key": nil, "api_key_env": "",
 				"base_url": "https://chatgpt.com/backend-api/codex",
