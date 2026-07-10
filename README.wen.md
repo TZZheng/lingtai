@@ -11,7 +11,7 @@
 > *灵台者有持，而不知其所持，而不可持者也。*
 > — 庄子 · 庚桑楚
 
-[English](README.md) | [中文](README.zh.md) | [文言](README.wen.md) | [lingtai.ai](https://lingtai.ai)
+[English](README.md) · [中文](README.zh.md) · [文言](README.wen.md) · [官网](https://lingtai.ai) · [教程](https://lingtai.ai/wen/tutorial/) · [发布日志](https://lingtai.ai/releases/)
 
 [![License](https://img.shields.io/github/license/Lingtai-AI/lingtai?color=%237dab8f)](LICENSE)
 [![Kernel](https://img.shields.io/badge/内核-lingtai--kernel-%237dab8f)](https://github.com/Lingtai-AI/lingtai-kernel)
@@ -22,13 +22,9 @@
 
 ---
 
-诸 agent 之器，多予人一善工。**灵台所予者，AI 组织之基也**：器灵久居本地项目，各有庐舍目录、收发信匣、久藏之记、生死之制、自省之心流；事大而一心不足，则可召同侪，亦可化分身。
+诸 agent 之器，多予人一善工。**灵台所予者，AI 组织之基也**——器灵久居本地项目，各有庐舍目录、收发信匣、久藏之记、生死之制、自省之心流；事大而一心不足，则可召同侪，亦可化分身。
 
-**OpenClaw**、**Hermes** 诸器，善为可役之手，能行 agentic task。灵台则立其上之组织法：能以编码智能体与 CLI 为工，而自守其角色、记忆、书信、督察、复苏之道，使一网器灵不以一窗既闭、一终端既息而散。
-
-人自 TUI、Telegram、飞书、微信、WhatsApp、邮件下令。其组织由被召之器灵醒，读项目旧记，用本地诸器，成文卷，必要则调同侪，终仍由来路复命。
-
-## 非一窗，乃元组织
+其道以文件系统为本，非一聊天之窗也。凡器灵皆有宅于 `.lingtai/` 之下；其一切状态——书信、记忆、日志、心跳——皆寻常文件，可以 `ls`、`cat`、`jq`、编辑器，乃至他编码智能体径读之。终端虽闭，其组织犹存：可验、可重启、可教、可复。
 
 ```text
 人曰：
@@ -36,8 +32,7 @@
    明旦以简报告我。”
 
 灵台：
-  自信匣而醒
-  → 读久存项目之记
+  自信匣而醒 → 读久存项目之记
   → 用 shell / web / file / coding-agent 诸器
   → 闲或滞时，以 soul flow 自省
   → 书札、成报、补丁、定期之务
@@ -45,7 +40,7 @@
   → 仍由 Telegram / TUI / 邮件奉复
 ```
 
-终端可闭。其组织犹有 `.lingtai/` 之宅、信匣、可验之日志，亦有眠、醒、刷新、复苏、凝蜕诸生命之制。Soul flow 者，器灵内省之流也：久闲之后，能返观其局，见所遗漏，陈可行之后策，不必永候下一问。
+Claude Code、Codex、OpenClaw、Hermes 诸编码之器，善为可役之手。灵台则立其上之组织法：能以编码智能体为工，而自守其角色、记忆、书信、督察、复苏之道，使一网器灵不以一窗既闭、一终端既息而散。
 
 ## 三令而启
 
@@ -55,82 +50,33 @@ mkdir my-project && cd my-project
 lingtai-tui
 ```
 
-> 一令安装之脚本，通 macOS、Linux 与 WSL；先取预编译之 release，无则退而源码编译。原生 Windows/PowerShell 尚在计划，未及也。
+一令安装之脚本，通 macOS、Linux 与 WSL（原生 Windows/PowerShell 尚在计划），装 `lingtai-tui` 与 `lingtai-portal`。此后**余事皆委于 TUI**——初启之时，作 `.lingtai/`，备其 Python 运行时，引君择模型与配方，并令一常驻器灵守此项目。后欲升级，重跑安装脚本（或 `lingtai-tui self-update`），再启 TUI 可也。
 
-> 初入 LingTai？先读[小白工作手册](docs/beginner-work-manual.zh.md)（或[单文件 HTML 图解版](docs/beginner-work-manual-stick-figure.zh.html)），再启首个项目。
+> **初入灵台？** 循 [lingtai.ai 之教程](https://lingtai.ai/wen/tutorial/) 逐步而行——自安装、首务、外接诸渠、记忆与生死，首尾一贯。
 
-初启之时，灵台作 `.lingtai/`，备其运行时，引君择模型与配方，并令一常驻器灵守此项目。
+> Homebrew（`brew install lingtai-ai/lingtai/lingtai-tui`）于旧用者犹可用；然新装宜用一令之脚本。PyPI 之 `lingtai` 包者，乃 TUI 代管之 Python 运行时——唯开发或诊断内核时，方用 `pip`。
 
-```text
-project/
-└── .lingtai/
-    ├── human/              # 人之信匣身份
-    └── <agent>/            # 一常驻项目器灵
-        ├── inbox/ outbox/  # 书至则醒
-        ├── knowledge/      # 久存事实与所学
-        ├── system/         # pad、总结、恒规
-        └── logs/           # 可考之运行迹
-```
+## 诸界面
 
-> PyPI 之 `lingtai` 包固在，然其为 TUI 代管之 Python 运行时。安装、升级宜用一令安装之脚本；唯开发或诊断内核时，乃用 `pip`。
+**TUI——`lingtai-tui`** 者，人所主用之面也：项目初始、模型/配方之设、对话与信匣、器灵之状（token + 上下文 + 心跳）、分身神识之可见、命令之面板、升级与 doctor 之流。于 TUI 中入 `/help`，可观斜杠命令之全录（其权威之目，乃内置 [`lingtai-tui-help` 技能](tui/internal/preset/skills/lingtai-tui-help/assets/slash-commands.wen.md)，此 README 不复述之）。升级之后若有不谐，行 `lingtai-tui doctor`。
 
-> 欲手动更新 TUI，可行 `lingtai-tui self-update`；其先辨装法，`source/user-local` 可自更，`unknown/other` 则止而示指引。亦可重跑一令安装之脚本以升级。
+**Portal——`lingtai-portal`** 者，可视之服也。读项目之状，显器灵之网、书信之边、历史之拓扑——一项目中器灵非一，或欲观其事之所以演，则用之。
 
-> 启时亦察源码/用户本地之新版；若辞，则不动旧二进制，并示 `lingtai-tui self-update` 以待后行。
+**外接诸渠**，接**同一**助理于君素用之台——记忆、诸器、往史，通乎诸渠之间；其为一助理之众门，非各立之机器人也。可于 TUI 之 `/mcp` 面板配置，亦可于 `init.json` 中明示。凭证藏于本地 `.secrets/`（绝不入 Git）；凡外部之副作用（发讯、提 issue）皆按真行待之，于陌生发件者默不自答。
 
-> `doctor` 亦辨 TUI 之装法：`homebrew`、`source/user-local`、`unknown/other`。非 Homebrew 者，不妄行 `brew`，但示手动更新之路。
-
-> 大陆网络之镜像、源码编译诸细，详见 [README.zh 安装详解](README.zh.md#安装详解)。
-
-## 所善
-
-| 人所欲 | 器灵所行 |
+| 插件 | 所用 |
 |---|---|
-| **每日治项** | 扫变更，记决策，列阻塞，晨前以简报进。 |
-| **GitHub 分诊** | 读 issue/PR，辨风险，草回复或补丁；凡有外部副作用，先候人允。 |
-| **调研成器** | 搜索、抓取、比较、引证，终成独立 HTML 札记，而非散乱对话。 |
-| **长时编码** | 使 Claude Code、Codex、OpenCode、shell 与本地文卷；灵台守其计、记与通信。 |
-| **能行之定期事** | “每工作日辰时察部署队，滞则 Telegram 告我”——非徒提醒而已。 |
-| **跨会话之记忆** | 路径、偏好、同作者背景、旧训、可复用流程，皆留待后来。 |
+| `telegram` | 于 Telegram 与助理对（私信、可选白名单、附件语音透传）。 |
+| `feishu` | 飞书 / Lark——长连接之术，无需公网之址，无需回调之路。 |
+| `wechat` | 以 iLink / gewechat 之桥接接微信。 |
+| `whatsapp` | 以灵台精选之桥接接 WhatsApp。 |
+| `imap` | 真 IMAP/SMTP 之邮——多账、于陌生者有安全之默。 |
 
-## 何以异
+**以编码智能体为手。** 灵台之助理居于文件系统，故凡编码智能体皆能驱之——或为 daemon 之后端以行专务，或为同侪而通乎共享之 `.lingtai/human/` 信匣。灵台执其长线之计、记与协；编码智能体司精确可审之作。
 
-| Agent 工具 / 编码助手 | 灵台元组织之器 |
-|---|---|
-| 一窗对话、一回运行，即其产品。 | 项目中之组织，乃其产品；对话特入口耳。 |
-| OpenClaw、Hermes 诸器，为善工。 | 灵台立善工之外之组织图：记忆、信匣、角色、生死、督察、复苏。 |
-| 窗闭则缘尽。 | 器灵有本地之宅、信匣、日志、记忆与生命周期。 |
-| 主动与否，全待人复问。 | Soul flow 使闲中自省，能见盲处而献后策。 |
-| 扩展者，多开几窗几轮。 | 可化长存分身掌专职，亦遣短命神识分批务；门户可观其拓扑。 |
-| 一 turn 失误，则重启祈祷。 | 眠、醒、刷新、复苏、清境、doctor、凝蜕，皆运行时之常法。 |
-
-## 制式一览
-
-```mermaid
-flowchart LR
-    human[Human] --> channels[TUI / Telegram / Email / Feishu / WeChat]
-    channels --> agent[常驻灵台器灵]
-    agent --> soul[Soul flow: 自省 + 主动后策]
-    agent --> tools[Files / Bash / Web / Vision / MCP / Coding CLIs]
-    agent --> memory[Pad / Knowledge / Skills / Character]
-    agent --> lifecycle[Sleep / Wake / Refresh / CPR / Molt]
-    agent --> network[组织: avatars + daemons]
-    network --> portal[组织实时可视]
-    tools --> artifacts[报告 / 补丁 / 笔记 / 定期之务]
-    soul --> agent
-    memory --> agent
-```
-
-## 随事而长
-
-始于一常驻器灵。事大，则组织随之而长：
-
-- **凝蜕而不失忆。** 长会话卸其尘滓，而以总结与久记传后身。
-- **自省而不枯候。** Soul flow 使器灵于闲时反观，见失路与新机。
-- **化分身。** 令长存专才各有记忆、信匣、职责。
-- **遣神识。** 以短命工人分繁杂批务，留其结论。
-- **以编码智能体为手。** Claude Code、Codex、OpenCode、OpenClaw、Hermes 等为精作之手；灵台执其计、记、协同与对人之言。
-- **观其生长。** Portal 显谁存、谁作、组织拓扑何以变。
+- **Claude Code** — `claude plugin add Lingtai-AI/claude-code-plugin`
+- **OpenAI Codex CLI** — `git clone https://github.com/Lingtai-AI/codex-plugin.git && cd codex-plugin && ./install.sh`
+- **他智能体**（OpenCode、OpenClaw、Hermes 等）—— 置 [`lingtai-skill`](https://github.com/Lingtai-AI/lingtai-skill) 协议之技能于君工具之技能目录即可。
 
 <div align="center">
 
@@ -138,64 +84,54 @@ flowchart LR
 
 </div>
 
-## 外接诸器
+## 制式
 
-外接插件者，接通外部通讯之道也。可于 TUI 中以 `/mcp` 控制面板配置，亦可于 `init.json` 中明示。
+灵台由二仓而成：
 
-### 飞书（Feishu/Lark）
+| 仓 | 语 | 所司 |
+|---|---|---|
+| [`Lingtai-AI/lingtai`](https://github.com/Lingtai-AI/lingtai)（本仓） | Go + TypeScript | TUI、portal、安装流水、自带工具技能。出 `lingtai-tui` 与 `lingtai-portal`。 |
+| [`Lingtai-AI/lingtai-kernel`](https://github.com/Lingtai-AI/lingtai-kernel) | Python（+ Rust sidecar） | 器灵运行时、LLM 回合之环、固有诸器、会话/上下文/凝蜕之治、MCP 之宿。于 PyPI 以 `lingtai` 发。 |
 
-飞书插件以**长连接之术**接收讯息，**无需公网之址，无需回调之路**。
+Go 之 TUI **不**承器灵之心，但启并监 Python 内核器灵为子进程；面与器灵之间，凡交皆经项目文件系统（`.lingtai/` 信匣、心跳、日志、提示之文、portal 之记）。此所以其状易考、他器不假 SDK 而能与之协也。
 
-飞书开放台配置：
+欲观有源可考之仓图，自 [`ANATOMY.md`](ANATOMY.md) 入，而后下至 [`tui/ANATOMY.md`](tui/ANATOMY.md) 或 [`portal/ANATOMY.md`](portal/ANATOMY.md)。欲循知识图谱而行，见 [`docs/graphify.md`](docs/graphify.md)。
 
-1. 于 [open.feishu.cn/app](https://open.feishu.cn/app) 创企业自建应用
-2. 启机器人之能（Bot → 功能 → 启用）
-3. 权限管理 → 加 `im:message`
-4. 事件订阅 → 选"以长连接接收事件" → 加 `im.message.receive_v1`
-5. 发布应用版本
+## 开发与贡献
 
-配置文件 `feishu.json`：
+编 TUI：`cd tui && make build`；编 portal：`cd portal && make build`。需 Go 1.26+、`make`，及（portal 所用之）Node.js/npm。
 
-```json
-{
-  "app_id_env": "FEISHU_APP_ID",
-  "app_secret_env": "FEISHU_APP_SECRET",
-  "allowed_users": ["ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"]
-}
+灵台之贡献，贵有源可考、循既定之流：
+
+1. 先读相关 anatomy——根之 [`ANATOMY.md`](ANATOMY.md)，而后下至 `tui/ANATOMY.md` 或 `portal/ANATOMY.md`。
+2. 于 `origin/main` 上开分支或 worktree；改动务收敛。
+3. 行对应之验证；凡结构性之改，同步更新 anatomy 与文档。
+4. PR 中明言：何所改、何以改、何以验之。
+
+```bash
+# TUI 之改
+cd tui && go test ./... && go vet ./... && go build -o bin/lingtai-tui .
+
+# Portal 之改
+cd portal/web && npm ci && npm run build && cd .. && go test ./... && go build -o bin/lingtai-portal .
+
+# 唯文档
+git diff --check && git status --short
 ```
 
-于 `init.json` 中明示：
-
-```json
-{
-  "addons": {
-    "feishu": { "config": "feishu.json" }
-  }
-}
-```
-
-## 文档
-
-- 初用者，可先读 [《灵台工作手册（初学者友好版）》](docs/beginner-work-manual.zh.md)，亦可观 [单文件图解版](docs/beginner-work-manual-stick-figure.zh.html)。
-- 接外渠者，于 TUI 中用 `/mcp`，再读相应插件之入门文。
-- 读源码者，自 [`ANATOMY.md`](ANATOMY.md) 入，而后下至 `tui/ANATOMY.md` 或 `portal/ANATOMY.md`。
+发布之流见 [`RELEASING.md`](RELEASING.md)。常需相助之处：TUI 之易用与无障、portal 之可视、MCP/插件之入门、跨平台安装之磨、文档、运行时之诊、可复用之技能。
 
 ## 同道
 
-诸君若有问、有疑、有议，可于 [GitHub Issues](https://github.com/Lingtai-AI/lingtai/issues) 或 [Discussions](https://github.com/Lingtai-AI/lingtai/discussions) 言之。
+- 官网、教程与发布日志：<https://lingtai.ai>
+- 主仓：<https://github.com/Lingtai-AI/lingtai> · 内核：<https://github.com/Lingtai-AI/lingtai-kernel>
+- Discord：<https://discord.gg/cMchjXpg>
+- Issues：<https://github.com/Lingtai-AI/lingtai/issues> · Discussions：<https://github.com/Lingtai-AI/lingtai/discussions>
 
-**微信同道群**
-
-扫码加作者微信（备注 *lingtai*），引入测试群。此码按时更之，若已过期，烦君提 issue 相告。
+**微信同道群**：扫码加作者微信（备注 *lingtai*），引入测试群。此码按时更之，若已过期，烦君提 issue 相告。
 
 <img src="docs/assets/wechat.png" alt="微信二维码 — 扫码加入 lingtai 测试群" width="200">
 
 ## 许可
 
-MIT — [Zesen Huang](https://github.com/huangzesen), 2025–2026
-
-<div align="center">
-
-[lingtai.ai](https://lingtai.ai) · [lingtai-kernel](https://github.com/Lingtai-AI/lingtai-kernel) · [PyPI](https://pypi.org/project/lingtai/)
-
-</div>
+Apache-2.0 — 见 [LICENSE](LICENSE)。

@@ -4,8 +4,6 @@ related_files:
   - README.md
   - README.zh.md
   - README.wen.md
-  - docs/beginner-work-manual.zh.md
-  - docs/beginner-work-manual-stick-figure.zh.html
   - docs/known-limitations.md
   - docs/status.md
   - docs/graphify.md
@@ -23,14 +21,12 @@ maintenance: |
 
 Human- and developer-facing documentation for the Go-side LingTai repo.
 
-> **Maintenance:** see the `lingtai-tui-anatomy` skill. This file is part of the repo anatomy tree. Update it in the same PR when documentation entry points move, when a human-facing manual becomes authoritative for a capability surface, or when docs stop matching the product.
+> **Maintenance:** see the `lingtai-tui-anatomy` skill. This file is part of the repo anatomy tree. Update it in the same PR when documentation entry points move or when docs stop matching the product. The step-by-step beginner guide is owned by the website tutorial (`https://lingtai.ai/{en,zh,wen}/tutorial/`), not this directory; `docs/` holds repo-native developer and reference material.
 
 ## Components
 
 | Path | Role |
 |---|---|
-| `beginner-work-manual.zh.md` | **Human-facing anatomy / capability map** for first-time users. Explains what LingTai is, first-use flow, common slash commands, files/bash/web/vision/skills/knowledge/pad, MCP/addons, daemon/avatar, context pressure and molt, soul flow, safety/privacy, and troubleshooting. |
-| `beginner-work-manual-stick-figure.zh.html` | Standalone browser-friendly animated explainer for the same beginner manual. No remote assets; keep it consistent with the Markdown manual. |
 | `assets/` | Documentation screenshots and visual assets. |
 | `blog/` | Narrative product/dev blog posts. |
 | `daily/` | Daily notes / project logs. |
@@ -40,30 +36,28 @@ Human- and developer-facing documentation for the Go-side LingTai repo.
 
 ## Connections
 
-- `README.md`, `README.zh.md`, and `README.wen.md` point first-time users to `beginner-work-manual.zh.md` and the animated HTML version.
-- TUI command/help truth lives in the TUI command registry and shipped help assets; the beginner manual summarizes it for humans and must not drift from those sources.
-- Install/upgrade truth lives in README, release notes, and TUI/doctor behavior; the beginner manual gives a friendly route and should defer to those sources for exact commands.
-- Addon/channel truth lives in the TUI `/mcp` surface and curated addon docs; the manual summarizes the concept and common channels.
+- `README.md`, `README.zh.md`, and `README.wen.md` each point first-time users to their locale's website tutorial (`https://lingtai.ai/{en,zh,wen}/tutorial/`) for step-by-step learning; the READMEs themselves carry only concise orientation.
+- TUI command/help truth lives in the TUI command registry and shipped help assets (`tui/internal/preset/skills/lingtai-tui-help/assets/`); README and the website tutorial defer to those sources rather than duplicating the command catalog.
+- Install/upgrade truth lives in README, release notes, and TUI/doctor behavior; the website tutorial gives the friendly route and defers to those sources for exact commands.
+- Addon/channel truth lives in the TUI `/mcp` surface and curated addon docs; README and the tutorial summarize the concept and common channels.
 
 ## Composition
 
 The documentation tree serves three audiences:
 
-1. **First-time humans:** README docs-by-goal → `beginner-work-manual.zh.md` → optional animated HTML.
+1. **First-time humans:** README orientation → website tutorial (`https://lingtai.ai/{en,zh,wen}/tutorial/`) for the step-by-step walkthrough. This directory no longer holds a beginner manual.
 2. **Maintainers / coding agents:** repo-root `ANATOMY.md` → `tui/ANATOMY.md` / `portal/ANATOMY.md` / this file → cited code/docs.
 3. **Historical researchers:** plans, specs, blog, daily logs, and design notes.
 
-The beginner manual is intentionally not just a loose article: it is the human-facing counterpart to code anatomy. It maps the product surface into concepts a user can act on.
+`docs/` is repo-native developer and reference material. The human-facing beginner guide is deliberately kept as one source of truth on the website, so the READMEs link to it instead of duplicating a manual here.
 
 ## State
 
-- `beginner-work-manual.zh.md` and `beginner-work-manual-stick-figure.zh.html` were added by community PR `Lingtai-AI/lingtai#255` and linked from the three READMEs.
-- The animated HTML is checked in deliberately as long-lived documentation, unlike routine PR explainers under `reports/`.
-- The manual uses version-drift disclaimers; do not rely on those disclaimers as a substitute for updating it when the product surface changes.
+- The repo-owned Chinese beginner manual (`beginner-work-manual.zh.md`, added by community PR `Lingtai-AI/lingtai#255`, plus its single-file illustrated companion `beginner-work-manual-stick-figure.zh.html`) was removed when the beginner guide moved to the website tutorial. The READMEs now link to `https://lingtai.ai/{en,zh,wen}/tutorial/` instead. Do not reintroduce an in-repo beginner manual — that recreates a second source of truth.
+- Routine PR explainers under `reports/` remain local-only by default; only deliberately long-lived docs live under `docs/`.
 
 ## Notes
 
-- **Update trigger:** when a PR changes a user-visible slash command, setup flow, install/upgrade path, `/mcp`/addon/channel behavior, daemon/avatar guidance, memory/molt behavior, soul-flow explanation, safety boundary, or troubleshooting path, check whether the beginner manual and animated HTML need edits.
-- **Keep Markdown and HTML aligned:** if one is updated substantively, update the other or leave a clear note explaining why the HTML remains a high-level explainer.
+- **Update trigger:** when a PR changes a user-visible slash command, setup flow, install/upgrade path, `/mcp`/addon/channel behavior, daemon/avatar guidance, memory/molt behavior, soul-flow explanation, safety boundary, or troubleshooting path, keep the README orientation and shipped help assets accurate, and flag the website tutorial for a matching update (tracked in the separate website repo).
 - **No private paths or secrets:** docs may mention `.secrets/` and placeholders, but must not include real local paths, tokens, chat IDs, or account-specific values.
 - **Do not commit routine reports:** `reports/*.html` is local-only by default. Long-lived docs belong under `docs/` and should be represented here when they become maintenance obligations.
