@@ -10,6 +10,7 @@ description: >
   registration is owned by the `mcp-manual` skill (kernel capability).
 version: 1.0.0
 last_changed_at: "2026-05-31T21:29:38-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # zhipu-coding-plan

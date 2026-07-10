@@ -4,6 +4,7 @@ description: >
   Nested lingtai-dev-guide reference for diagnosing LingTai failures: agent process state, OOM/crashes, avatar spawn issues, post-molt memory loss, mail delivery, scheduled messages, tool timeouts, and escalation.
 version: 1.0.0
 last_changed_at: "2026-06-02T00:05:51-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # LingTai Debug & Troubleshoot Reference

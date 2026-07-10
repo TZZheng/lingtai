@@ -19,6 +19,7 @@ description: >
 version: 2.4.0
 tags: [utilities, umbrella, toolkit, nested-skill]
 last_changed_at: "2026-06-23T17:01:03-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # Swiss Knife — Utility Toolkit Router

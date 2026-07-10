@@ -6,6 +6,7 @@ description: >
 version: 2.1.0
 tags: [python, cost, tokens, litellm, budget, tools, agents]
 last_changed_at: "2026-06-23T17:01:03-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # Token Usage, Cost, and Agentic-Intensity Reports v2

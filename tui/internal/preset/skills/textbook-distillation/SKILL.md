@@ -15,6 +15,7 @@ description: >
 version: 1.0.0
 tags: [learning, study, textbook, lecture-notes, html, curriculum, self-paced]
 last_changed_at: "2026-06-08T22:45:29-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # Textbook Distillation — Self-Paced Learning Tracks

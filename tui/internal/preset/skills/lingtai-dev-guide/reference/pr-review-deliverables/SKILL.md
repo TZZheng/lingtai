@@ -8,6 +8,7 @@ description: >
   authorization boundaries for opening, editing, and merging PRs.
 version: 1.0.0
 last_changed_at: "2026-06-13T23:25:20-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # PR Review & Deliverables

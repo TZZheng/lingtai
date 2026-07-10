@@ -7,6 +7,7 @@ description: >
   human is ready to begin or continue the tutorial.
 version: 2.0.1
 last_changed_at: "2026-06-02T00:34:40-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # Tutorial Guide — Router

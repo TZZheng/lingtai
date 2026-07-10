@@ -3,6 +3,7 @@ name: issue-report-evidence-checklist
 description: Nested lingtai-issue-report reference for deciding when an observation is worth reporting, what evidence to collect, and how to keep secrets out of a report. Read this first, while the problem is fresh, before drafting the report body.
 version: 1.0.0
 last_changed_at: "2026-06-02T02:43:15-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # Issue report — evidence checklist

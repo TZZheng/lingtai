@@ -10,6 +10,7 @@ description: >
   for end-user lessons, use tutorial-guide.
 version: 2.6.1
 last_changed_at: "2026-07-03T08:05:00Z"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # LingTai Developer Guide

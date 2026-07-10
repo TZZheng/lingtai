@@ -6,6 +6,7 @@ description: >
   collection, bundle authoring, validation, git initialization, and handoff.
 version: 1.0.0
 last_changed_at: "2026-06-02T00:08:39-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # Exporting a Recipe
