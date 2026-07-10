@@ -1197,7 +1197,7 @@ func customPreset() Preset {
 		Description: PresetDescription{Summary: "OpenAI-compatible API — full capabilities"},
 		Manifest: map[string]interface{}{
 			"llm": map[string]interface{}{
-				"provider": "custom", "model": "",
+				"provider": "custom", "model": "", "api_compat": "openai",
 				"api_key": nil, "api_key_env": "LLM_API_KEY", "base_url": nil,
 			},
 			"capabilities": map[string]interface{}{

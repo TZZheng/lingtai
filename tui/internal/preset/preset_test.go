@@ -790,3 +790,17 @@ func TestMiniMaxPresetCapabilitiesUseApiKeyEnv(t *testing.T) {
 		}
 	}
 }
+
+func TestCustomPresetDeclaresOpenAICompatForWireSelector(t *testing.T) {
+	p := customPreset()
+	llm := p.Manifest["llm"].(map[string]interface{})
+	if got, _ := llm["provider"].(string); got != "custom" {
+		t.Fatalf("custom preset provider = %q, want custom", got)
+	}
+	if got, _ := llm["api_compat"].(string); got != "openai" {
+		t.Fatalf("custom preset api_compat = %q, want openai", got)
+	}
+	if _, ok := llm["wire_api"]; ok {
+		t.Fatalf("custom preset should omit wire_api so kernel/editor default to auto")
+	}
+}

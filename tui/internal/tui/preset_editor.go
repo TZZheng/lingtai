@@ -50,6 +50,7 @@ const (
 	feServiceTier
 	feThinking
 	feAPICompat
+	feWireAPI
 	feBaseURL
 	feAPIKey
 	feCapFile
@@ -77,7 +78,7 @@ var capFieldNames = map[editorField]string{
 // optional/provider-conditional capabilities appear as editable rows.
 var editorFieldOrder = []editorField{
 	feName, feSummary, feTier, feGains, feLoses,
-	feProvider, feModel, feServiceTier, feThinking, feAPICompat, feBaseURL, feAPIKey,
+	feProvider, feModel, feServiceTier, feThinking, feAPICompat, feWireAPI, feBaseURL, feAPIKey,
 	feCapWebSearch, feCapVision,
 	feSave,
 }
@@ -164,6 +165,8 @@ var providerModels = map[string][]string{
 var codexServiceTierOptions = []string{"normal", "fast"}
 
 var codexThinkingOptions = []string{"low", "medium", "high", "xhigh"}
+
+var wireAPIOptions = []string{"auto", "chat_completions", "responses"}
 
 const presetEditorFieldLabelWidth = 18
 
@@ -647,7 +650,7 @@ func (m *PresetEditorModel) openInline() (PresetEditorModel, tea.Cmd) {
 		// Capability rows: Enter toggles, same as Space. Disabled rows
 		// (e.g. vision on text-only models) are gated inside toggleFocused.
 		m.toggleFocused()
-	case feProvider, feAPICompat:
+	case feProvider, feAPICompat, feWireAPI:
 		// Enums — Enter cycles forward (same as Right). Lets the user
 		// stay on the keyboard's "advance" key.
 		m.cycleFocused(+1)
@@ -879,6 +882,16 @@ func (m PresetEditorModel) isCodexProvider() bool {
 	return asString(m.llmMap()["provider"]) == "codex"
 }
 
+// isCustomOpenAI reports whether the working preset is in the narrow scope
+// where the OpenAI wire-format selector (wire_api) applies: the custom
+// provider with api_compat=openai. Built-in OpenAI, Anthropic/Gemini custom
+// compat, Codex, and all other providers never surface the wire_api field.
+func (m PresetEditorModel) isCustomOpenAI() bool {
+	llm, _ := m.working.Manifest["llm"].(map[string]interface{})
+	return asString(llm["provider"]) == "custom" &&
+		asString(llm["api_compat"]) == "openai"
+}
+
 // codexAccountRefs returns the selectable codex_auth_path values for the
 // account picker on the feAPIKey row: "" (legacy/default account) first, then
 // each per-account file's home-shortened ref. Order is stable so ←/→ cycling
@@ -1013,9 +1026,28 @@ func normalizeThinking(manifest map[string]interface{}) {
 	}
 }
 
+// normalizeWireAPI strips llm.wire_api whenever the preset leaves the narrow
+// custom+openai scope where the OpenAI wire-format selector applies. Inside
+// that scope, an explicit "auto" (the absence default) is omitted to keep the
+// committed manifest minimal — absent and "auto" are semantically identical.
+func normalizeWireAPI(manifest map[string]interface{}) {
+	llm, _ := manifest["llm"].(map[string]interface{})
+	if llm == nil {
+		return
+	}
+	if asString(llm["provider"]) == "custom" && asString(llm["api_compat"]) == "openai" {
+		if asString(llm["wire_api"]) == "auto" {
+			delete(llm, "wire_api")
+		}
+		return
+	}
+	delete(llm, "wire_api")
+}
+
 func normalizeLLMForCommit(manifest map[string]interface{}) {
 	normalizeServiceTier(manifest)
 	normalizeThinking(manifest)
+	normalizeWireAPI(manifest)
 }
 
 // setExtra writes into Description.Extra, allocating the map on first
@@ -1066,6 +1098,7 @@ func (m *PresetEditorModel) cycleFocused(dir int) {
 		opts := []string{"minimax", "zhipu", "mimo", "deepseek", "nvidia", "openrouter", "codex", "custom"}
 		newProvider := cycleString(opts, m.fieldString(f), dir)
 		m.llmMap()["provider"] = newProvider
+		normalizeWireAPI(m.working.Manifest)
 		if newProvider != "codex" {
 			delete(m.llmMap(), "thinking")
 		}
@@ -1114,6 +1147,14 @@ func (m *PresetEditorModel) cycleFocused(dir int) {
 	case feAPICompat:
 		opts := []string{"", "openai", "anthropic"}
 		m.llmMap()["api_compat"] = cycleString(opts, m.fieldString(f), dir)
+		normalizeWireAPI(m.working.Manifest)
+	case feWireAPI:
+		next := cycleString(wireAPIOptions, m.fieldString(f), dir)
+		if next == "auto" {
+			delete(m.llmMap(), "wire_api")
+		} else {
+			m.llmMap()["wire_api"] = next
+		}
 	case feServiceTier:
 		if m.isCodexProvider() {
 			m.setCodexServiceTier(cycleString(codexServiceTierOptions, m.codexServiceTier(), dir))
@@ -1307,6 +1348,12 @@ func (m PresetEditorModel) fieldString(f editorField) string {
 	case feAPICompat:
 		s, _ := llm["api_compat"].(string)
 		return s
+	case feWireAPI:
+		s, _ := llm["wire_api"].(string)
+		if s == "" {
+			return "auto"
+		}
+		return s
 	case feBaseURL:
 		s, _ := llm["base_url"].(string)
 		return s
@@ -1474,6 +1521,9 @@ func (m PresetEditorModel) formRows(width int) []presetEditorRow {
 		rows = append(rows, row(feThinking, m.row(feThinking, lbl("thinking"), m.codexThinking(), width-4)))
 	}
 	rows = append(rows, row(feAPICompat, m.row(feAPICompat, lbl("api_compat"), asString(llm["api_compat"]), width-4)))
+	if m.fieldVisible(feWireAPI) {
+		rows = append(rows, row(feWireAPI, m.row(feWireAPI, lbl("wire_api"), m.fieldString(feWireAPI), width-4)))
+	}
 	rows = append(rows, row(feBaseURL, m.row(feBaseURL, lbl("base_url"), asString(llm["base_url"]), width-4)))
 	rows = append(rows, row(feAPIKey, m.row(feAPIKey, lbl("api_key"), m.fieldString(feAPIKey), width-4)))
 	rows = append(rows, plain(""))
@@ -1532,6 +1582,9 @@ func (m PresetEditorModel) row(f editorField, key, value string, width int) stri
 		if strip := m.thinkingRadioStrip(focused, valStyle); strip != "" {
 			return marker + keyStyle.Render(key) + strip
 		}
+	}
+	if f == feWireAPI {
+		return marker + keyStyle.Render(key) + m.wireAPIRadioStrip(focused, valStyle)
 	}
 	if f == feBaseURL {
 		if strip := m.baseURLRadioStrip(focused, valStyle); strip != "" {
@@ -1766,6 +1819,27 @@ func (m PresetEditorModel) baseURLRadioStrip(focused bool, valStyle lipgloss.Sty
 	return strings.Join(parts, "  ")
 }
 
+// wireAPIRadioStrip renders all three wire choices so Custom OpenAI users
+// can see the selector rather than only the current raw manifest value.
+func (m PresetEditorModel) wireAPIRadioStrip(focused bool, valStyle lipgloss.Style) string {
+	current := m.fieldString(feWireAPI)
+	subtle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	parts := make([]string, 0, len(wireAPIOptions))
+	for _, option := range wireAPIOptions {
+		label := option
+		if option == current {
+			if focused {
+				parts = append(parts, valStyle.Render("● "+label))
+			} else {
+				parts = append(parts, "● "+label)
+			}
+		} else {
+			parts = append(parts, subtle.Render("○ "+label))
+		}
+	}
+	return strings.Join(parts, "  ")
+}
+
 // isCyclable reports whether a field accepts ←/→ to step through enum
 // values. The model row is conditional — only when the current provider
 // has a known model lineup. Free-text providers leave the model row as
@@ -1776,6 +1850,8 @@ func (m PresetEditorModel) isCyclable(f editorField) bool {
 		return true
 	case feServiceTier, feThinking:
 		return m.isCodexProvider()
+	case feWireAPI:
+		return m.isCustomOpenAI()
 	case feAPIKey:
 		// For codex, the "API key" row is an account selector: ←/→ binds the
 		// preset to a different Codex OAuth account when more than one exists.
@@ -1917,6 +1993,8 @@ func (m PresetEditorModel) fieldVisible(f editorField) bool {
 	switch f {
 	case feServiceTier, feThinking:
 		return m.isCodexProvider()
+	case feWireAPI:
+		return m.isCustomOpenAI()
 	default:
 		return true
 	}

@@ -758,3 +758,231 @@ func renderedLineCount(s string) int {
 	}
 	return len(strings.Split(s, "\n"))
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// wire_api (OpenAI wire-format selector for custom+openai presets)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func testCustomOpenAIPresetEditorPreset() preset.Preset {
+	return preset.Preset{
+		Name:        "custom-openai-test",
+		Description: preset.PresetDescription{Summary: "Custom OpenAI-compat test preset"},
+		Manifest: map[string]interface{}{
+			"llm": map[string]interface{}{
+				"provider":    "custom",
+				"model":       "gpt-oss-test",
+				"api_compat":  "openai",
+				"base_url":    "https://api.example.com/v1",
+				"api_key_env": "CUSTOM_API_KEY",
+			},
+			"capabilities": map[string]interface{}{},
+		},
+	}
+}
+
+func TestPresetEditorWireAPIVisibleForCustomOpenAI(t *testing.T) {
+	m := NewPresetEditorModelWithBuiltinFlag(testCustomOpenAIPresetEditorPreset(), "en", nil, "", false)
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 140, Height: 80})
+	view := m.View()
+
+	if !m.fieldVisible(feWireAPI) {
+		t.Fatalf("wire_api row should be visible for custom+openai provider")
+	}
+	if !m.isCyclable(feWireAPI) {
+		t.Fatalf("wire_api should be cyclable for custom+openai provider")
+	}
+	if !strings.Contains(view, "wire_api") {
+		t.Fatalf("custom+openai editor should render wire_api row; view:\n%s", view)
+	}
+}
+
+func TestPresetEditorWireAPIHiddenOutsideCustomOpenAI(t *testing.T) {
+	// Built-in provider (minimax) with api_compat=openai: must NOT surface.
+	m := NewPresetEditorModelWithBuiltinFlag(testPresetEditorPreset(), "en", nil, "", false)
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 140, Height: 80})
+	view := m.View()
+	if m.fieldVisible(feWireAPI) {
+		t.Fatalf("wire_api row should be hidden for non-custom provider")
+	}
+	if strings.Contains(view, "wire_api") {
+		t.Fatalf("minimax editor should not render wire_api row; view:\n%s", view)
+	}
+
+	// Custom with api_compat=anthropic: must NOT surface.
+	p := testCustomOpenAIPresetEditorPreset()
+	llm := p.Manifest["llm"].(map[string]interface{})
+	llm["api_compat"] = "anthropic"
+	m2 := NewPresetEditorModelWithBuiltinFlag(p, "en", nil, "", false)
+	if m2.fieldVisible(feWireAPI) {
+		t.Fatalf("wire_api row should be hidden for custom+anthropic")
+	}
+
+	// Custom with api_compat unset: must NOT surface.
+	p2 := testCustomOpenAIPresetEditorPreset()
+	llm2 := p2.Manifest["llm"].(map[string]interface{})
+	delete(llm2, "api_compat")
+	m3 := NewPresetEditorModelWithBuiltinFlag(p2, "en", nil, "", false)
+	if m3.fieldVisible(feWireAPI) {
+		t.Fatalf("wire_api row should be hidden for custom with no api_compat")
+	}
+}
+
+func TestPresetEditorWireAPICursorSkipsHiddenField(t *testing.T) {
+	// For a non-custom-openai preset, cursor navigation must skip the
+	// hidden feWireAPI and advance from feAPICompat to feBaseURL.
+	m := NewPresetEditorModelWithBuiltinFlag(testPresetEditorPreset(), "en", nil, "", false)
+	m.cursor = editorFieldOrderIndex(t, feAPICompat)
+	m.moveCursor(+1)
+	if editorFieldOrder[m.cursor] == feWireAPI {
+		t.Fatalf("cursor landed on hidden wire_api field for non-custom-openai preset")
+	}
+	if editorFieldOrder[m.cursor] != feBaseURL {
+		t.Fatalf("cursor after api_compat = %v, want feBaseURL", editorFieldOrder[m.cursor])
+	}
+}
+
+func TestPresetEditorWireAPIDefaultsToAuto(t *testing.T) {
+	m := NewPresetEditorModelWithBuiltinFlag(testCustomOpenAIPresetEditorPreset(), "en", nil, "", false)
+	if got := m.fieldString(feWireAPI); got != "auto" {
+		t.Fatalf("absent wire_api displays %q, want auto", got)
+	}
+}
+
+func TestPresetEditorWireAPICycling(t *testing.T) {
+	m := NewPresetEditorModelWithBuiltinFlag(testCustomOpenAIPresetEditorPreset(), "en", nil, "", false)
+	m.cursor = editorFieldOrderIndex(t, feWireAPI)
+
+	// auto -> chat_completions
+	m.cycleFocused(+1)
+	if got := m.fieldString(feWireAPI); got != "chat_completions" {
+		t.Fatalf("cycling auto -> +1 = %q, want chat_completions", got)
+	}
+	llm := m.working.Manifest["llm"].(map[string]interface{})
+	if got, _ := llm["wire_api"].(string); got != "chat_completions" {
+		t.Fatalf("wire_api should be persisted as chat_completions, got %#v", llm["wire_api"])
+	}
+
+	// chat_completions -> responses
+	m.cycleFocused(+1)
+	if got := m.fieldString(feWireAPI); got != "responses" {
+		t.Fatalf("cycling chat_completions -> +1 = %q, want responses", got)
+	}
+
+	// responses -> auto (absent)
+	m.cycleFocused(+1)
+	if got := m.fieldString(feWireAPI); got != "auto" {
+		t.Fatalf("cycling responses -> +1 = %q, want auto", got)
+	}
+	llm = m.working.Manifest["llm"].(map[string]interface{})
+	if _, ok := llm["wire_api"]; ok {
+		t.Fatalf("cycling to auto should delete wire_api key; got %#v", llm["wire_api"])
+	}
+
+	// Reverse: auto -> responses
+	m.cycleFocused(-1)
+	if got := m.fieldString(feWireAPI); got != "responses" {
+		t.Fatalf("cycling auto -> -1 = %q, want responses", got)
+	}
+}
+
+func TestPresetEditorWireAPICommitPersistsAndOmitsAuto(t *testing.T) {
+	m := NewPresetEditorModelWithBuiltinFlag(testCustomOpenAIPresetEditorPreset(), "en", nil, "", false)
+	m.cursor = editorFieldOrderIndex(t, feWireAPI)
+
+	// Select responses and commit — should persist.
+	m.cycleFocused(+1) // auto -> chat_completions
+	m.cycleFocused(+1) // chat_completions -> responses
+	_, cmd := m.commit()
+	commit := cmd().(PresetEditorCommitMsg)
+	committedLLM := commit.Preset.Manifest["llm"].(map[string]interface{})
+	if got, _ := committedLLM["wire_api"].(string); got != "responses" {
+		t.Fatalf("committed wire_api=%#v, want responses", committedLLM["wire_api"])
+	}
+
+	// Cycle back to auto and commit — should omit the key entirely.
+	m.cycleFocused(+1) // responses -> auto
+	_, cmd = m.commit()
+	commit = cmd().(PresetEditorCommitMsg)
+	committedLLM = commit.Preset.Manifest["llm"].(map[string]interface{})
+	if _, ok := committedLLM["wire_api"]; ok {
+		t.Fatalf("committing auto wire_api should omit the key; got %#v", committedLLM["wire_api"])
+	}
+}
+
+func TestPresetEditorWireAPICleanupOnScopeExit(t *testing.T) {
+	p := testCustomOpenAIPresetEditorPreset()
+	llm := p.Manifest["llm"].(map[string]interface{})
+	llm["wire_api"] = "responses"
+	m := NewPresetEditorModelWithBuiltinFlag(p, "en", nil, "", false)
+
+	// Switch api_compat away from openai while keeping provider=custom.
+	m.cursor = editorFieldOrderIndex(t, feAPICompat)
+	m.cycleFocused(+1) // openai -> anthropic
+	if _, ok := m.llmMap()["wire_api"]; ok {
+		t.Fatalf("leaving openai compat should remove wire_api immediately")
+	}
+	if m.fieldVisible(feWireAPI) {
+		t.Fatalf("wire_api should be hidden after api_compat leaves openai")
+	}
+
+	// Commit must strip the stale wire_api.
+	_, cmd := m.commit()
+	commit := cmd().(PresetEditorCommitMsg)
+	committedLLM := commit.Preset.Manifest["llm"].(map[string]interface{})
+	if _, ok := committedLLM["wire_api"]; ok {
+		t.Fatalf("commit after scope exit should remove wire_api; got %#v", committedLLM["wire_api"])
+	}
+}
+
+func TestPresetEditorWireAPICleanupOnProviderSwitch(t *testing.T) {
+	p := testCustomOpenAIPresetEditorPreset()
+	llm := p.Manifest["llm"].(map[string]interface{})
+	llm["wire_api"] = "chat_completions"
+	m := NewPresetEditorModelWithBuiltinFlag(p, "en", nil, "", false)
+
+	// Switch provider away from custom (custom is last in picker order,
+	// so cycling wraps to the first provider, minimax).
+	m.cursor = editorFieldOrderIndex(t, feProvider)
+	m.cycleFocused(+1)
+	if _, ok := m.llmMap()["wire_api"]; ok {
+		t.Fatalf("leaving the custom provider should remove wire_api immediately")
+	}
+
+	// Commit must strip the stale wire_api.
+	_, cmd := m.commit()
+	commit := cmd().(PresetEditorCommitMsg)
+	committedLLM := commit.Preset.Manifest["llm"].(map[string]interface{})
+	if _, ok := committedLLM["wire_api"]; ok {
+		t.Fatalf("commit after provider switch should remove wire_api; got %#v", committedLLM["wire_api"])
+	}
+}
+
+func TestPresetEditorWireAPIEnterCyclesAndPreservesLegacyFlags(t *testing.T) {
+	p := testCustomOpenAIPresetEditorPreset()
+	llm := p.Manifest["llm"].(map[string]interface{})
+	llm["use_responses_api"] = true
+	llm["force_responses"] = true
+	m := NewPresetEditorModelWithBuiltinFlag(p, "en", nil, "", false)
+	m.cursor = editorFieldOrderIndex(t, feWireAPI)
+
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if got := m.fieldString(feWireAPI); got != "chat_completions" {
+		t.Fatalf("Enter on wire_api = %q, want chat_completions", got)
+	}
+	for _, key := range []string{"use_responses_api", "force_responses"} {
+		if got := m.llmMap()[key]; got != true {
+			t.Fatalf("wire selection must preserve legacy %s=true, got %#v", key, got)
+		}
+	}
+
+	m.cycleFocused(+1) // chat_completions -> responses
+	m.cycleFocused(+1) // responses -> auto (canonical key omitted)
+	if _, ok := m.llmMap()["wire_api"]; ok {
+		t.Fatalf("auto should omit only canonical wire_api")
+	}
+	for _, key := range []string{"use_responses_api", "force_responses"} {
+		if got := m.llmMap()[key]; got != true {
+			t.Fatalf("auto must keep legacy delegation flag %s=true, got %#v", key, got)
+		}
+	}
+}
