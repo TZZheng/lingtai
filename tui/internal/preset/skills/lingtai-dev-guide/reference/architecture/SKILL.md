@@ -55,7 +55,7 @@ Key packages in `portal/internal/`:
 
 Published as the `lingtai` package on PyPI. Contains:
 
-- `src/lingtai_kernel/` — the minimal agent runtime (turn loop, lifecycle, tool dispatch, mailbox, soul/molt orchestration)
+- `src/lingtai/kernel/` — the minimal agent runtime (turn loop, lifecycle, tool dispatch, mailbox, soul/molt orchestration)
 - `src/lingtai/` — the batteries-included wrapper (MCP, FileIO, Vision, Search, CLI)
 
 The wrapper depends on the kernel one-directionally. The kernel never imports from the wrapper.

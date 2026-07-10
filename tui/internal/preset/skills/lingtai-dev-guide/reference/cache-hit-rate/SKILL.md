@@ -39,7 +39,7 @@ paths can be private — generalize to `~/.lingtai-tui/...` or
 ## Data source: the token ledger
 
 Single source of truth: `logs/token_ledger.jsonl`, one JSON object per LLM call,
-written after every call by `lingtai_kernel/token_ledger.py`
+written after every call by `lingtai/kernel/token_ledger.py`
 (`append_token_entry`). Every entry carries these required fields:
 
 | Field | Meaning |
@@ -199,10 +199,10 @@ PY
 - **`skipped` count is non-zero** — corrupt/rotated lines or pre-schema rows.
   A handful is normal (e.g. a partially written final line). A large fraction
   suggests schema drift — confirm the ledger still matches
-  `lingtai_kernel/token_ledger.py` before trusting the numbers.
+  `lingtai/kernel/token_ledger.py` before trusting the numbers.
 - **Schema drift** — if a future kernel renames `input`/`cached`/`ts`, this
   reference and the script must be updated in the same spirit as the
-  "anatomy travels with code" rule. Re-read `lingtai_kernel/token_ledger.py`
+  "anatomy travels with code" rule. Re-read `lingtai/kernel/token_ledger.py`
   and the active provider adapter to re-confirm field semantics.
 - **Project-root totals equal one agent's** — expected when only one agent has
   recent activity; idle colleagues contribute zero to recent windows.

@@ -7,7 +7,7 @@ Cache hit rate is computed per time window as:
 
 over all ledger entries whose ``ts`` falls within the window. Both fields come
 straight from ``logs/token_ledger.jsonl`` (see
-``lingtai_kernel/token_ledger.py``):
+``lingtai/kernel/token_ledger.py``):
 
     input   total prompt/input tokens for the call (already INCLUDES the
             cached portion; for the Anthropic adapter this is

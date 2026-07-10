@@ -53,7 +53,13 @@ Read your own `system/system.md` and show the human the fully assembled system p
 
 **To discover the section order**: read the source code. Run:
 ```bash
-python3 -c "from lingtai_kernel.prompt import SystemPromptManager; print(SystemPromptManager._DEFAULT_ORDER)"
+python3 -c "
+try:
+    from lingtai.kernel.prompt import SystemPromptManager
+except ImportError:
+    from lingtai_kernel.prompt import SystemPromptManager
+print(SystemPromptManager._DEFAULT_ORDER)
+"
 ```
 
 This gives you the real, current section render order. Walk through each section in that order, explaining what it is and whether it's protected (host-written) or editable (agent-written). Read the actual file for each section under `system/` to show real content.

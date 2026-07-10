@@ -128,7 +128,7 @@ such as `lingtai.mcp_servers` fail; an MCP/addon path still points at an old
 standalone repo or a detached worktree.
 
 **Fix:** probe the exact Python interpreter named by the agent/runtime, print
-`module.__file__` for `lingtai`, `lingtai_kernel`, and relevant MCP/addon
+`module.__file__` for `lingtai`, `lingtai.kernel`, and relevant MCP/addon
 modules, inspect the git root/HEAD behind those paths, fast-forward the checkout
 if it is the intended editable source, then call `system(action="refresh")` and
 rerun the probe. See `reference/setup/SKILL.md` → “Verify the runtime checkout a

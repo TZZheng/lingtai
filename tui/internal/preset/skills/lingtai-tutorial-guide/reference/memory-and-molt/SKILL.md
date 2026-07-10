@@ -21,7 +21,13 @@ This lesson covers what every agent has by birth, and the most important concept
 
 Intrinsics are built into the kernel — every agent gets them regardless of init.json configuration. **Discover them live** — run:
 ```bash
-python3 -c "from lingtai_kernel.intrinsics import ALL_INTRINSICS; print(list(ALL_INTRINSICS.keys()))"
+python3 -c "
+try:
+    from lingtai.kernel.intrinsics import ALL_INTRINSICS
+except ImportError:
+    from lingtai_kernel.intrinsics import ALL_INTRINSICS
+print(list(ALL_INTRINSICS.keys()))
+"
 ```
 
 Walk through each one you find:

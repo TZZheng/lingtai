@@ -108,7 +108,7 @@ Go + Bubble Tea terminal interface. Key facts:
 - Binary name: `lingtai-tui` (never `lingtai-agent` — that is the Python agent CLI)
 - Launches agents via `python -m lingtai run <dir>` subprocess
 - Communicates with running agents via filesystem only: reads `.lingtai/` metadata, heartbeat files, and signal files inside each agent working directory
-- Agent discovery uses `lingtai_kernel.handshake` conventions (`is_agent`, `is_alive` checks on working directories)
+- Agent discovery uses `lingtai.kernel.handshake` conventions (`is_agent`, `is_alive` checks on working directories)
 
 ### Dev mode for the TUI/portal binaries
 

@@ -233,12 +233,12 @@ Same contract as TUI — see "Adding a migration" above. Portal-only migrations 
 
 ### Where to look
 
-- **Agent runtime:** `src/lingtai_kernel/` — turn loop, lifecycle, tool dispatch, mailbox, soul/molt
+- **Agent runtime:** `src/lingtai/kernel/` — turn loop, lifecycle, tool dispatch, mailbox, soul/molt
 - **Wrapper (CLI + services):** `src/lingtai/` — MCP, FileIO, Vision, Search, CLI
-- **Intrinsics:** `src/lingtai_kernel/intrinsics/` — email, soul, system, psyche, codex, etc.
+- **Intrinsics:** `src/lingtai/kernel/intrinsics/` — email, soul, system, psyche, codex, etc.
 - **Skills:** `src/lingtai/intrinsic_skills/` — bundled skill manuals
 
-The kernel-root anatomy at `src/lingtai_kernel/ANATOMY.md` is the entry point for navigating the source. See the `lingtai-kernel-anatomy` skill for the convention.
+The kernel-root anatomy at `src/lingtai/kernel/ANATOMY.md` is the entry point for navigating the source. See the `lingtai-kernel-anatomy` skill for the convention.
 
 ### Build and test
 
@@ -334,7 +334,7 @@ PY
 ```bash
 python - <<'PY'
 import pathlib, re
-root = pathlib.Path("src/lingtai_kernel")
+root = pathlib.Path("src/lingtai/kernel")
 for anatomy in root.rglob("ANATOMY.md"):
     text = anatomy.read_text()
     for rel, line in re.findall(r"`?([A-Za-z0-9_./-]+\.py):(\d+)", text):

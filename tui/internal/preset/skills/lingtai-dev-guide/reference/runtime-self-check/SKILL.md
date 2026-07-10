@@ -33,7 +33,7 @@ through, do **all** of these steps. This is the in-situ path; skipping step 1 is
 how agents repeatedly refresh stale code and conclude the fix failed.
 
 1. **Find the runtime import path.** Use the runtime venv Python, not `python` on
-   PATH, and print `lingtai` / `lingtai_kernel` `__file__`, package metadata, and
+   PATH, and print `lingtai` / `lingtai.kernel` `__file__`, package metadata, and
    the nearest git checkout.
 2. **Compare HEADs.** If the running agent imports `/B/lingtai-kernel` but your
    PR was merged in `/A/lingtai-kernel`, update `/B` (`git fetch origin main &&
@@ -57,9 +57,14 @@ Minimal kernel probe:
 VENV_PY="$HOME/.lingtai-tui/runtime/venv/bin/python"
 "$VENV_PY" - <<'PY'
 import inspect, importlib.metadata as md
-import lingtai_kernel
+try:
+    import lingtai.kernel as _kernel
+    _kernel_name = 'lingtai.kernel'
+except ImportError:
+    import lingtai_kernel as _kernel
+    _kernel_name = 'lingtai_kernel'
 print('python:', __import__('sys').executable)
-print('lingtai_kernel:', lingtai_kernel.__file__)
+print(f'{_kernel_name}: {_kernel.__file__}')
 try:
     print('dist:', md.version('lingtai-kernel'))
     print('direct_url:', md.distribution('lingtai-kernel').read_text('direct_url.json') or '<none>')

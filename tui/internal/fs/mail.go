@@ -15,7 +15,7 @@ import (
 
 // newMailboxID builds a sortable, human-scannable mailbox id. The format
 // (`YYYYMMDDTHHMMSS-xxxx`, 20 chars, UTC) matches the kernel helper
-// `_new_mailbox_id` in `lingtai_kernel/intrinsics/email/primitives.py` and
+// `_new_mailbox_id` in `lingtai.kernel/intrinsics/email/primitives.py` and
 // the portal's mirror in `portal/internal/fs/mail.go` so mail written by
 // any of the three sides is indistinguishable in `email(check)` output.
 // The 4-hex suffix is drawn from `uuid.New` (a v4 UUID); 16 bits of

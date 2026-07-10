@@ -41,7 +41,7 @@ type SessionEntry struct {
 }
 
 // NotificationMeta carries the kernel's per-injection vital signs.
-// Shape mirrors lingtai_kernel.meta_block.build_meta plus the monotonic
+// Shape mirrors lingtai.kernel.meta_block.build_meta plus the monotonic
 // injection_seq stamped in BaseAgent._inject_notification_pair. All fields
 // are optional — the kernel emits sentinel values (-1, "") when the
 // underlying state hasn't been computed yet, and older events.jsonl rows

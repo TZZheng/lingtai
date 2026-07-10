@@ -364,7 +364,18 @@ import json
 import sys
 from pathlib import Path
 
-from lingtai_kernel.services import logging as logmod
+# Cross-version compatibility: the kernel namespace moved from
+# lingtai_kernel to lingtai.kernel in the pre-1.0 layout redesign.
+# Prefer the new path, but fall back to the old one so the same TUI
+# binary can backfill projects using either runtime version.
+# Fallback only when the new umbrella namespace itself is absent; a
+# broken new runtime (missing internal child) must surface loudly.
+try:
+    from lingtai.kernel.services import logging as logmod
+except ModuleNotFoundError as exc:
+    if exc.name not in ("lingtai", "lingtai.kernel"):
+        raise
+    from lingtai_kernel.services import logging as logmod
 
 agent_dir = Path(sys.argv[1]).resolve()
 source = agent_dir / "logs" / "events.jsonl"

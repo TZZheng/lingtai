@@ -113,19 +113,25 @@ $RUNTIME_PY - <<'PY'
 import importlib, pathlib, subprocess
 mods = [
     "lingtai",
-    "lingtai_kernel",
+    ("lingtai.kernel", "lingtai_kernel"),   # new canonical first, old fallback
     "lingtai.mcp_servers",
-    "lingtai.mcp_servers.telegram",
-    "lingtai_telegram",
+    ("lingtai.mcp_servers.telegram", "lingtai_telegram"),
 ]
-for name in mods:
-    try:
-        mod = importlib.import_module(name)
-    except Exception as exc:
-        print(f"{name}: NOT IMPORTABLE ({type(exc).__name__}: {exc})")
+for entry in mods:
+    names = (entry,) if isinstance(entry, str) else entry
+    mod = None
+    err = None
+    for name in names:
+        try:
+            mod = importlib.import_module(name)
+            break
+        except Exception as exc:
+            err = exc
+    if mod is None:
+        print(f"{names[0]}: NOT IMPORTABLE ({type(err).__name__}: {err})")
         continue
     path = pathlib.Path(getattr(mod, "__file__", "")).resolve()
-    print(f"{name}: {path}")
+    print(f"{names[0]}: {path}")
     cur = path
     for parent in [cur, *cur.parents]:
         if (parent / ".git").exists() or (parent / ".git").is_file():
