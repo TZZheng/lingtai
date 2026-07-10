@@ -4,6 +4,7 @@ description: Nested swiss-knife reference for composing one music track that res
 version: 1.1.0
 tags: [media-creation, music, journal, on-demand]
 last_changed_at: "2026-06-02T02:10:59-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # DJ — On-demand journal-track composer

@@ -4,6 +4,7 @@ description: >
   Nested tutorial-guide reference for lessons 1–3: welcome, live architecture discovery, global directory, project directory, and agent working directory.
 version: 1.0.0
 last_changed_at: "2026-06-10T19:45:10-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # Tutorial Guide — Orientation Lessons

@@ -10,6 +10,7 @@ description: >
 version: 1.1.0
 tags: [utilities, bot, telegram, mcp, headless, bootstrap]
 last_changed_at: "2026-06-01T02:00:30-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # Headless Bot Project

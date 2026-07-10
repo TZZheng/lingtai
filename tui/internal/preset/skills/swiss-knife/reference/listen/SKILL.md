@@ -10,6 +10,7 @@ description: >
 version: 1.0.0
 tags: [audio, transcribe, whisper, librosa, music-analysis, nested-skill]
 last_changed_at: "2026-06-02T11:16:04-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # listen

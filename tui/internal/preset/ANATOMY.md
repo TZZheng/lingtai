@@ -19,6 +19,20 @@ related_files:
   - tui/internal/preset/preset_agent_json_merge_test.go
   - tui/internal/preset/skills/lingtai-dev-guide/SKILL.md
   - tui/internal/preset/skills/lingtai-dev-guide/reference/skill-stewardship/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/reference/minimax/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/reference/zhipu/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/reference/mimo/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/reference/deepseek/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/reference/gemini/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/reference/kimi/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/reference/nvidia/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/reference/openrouter/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/reference/codex/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/reference/codex-pool/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/reference/claude-agent-sdk/SKILL.md
+  - tui/internal/preset/skills/lingtai-preset-skill/reference/custom/SKILL.md
+  - tui/internal/preset/preset_skill_router_test.go
 maintenance: |
   Keep related_files as repo-relative paths to real files. Include neighboring
   ANATOMY.md files so the anatomy graph stays connected rather than isolated;
@@ -48,6 +62,7 @@ The preset package owns the atomic `{llm, capabilities}` bundle layer — loadin
 | `RefreshTemplates()` | `tui/internal/preset/preset.go:437` | rewrites `templates/` from `BuiltinPresets()`, prunes retired |
 | `PopulateBundledLibrary(globalDir)` | `tui/internal/preset/preset.go:1288` | rewrites `~/.lingtai-tui/utilities/` from embedded `skills/` |
 | `BuiltinPresets()` | `tui/internal/preset/preset.go:489` | minimax, zhipu, mimo, deepseek, gemini, kimi, nvidia, openrouter, codex, codex-pool, claude-agent-sdk, custom |
+| `skills/lingtai-preset-skill/` | `tui/internal/preset/skills/lingtai-preset-skill/SKILL.md:1` | 12-child router; one nested manual per `BuiltinPresets()` name under `reference/<preset>/SKILL.md`. |
 | `IsTemplate(p)` | `tui/internal/preset/preset.go:540` | canonical "is this read-only?" — prefer over `IsBuiltin(p.Name)` |
 | `RefFor(p)` | `tui/internal/preset/preset.go:549` | `~/.lingtai-tui/presets/{templates\|saved}/<name>.json` |
 | `ResolveRefsWithAuth(refs, keys, auth)` / `ResolveRefs(refs, keys)` | `tui/internal/preset/preset.go` | health-check: Source, Exists, HasKey (+ `CodexAuthRef`) for each preset path; credential validity requires configured `api_key_env`, Codex OAuth, or Claude Code CLI auth for `claude-agent-sdk`. For codex, when `AuthState.CodexAuthDir` is set, validity is judged per-preset against the preset's own `manifest.llm.codex_auth_path` token file (empty → legacy `codex-auth.json` fallback) so multiple Codex accounts are independent; without the dir it falls back to the global `CodexOAuthConfigured` bool |
@@ -73,7 +88,7 @@ The preset package owns the atomic `{llm, capabilities}` bundle layer — loadin
 ## Composition
 
 - **Parent:** `tui/internal/` (no own anatomy)
-- **Subfolders:** `covenant/`, `principle/`, `procedures/`, `templates/`, `soul/`, `recipe_assets/`, `skills/` — all `//go:embed` targets. `skills/swiss-knife/` is a top-level router whose nested utility references live under `skills/swiss-knife/reference/*/SKILL.md`.
+- **Subfolders:** `covenant/`, `principle/`, `procedures/`, `templates/`, `soul/`, `recipe_assets/`, `skills/` — all `//go:embed` targets. `skills/swiss-knife/` is a top-level router whose nested utility references live under `skills/swiss-knife/reference/*/SKILL.md`. `skills/lingtai-preset-skill/` is another top-level router whose 12 nested references mirror `BuiltinPresets()` under `skills/lingtai-preset-skill/reference/*/SKILL.md`.
 - **Siblings:** `tui/internal/migrate/ANATOMY.md` — migrations m029 (preset allowed list), m030 (preset dir split) live there
 
 ## State

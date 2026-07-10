@@ -4,6 +4,7 @@ description: >
   Compact lingtai-dev-guide release overview: when you are doing a release, the maintainer-authorization boundary, the version scheme, and a pointer to release-workflow for the full TUI/Portal + kernel publishing checklist, GitHub/PyPI/Homebrew steps, the required HTML release log, and the website release blog.
 version: 2.0.0
 last_changed_at: "2026-06-29T02:13:00-07:00"
+maintenance: "If you find stale or incorrect information here, use the lingtai-issue-report skill to assemble evidence and obtain per-issue human consent before filing an issue. Never include secrets, credentials, tokens, or private paths."
 ---
 
 # Releasing — Overview
