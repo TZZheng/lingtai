@@ -129,6 +129,16 @@ type LoginModel struct {
 	// (so accounts render as "not in pool") and that the bad file will NOT be
 	// clobbered. A missing pool file is not corrupt and sets this false.
 	poolCorrupt bool
+	// poolModelClassified is true when codex-auth-pool.json carries a top-level
+	// `models` map (v2, classified by exact model) — presence, not size: the
+	// kernel treats even an empty `{}` as classified. The kernel then
+	// ignores the flat accounts list, so rows render the classified state
+	// instead of flat memberships, and the +/-/0 flat edits are refused with a
+	// hand-edit hint (no category editor exists yet).
+	poolModelClassified bool
+	// poolModelCount is the number of model categories in a classified pool
+	// (meaningful only when poolModelClassified). Shown in the explanatory note.
+	poolModelCount int
 }
 
 // NewSetupCredentialsModel opens the credential manager as a /setup subpage.
@@ -282,6 +292,11 @@ func NewLoginModel(orchDir, globalDir string) LoginModel {
 	// rather than silently degrading to "everything not in pool"; a missing file
 	// stays quiet.
 	m.poolCorrupt = codexPoolFileCorrupt(globalDir)
+	// A model-classified (v2) pool replaces flat membership display entirely:
+	// the kernel selects only inside the current model's category, so flat
+	// weights would be a lie. Rows render the classified state instead and the
+	// +/-/0 keys turn into a hand-edit hint.
+	m.poolModelClassified, m.poolModelCount = codexPoolModelInfo(globalDir)
 
 	return m
 }
@@ -633,6 +648,15 @@ func (m LoginModel) adjustCodexPoolWeight(action codexPoolAction) LoginModel {
 	}
 	entry := m.entries[m.cursor]
 	if !entry.IsOAuth {
+		return m
+	}
+	if m.poolModelClassified {
+		// Flat weight edits are meaningless on a model-classified pool (the
+		// kernel ignores the accounts list) and rewriting the file could
+		// destroy the hand-authored classification. Explain instead of
+		// writing; setCodexPoolWeight refuses too, as the backstop.
+		m.message = fmt.Sprintf(i18n.T("login.codex_pool_model_classified_note"), m.poolModelCount)
+		m.messageOK = false
 		return m
 	}
 	absPath := m.codexEntryPoolPath(entry)
@@ -1112,15 +1136,23 @@ func (m LoginModel) View() string {
 			// edited with +/-/0 on the row; it is independent of the (active)
 			// single-account binding above, which drives the plain codex preset.
 			if entry.Provider == "codex" && entry.IsOAuth {
-				inPool, weight := m.codexEntryMembership(entry)
 				var poolLabel string
-				switch {
-				case !inPool:
-					poolLabel = i18n.T("login.codex_pool_not_member")
-				case weight <= 0:
-					poolLabel = i18n.T("login.codex_pool_disabled")
-				default:
-					poolLabel = fmt.Sprintf(i18n.T("login.codex_pool_weight"), weight)
+				if m.poolModelClassified {
+					// A model-classified (v2) pool has no flat per-account
+					// state: the kernel picks inside the current model's
+					// category, so any flat membership label would be a lie.
+					// Say what the pool actually is.
+					poolLabel = i18n.T("login.codex_pool_model_classified")
+				} else {
+					inPool, weight := m.codexEntryMembership(entry)
+					switch {
+					case !inPool:
+						poolLabel = i18n.T("login.codex_pool_not_member")
+					case weight <= 0:
+						poolLabel = i18n.T("login.codex_pool_disabled")
+					default:
+						poolLabel = fmt.Sprintf(i18n.T("login.codex_pool_weight"), weight)
+					}
 				}
 				line += " " + StyleFaint.Render(poolLabel)
 			}
@@ -1152,9 +1184,16 @@ func (m LoginModel) View() string {
 	// One-line explanation tying the two Codex affordances to their presets, so
 	// users don't confuse the (active) single-account binding with pool weights.
 	// Shown only when a Codex OAuth account exists (the only rows that carry
-	// either affordance). Kept short to avoid footer/note bloat.
+	// either affordance). Kept short to avoid footer/note bloat. On a
+	// model-classified pool the flat-weight explanation is replaced by the
+	// classified-pool note (category count + hand-edit hint), since the flat
+	// affordance it describes is disabled.
 	if m.hasCodexOAuth() {
-		b.WriteString("\n  " + StyleFaint.Render(i18n.T("login.codex_pool_explain")) + "\n")
+		explain := i18n.T("login.codex_pool_explain")
+		if m.poolModelClassified {
+			explain = fmt.Sprintf(i18n.T("login.codex_pool_model_classified_note"), m.poolModelCount)
+		}
+		b.WriteString("\n  " + StyleFaint.Render(explain) + "\n")
 	}
 
 	// Virtual Codex OAuth row — always shown so a Codex login is always
@@ -1240,8 +1279,12 @@ func (m LoginModel) View() string {
 		footerHint = i18n.T("login.codex_add_hint") + "  [Esc] back"
 	case m.cursor >= 0 && m.cursor < len(m.entries) && m.entries[m.cursor].IsOAuth:
 		// Enter sets active, r re-auths, l edits label, +/-/0 edit pool weight,
-		// Del/d removes (see updateNormal).
+		// Del/d removes (see updateNormal). The pool-weight hint is dropped on
+		// a model-classified pool, where those keys only explain themselves.
 		footerHint = i18n.T("login.codex_entry_hint") + "  " + i18n.T("login.codex_pool_hint") + "  [Esc] back"
+		if m.poolModelClassified {
+			footerHint = i18n.T("login.codex_entry_hint") + "  [Esc] back"
+		}
 	default:
 		footerHint = "[Enter] " + i18n.T("login.reauth") + "  [Del] " + i18n.T("login.remove_hint") + "  [Esc] back"
 	}

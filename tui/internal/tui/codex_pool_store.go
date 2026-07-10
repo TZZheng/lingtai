@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,8 +24,11 @@ import (
 //	  $LINGTAI_TUI_DIR/codex-auth-pool.json  when LINGTAI_TUI_DIR is set;
 //	  otherwise ~/.lingtai-tui/codex-auth-pool.json.
 //
-//	Schema:
+//	Schema (v1, flat):
 //	  {"version": 1, "accounts": [{"path": "codex-auth.json", "weight": 1}, ...]}
+//
+//	Schema (v2, model-classified — hand-authored):
+//	  {"version": 2, "models": {"<exact model>": [{"path": ..., "weight": ...}, ...], ...}}
 //
 //	Rules:
 //	  - `path` is TUI-dir-relative for token files under the TUI dir; the legacy
@@ -33,6 +37,16 @@ import (
 //	    "~/"-prefixed or absolute ref.
 //	  - Store only paths/refs and integer weights — NEVER token contents.
 //	  - Weight 0 means the account is disabled (present but not balanced onto).
+//	  - A `models` map classifies the pool by EXACT model string: the kernel
+//	    selects accounts only inside the current model's category and ignores
+//	    `accounts` entirely when `models` is present. PRESENCE of the dict is
+//	    what classifies — an empty `{}` still classifies (every model then
+//	    falls back to the legacy token); `models: null` is not a dict and
+//	    leaves the pool flat. The TUI has no category editor yet — it
+//	    round-trips `models` losslessly, stamps version 2, and REFUSES flat
+//	    +/-/0 weight edits on a classified pool (errCodexPoolModelClassified)
+//	    so it can never destroy a hand-authored classification or write an
+//	    entry the kernel would ignore.
 //
 // Nothing here reads, logs, or writes token material.
 
@@ -40,8 +54,20 @@ import (
 // kernel's reader.
 const codexPoolFileName = "codex-auth-pool.json"
 
-// codexPoolVersion is the schema version written into the pool file.
+// codexPoolVersion is the schema version written into a flat (v1) pool file.
 const codexPoolVersion = 1
+
+// codexPoolVersionModels is the schema version stamped when the pool is
+// model-classified (carries a top-level `models` map — even an empty one).
+const codexPoolVersionModels = 2
+
+// errCodexPoolModelClassified refuses flat weight edits on a model-classified
+// pool: the kernel ignores `accounts` when `models` is present, so the edit
+// would silently do nothing at runtime, and rewriting the file risks mangling
+// the hand-authored classification. The file must be edited by hand until a
+// category-aware editor exists.
+var errCodexPoolModelClassified = errors.New(
+	"codex-auth-pool.json is model-classified (has a models map); flat weight edits are disabled — edit the file by hand")
 
 // codexPoolAccount is one balanced account: a stable ref to its token file plus
 // an integer weight. Weight 0 disables the account without dropping it.
@@ -50,10 +76,18 @@ type codexPoolAccount struct {
 	Weight int    `json:"weight"`
 }
 
-// codexPool is the on-disk pool file shape.
+// codexPool is the on-disk pool file shape. Models (v2) classifies accounts by
+// EXACT model string; when present it is the single source of truth and the
+// flat Accounts list is ignored by the kernel. The kernel keys on the dict's
+// PRESENCE, not its size — `models: {}` classifies, `models: null` does not —
+// so Models is a pointer: nil means the key was absent or null (flat v1),
+// non-nil means a dict was present (v2), even an empty one. That presence bit
+// plus keeping both fields typed is what makes load→save lossless for
+// hand-authored v2 files.
 type codexPool struct {
-	Version  int                `json:"version"`
-	Accounts []codexPoolAccount `json:"accounts"`
+	Version  int                            `json:"version"`
+	Accounts []codexPoolAccount             `json:"accounts"`
+	Models   *map[string][]codexPoolAccount `json:"models,omitempty"`
 }
 
 // codexPoolPath returns the absolute path of the pool file. LINGTAI_TUI_DIR
@@ -155,9 +189,15 @@ func loadCodexPool(globalDir string) (codexPool, error) {
 // saveCodexPool writes the pool file (version stamped, parent created). The file
 // is non-secret — it holds only refs and weights — so it is written 0644, unlike
 // the 0600 token files. Callers build the accounts list from
-// codexPoolRefForPath so only stable relative refs land on disk.
+// codexPoolRefForPath so only stable relative refs land on disk. A pool whose
+// `models` map was present (even empty) is stamped version 2 (model-classified)
+// and the map is written back — dropping an empty `{}` would flip the kernel
+// from classified to flat. Flat pools stay version 1, byte-identical to today.
 func saveCodexPool(globalDir string, pool codexPool) error {
 	pool.Version = codexPoolVersion
+	if pool.Models != nil {
+		pool.Version = codexPoolVersionModels
+	}
 	if pool.Accounts == nil {
 		pool.Accounts = []codexPoolAccount{}
 	}
@@ -173,10 +213,12 @@ func saveCodexPool(globalDir string, pool codexPool) error {
 }
 
 // codexPoolWeights returns a map from resolved ABSOLUTE token-file path to the
-// weight recorded in the pool file. Entries whose ref can't be resolved are
-// skipped. Used by the credentials UI to look up each Codex account row's weight
-// without re-parsing the pool per row. A missing pool file yields an empty map
-// (callers apply the default-weight policy on top).
+// weight recorded in the pool file's FLAT accounts list. Entries whose ref
+// can't be resolved are skipped. Used by the credentials UI to look up each
+// Codex account row's weight without re-parsing the pool per row. A missing
+// pool file yields an empty map (callers apply the default-weight policy on
+// top). On a model-classified pool the kernel ignores the flat list, so UI
+// callers must gate on codexPoolModelInfo before rendering these weights.
 func codexPoolWeights(globalDir string) map[string]int {
 	pool, err := loadCodexPool(globalDir)
 	if err != nil {
@@ -191,6 +233,20 @@ func codexPoolWeights(globalDir string) map[string]int {
 		out[abs] = acct.Weight
 	}
 	return out
+}
+
+// codexPoolModelInfo reports whether the pool file is model-classified (has a
+// top-level `models` map — presence, not size, is the classification bit, so
+// an empty `{}` reports true/0) and how many model categories it holds.
+// A missing or malformed file reports false/0 — corruption is surfaced
+// separately by codexPoolFileCorrupt. The credentials UI uses this to render
+// the classified state instead of flat memberships the kernel would not honor.
+func codexPoolModelInfo(globalDir string) (classified bool, modelCount int) {
+	pool, err := loadCodexPool(globalDir)
+	if err != nil || pool.Models == nil {
+		return false, 0
+	}
+	return true, len(*pool.Models)
 }
 
 // codexPoolFileCorrupt reports whether the pool file exists but fails to parse.
@@ -241,6 +297,12 @@ func setCodexPoolWeight(globalDir, absPath string, weight int) error {
 	if err != nil {
 		// A malformed pool file must not be silently overwritten — surface it.
 		return err
+	}
+	if pool.Models != nil {
+		// A model-classified pool (any `models` dict, even empty) has no flat
+		// weights to edit: refuse before touching anything so the file bytes
+		// stay exactly as the operator wrote them.
+		return errCodexPoolModelClassified
 	}
 
 	ref := codexPoolRefForPath(globalDir, absPath)

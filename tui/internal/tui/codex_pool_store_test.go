@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -312,6 +313,275 @@ func TestSetCodexPoolWeight_DedupesSameAbsToken(t *testing.T) {
 	// codexPoolWeights (map keyed by abs path) must agree.
 	if w := codexPoolWeights(dir)[work]; w != 5 {
 		t.Errorf("resolved work weight = %d, want 5", w)
+	}
+}
+
+// seedModelClassifiedPool writes a hand-authored v2 (model-classified) pool
+// file — the shape the kernel's codex-pool provider selects from by exact
+// model — and returns its raw bytes for byte-preservation assertions.
+func seedModelClassifiedPool(t *testing.T, globalDir string) []byte {
+	t.Helper()
+	raw := []byte(`{
+  "version": 2,
+  "models": {
+    "gpt-5.6-sol": [
+      {"path": "codex-auth/work.json", "weight": 3},
+      {"path": "codex-auth.json", "weight": 1}
+    ],
+    "gpt-5.5": [
+      {"path": "codex-auth/backup.json", "weight": 1}
+    ]
+  }
+}`)
+	if err := os.MkdirAll(filepath.Dir(codexPoolPath(globalDir)), 0o755); err != nil {
+		t.Fatalf("mkdir pool dir: %v", err)
+	}
+	if err := os.WriteFile(codexPoolPath(globalDir), raw, 0o644); err != nil {
+		t.Fatalf("seed v2 pool: %v", err)
+	}
+	return raw
+}
+
+// seedEmptyModelsClassifiedPool writes a hand-authored v2 pool whose `models`
+// map is PRESENT BUT EMPTY, with a sibling flat `accounts` list. The kernel
+// treats any top-level `models` dict — including `{}` — as classified and
+// ignores the sibling `accounts` entirely, so the TUI must classify on
+// presence, not non-emptiness. Returns the raw bytes for byte-preservation
+// assertions.
+func seedEmptyModelsClassifiedPool(t *testing.T, globalDir string) []byte {
+	t.Helper()
+	raw := []byte(`{
+  "version": 2,
+  "models": {},
+  "accounts": [
+    {"path": "codex-auth/work.json", "weight": 3}
+  ]
+}`)
+	if err := os.MkdirAll(filepath.Dir(codexPoolPath(globalDir)), 0o755); err != nil {
+		t.Fatalf("mkdir pool dir: %v", err)
+	}
+	if err := os.WriteFile(codexPoolPath(globalDir), raw, 0o644); err != nil {
+		t.Fatalf("seed empty-models v2 pool: %v", err)
+	}
+	return raw
+}
+
+// TestLoadSaveCodexPool_PreservesEmptyModelsMap pins the presence semantics of
+// an empty `models` map through load→save: the saved file must still carry
+// `"models": {}` (a present, empty JSON object), stamp version 2, and keep the
+// sibling flat accounts — never collapse to a flat v1 file, which would flip
+// the kernel from "classified, everything falls back" to "flat, accounts win".
+// Asserted on the raw JSON so the test is independent of the in-memory
+// representation.
+func TestLoadSaveCodexPool_PreservesEmptyModelsMap(t *testing.T) {
+	t.Setenv("LINGTAI_TUI_DIR", "")
+	dir := t.TempDir()
+	seedEmptyModelsClassifiedPool(t, dir)
+
+	pool, err := loadCodexPool(dir)
+	if err != nil {
+		t.Fatalf("load empty-models pool: %v", err)
+	}
+	if err := saveCodexPool(dir, pool); err != nil {
+		t.Fatalf("save empty-models pool: %v", err)
+	}
+
+	raw, err := os.ReadFile(codexPoolPath(dir))
+	if err != nil {
+		t.Fatalf("read pool file back: %v", err)
+	}
+	var generic map[string]any
+	if err := json.Unmarshal(raw, &generic); err != nil {
+		t.Fatalf("reparse saved pool: %v", err)
+	}
+	models, present := generic["models"]
+	if !present {
+		t.Fatalf("saved pool dropped the empty models map; body=%s", raw)
+	}
+	obj, isObj := models.(map[string]any)
+	if !isObj {
+		t.Fatalf("saved models is not a JSON object; got %T (%v)", models, models)
+	}
+	if len(obj) != 0 {
+		t.Errorf("saved models should stay empty; got %v", obj)
+	}
+	if v, _ := generic["version"].(float64); int(v) != codexPoolVersionModels {
+		t.Errorf("saved version = %v, want %d (models present ⇒ classified)", generic["version"], codexPoolVersionModels)
+	}
+	accounts, _ := generic["accounts"].([]any)
+	if len(accounts) != 1 {
+		t.Fatalf("sibling accounts list mangled; got %v", generic["accounts"])
+	}
+	if acct, _ := accounts[0].(map[string]any); acct["path"] != "codex-auth/work.json" || acct["weight"].(float64) != 3 {
+		t.Errorf("sibling account mangled by round-trip: %v", accounts[0])
+	}
+	// The classification probe must agree after the round-trip.
+	if classified, n := codexPoolModelInfo(dir); !classified || n != 0 {
+		t.Errorf("round-tripped empty-models pool: classified=%v count=%d, want true/0", classified, n)
+	}
+}
+
+// TestSetCodexPoolWeight_RefusesEmptyModelsClassifiedPool guards the edit path
+// for the empty-`models` shape: even with zero categories the pool is
+// classified (the kernel ignores the sibling accounts), so a flat weight edit
+// must be refused with errCodexPoolModelClassified and the file bytes — the
+// empty map AND the sibling accounts — left exactly as the operator wrote
+// them. The sibling accounts list is never treated as editable.
+func TestSetCodexPoolWeight_RefusesEmptyModelsClassifiedPool(t *testing.T) {
+	t.Setenv("LINGTAI_TUI_DIR", "")
+	dir := t.TempDir()
+	raw := seedEmptyModelsClassifiedPool(t, dir)
+
+	work := filepath.Join(dir, codexAuthSubdir, "work.json")
+	err := setCodexPoolWeight(dir, work, 2)
+	if err == nil {
+		t.Fatal("flat weight edit on an empty-models classified pool must be refused")
+	}
+	if !errors.Is(err, errCodexPoolModelClassified) {
+		t.Errorf("refusal error = %v, want errCodexPoolModelClassified", err)
+	}
+
+	got, readErr := os.ReadFile(codexPoolPath(dir))
+	if readErr != nil {
+		t.Fatalf("read pool file back: %v", readErr)
+	}
+	if string(got) != string(raw) {
+		t.Errorf("refused edit must leave the pool file byte-identical;\n got: %s\nwant: %s", got, raw)
+	}
+}
+
+// TestLoadSaveCodexPool_RoundTripsModelsMap guards the v2 round-trip: a
+// hand-authored model-classified pool file must survive load→save with its
+// `models` map semantically intact and the version stamped 2 — never silently
+// collapsed back to a flat v1 file (which would destroy the operator's
+// classification the first time the TUI rewrites the file).
+func TestLoadSaveCodexPool_RoundTripsModelsMap(t *testing.T) {
+	t.Setenv("LINGTAI_TUI_DIR", "")
+	dir := t.TempDir()
+	seedModelClassifiedPool(t, dir)
+
+	pool, err := loadCodexPool(dir)
+	if err != nil {
+		t.Fatalf("load v2 pool: %v", err)
+	}
+	if pool.Models == nil || len(*pool.Models) != 2 {
+		t.Fatalf("loaded models want 2 categories; got %#v", pool.Models)
+	}
+	if err := saveCodexPool(dir, pool); err != nil {
+		t.Fatalf("save v2 pool: %v", err)
+	}
+
+	reloaded, err := loadCodexPool(dir)
+	if err != nil {
+		t.Fatalf("reload v2 pool: %v", err)
+	}
+	if reloaded.Version != codexPoolVersionModels {
+		t.Errorf("round-tripped version = %d, want %d", reloaded.Version, codexPoolVersionModels)
+	}
+	if reloaded.Models == nil {
+		t.Fatal("round-tripped pool lost its models map")
+	}
+	sol := (*reloaded.Models)["gpt-5.6-sol"]
+	if len(sol) != 2 || sol[0].Path != "codex-auth/work.json" || sol[0].Weight != 3 ||
+		sol[1].Path != "codex-auth.json" || sol[1].Weight != 1 {
+		t.Errorf("gpt-5.6-sol category mangled by round-trip: %#v", sol)
+	}
+	old := (*reloaded.Models)["gpt-5.5"]
+	if len(old) != 1 || old[0].Path != "codex-auth/backup.json" || old[0].Weight != 1 {
+		t.Errorf("gpt-5.5 category mangled by round-trip: %#v", old)
+	}
+}
+
+// TestSetCodexPoolWeight_RefusesModelClassifiedPool guards the flat-edit
+// refusal: on a model-classified pool a +/-/0 weight edit must return
+// errCodexPoolModelClassified and leave the file bytes untouched — a flat
+// `accounts` entry would be ignored by the kernel (models wins), and any
+// rewrite risks mangling the hand-authored classification.
+func TestSetCodexPoolWeight_RefusesModelClassifiedPool(t *testing.T) {
+	t.Setenv("LINGTAI_TUI_DIR", "")
+	dir := t.TempDir()
+	raw := seedModelClassifiedPool(t, dir)
+
+	work := filepath.Join(dir, codexAuthSubdir, "work.json")
+	err := setCodexPoolWeight(dir, work, 2)
+	if err == nil {
+		t.Fatal("flat weight edit on a model-classified pool must be refused")
+	}
+	if !errors.Is(err, errCodexPoolModelClassified) {
+		t.Errorf("refusal error = %v, want errCodexPoolModelClassified", err)
+	}
+
+	got, readErr := os.ReadFile(codexPoolPath(dir))
+	if readErr != nil {
+		t.Fatalf("read pool file back: %v", readErr)
+	}
+	if string(got) != string(raw) {
+		t.Errorf("refused edit must leave the pool file byte-identical;\n got: %s\nwant: %s", got, raw)
+	}
+}
+
+// TestCodexPoolModelInfo covers the UI's classification probe: missing, flat,
+// and malformed pools report unclassified; a v2 pool reports classified with
+// its category count.
+func TestCodexPoolModelInfo(t *testing.T) {
+	t.Setenv("LINGTAI_TUI_DIR", "")
+
+	missing := t.TempDir()
+	if classified, n := codexPoolModelInfo(missing); classified || n != 0 {
+		t.Errorf("missing pool: classified=%v count=%d, want false/0", classified, n)
+	}
+
+	flat := t.TempDir()
+	if err := setCodexPoolWeight(flat, filepath.Join(flat, codexAuthSubdir, "w.json"), 1); err != nil {
+		t.Fatalf("seed flat pool: %v", err)
+	}
+	if classified, n := codexPoolModelInfo(flat); classified || n != 0 {
+		t.Errorf("flat pool: classified=%v count=%d, want false/0", classified, n)
+	}
+
+	bad := t.TempDir()
+	if err := os.WriteFile(codexPoolPath(bad), []byte("{not json"), 0o644); err != nil {
+		t.Fatalf("seed malformed pool: %v", err)
+	}
+	if classified, n := codexPoolModelInfo(bad); classified || n != 0 {
+		t.Errorf("malformed pool: classified=%v count=%d, want false/0", classified, n)
+	}
+
+	v2 := t.TempDir()
+	seedModelClassifiedPool(t, v2)
+	if classified, n := codexPoolModelInfo(v2); !classified || n != 2 {
+		t.Errorf("v2 pool: classified=%v count=%d, want true/2", classified, n)
+	}
+
+	// PRESENCE, not non-emptiness, classifies: the kernel treats any top-level
+	// `models` dict — even `{}` — as classified (isinstance(models, dict)).
+	emptyModels := t.TempDir()
+	seedEmptyModelsClassifiedPool(t, emptyModels)
+	if classified, n := codexPoolModelInfo(emptyModels); !classified || n != 0 {
+		t.Errorf("empty-models pool: classified=%v count=%d, want true/0", classified, n)
+	}
+
+	// `models: null` is NOT a dict — the kernel falls back to the flat
+	// accounts list, so the TUI must report unclassified.
+	nullModels := t.TempDir()
+	nullRaw := []byte(`{"version": 1, "models": null, "accounts": [{"path": "codex-auth/w.json", "weight": 1}]}`)
+	if err := os.WriteFile(codexPoolPath(nullModels), nullRaw, 0o644); err != nil {
+		t.Fatalf("seed null-models pool: %v", err)
+	}
+	if classified, n := codexPoolModelInfo(nullModels); classified || n != 0 {
+		t.Errorf("null-models pool: classified=%v count=%d, want false/0", classified, n)
+	}
+}
+
+// TestCodexPoolFileCorrupt_ModelClassifiedIsNotCorrupt pins that a valid v2
+// (model-classified) pool file parses cleanly — classification must never be
+// mistaken for corruption.
+func TestCodexPoolFileCorrupt_ModelClassifiedIsNotCorrupt(t *testing.T) {
+	t.Setenv("LINGTAI_TUI_DIR", "")
+	dir := t.TempDir()
+	seedModelClassifiedPool(t, dir)
+	if codexPoolFileCorrupt(dir) {
+		t.Error("a valid model-classified pool file must not be reported corrupt")
 	}
 }
 

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -232,6 +233,175 @@ func TestLoginModel_CorruptPoolFileWarns(t *testing.T) {
 	}
 	if string(got) != string(badContent) {
 		t.Errorf("corrupt pool file must be preserved verbatim; got %q", string(got))
+	}
+}
+
+// TestLoginModel_ModelClassifiedPoolRendersClassified guards login honesty for
+// a v2 (model-classified) pool: rows must render the classified state — never a
+// flat membership label the kernel would not honor — the note explaining that
+// flat edits are off must appear, and the +/-/0 footer hint must be suppressed
+// (the keys are inert, so advertising them would be a lie).
+func TestLoginModel_ModelClassifiedPoolRendersClassified(t *testing.T) {
+	t.Setenv("LINGTAI_TUI_DIR", "")
+	_, globalDir := withTempCodexHome(t)
+
+	acctPath := filepath.Join(globalDir, codexAuthSubdir, "work.json")
+	writeCodexTokenAt(t, acctPath, "work@example.com")
+	seedModelClassifiedPool(t, globalDir)
+
+	m := NewLoginModel("", globalDir)
+	if !m.poolModelClassified {
+		t.Fatal("model should detect the model-classified pool")
+	}
+	if m.poolModelCount != 2 {
+		t.Fatalf("poolModelCount = %d, want 2", m.poolModelCount)
+	}
+
+	idx := codexEntryIndex(t, m, acctPath)
+	m.entries[idx].Status = loginValid
+	m.cursor = idx
+	m.width = 120
+	view := m.View()
+
+	if !strings.Contains(view, i18n.T("login.codex_pool_model_classified")) {
+		t.Errorf("view should show the model-classified row label; view=%q", view)
+	}
+	if strings.Contains(view, i18n.T("login.codex_pool_not_member")) {
+		t.Errorf("view must not show a flat not-in-pool label for a classified pool; view=%q", view)
+	}
+	note := fmt.Sprintf(i18n.T("login.codex_pool_model_classified_note"), 2)
+	if !strings.Contains(view, note) {
+		t.Errorf("view should show the classified-pool note; want %q in view=%q", note, view)
+	}
+	if strings.Contains(view, i18n.T("login.codex_pool_hint")) {
+		t.Errorf("footer must not advertise the inert +/-/0 pool keys on a classified pool; view=%q", view)
+	}
+}
+
+// TestLoginModel_ModelClassifiedPoolRefusesFlatEdit guards the edit path: on a
+// model-classified pool the +/-/0 keys must produce the informational
+// hand-edit message and leave both the pool file bytes and the in-memory
+// weights untouched — never write a flat entry the kernel would ignore.
+func TestLoginModel_ModelClassifiedPoolRefusesFlatEdit(t *testing.T) {
+	t.Setenv("LINGTAI_TUI_DIR", "")
+	_, globalDir := withTempCodexHome(t)
+
+	acctPath := filepath.Join(globalDir, codexAuthSubdir, "work.json")
+	writeCodexTokenAt(t, acctPath, "work@example.com")
+	raw := seedModelClassifiedPool(t, globalDir)
+
+	m := NewLoginModel("", globalDir)
+	idx := codexEntryIndex(t, m, acctPath)
+	m.entries[idx].Status = loginValid
+	m.cursor = idx
+
+	note := fmt.Sprintf(i18n.T("login.codex_pool_model_classified_note"), 2)
+	for _, key := range []tea.KeyPressMsg{
+		{Text: "+", Code: '+'},
+		{Text: "-", Code: '-'},
+		{Text: "0", Code: '0'},
+	} {
+		var cmd tea.Cmd
+		m, cmd = m.Update(key)
+		if cmd != nil {
+			t.Fatalf("pool key %q on classified pool must not start a command", key.Text)
+		}
+		if m.message != note {
+			t.Errorf("key %q: message = %q, want the classified-pool note %q", key.Text, m.message, note)
+		}
+		if m.messageOK {
+			t.Errorf("key %q: the refusal message must not style as success", key.Text)
+		}
+		if _, ok := m.poolWeights[acctPath]; ok {
+			t.Errorf("key %q: in-memory weights must stay untouched; weights=%v", key.Text, m.poolWeights)
+		}
+	}
+
+	got, err := os.ReadFile(codexPoolPath(globalDir))
+	if err != nil {
+		t.Fatalf("read pool file back: %v", err)
+	}
+	if string(got) != string(raw) {
+		t.Errorf("classified pool file must stay byte-identical after refused edits;\n got: %s\nwant: %s", got, raw)
+	}
+}
+
+// TestLoginModel_EmptyModelsClassifiedPoolTruthful pins login honesty for a v2
+// pool whose `models` map is present but EMPTY, with a sibling flat `accounts`
+// entry for this very account. Kernel semantics: any `models` dict — even `{}`
+// — classifies the pool and the sibling accounts are ignored. The UI must
+// therefore render the classified state (never the sibling's flat weight,
+// which the kernel would not honor), show the note with the truthful count of
+// 0, suppress the +/-/0 footer hint, and keep those keys inert — no write, no
+// in-memory weight, file bytes untouched.
+func TestLoginModel_EmptyModelsClassifiedPoolTruthful(t *testing.T) {
+	t.Setenv("LINGTAI_TUI_DIR", "")
+	_, globalDir := withTempCodexHome(t)
+
+	acctPath := filepath.Join(globalDir, codexAuthSubdir, "work.json")
+	writeCodexTokenAt(t, acctPath, "work@example.com")
+	raw := seedEmptyModelsClassifiedPool(t, globalDir) // sibling accounts entry: work.json @ weight 3
+
+	m := NewLoginModel("", globalDir)
+	if !m.poolModelClassified {
+		t.Fatal("an empty-but-present models map must classify the pool")
+	}
+	if m.poolModelCount != 0 {
+		t.Fatalf("poolModelCount = %d, want 0", m.poolModelCount)
+	}
+
+	idx := codexEntryIndex(t, m, acctPath)
+	m.entries[idx].Status = loginValid
+	m.cursor = idx
+	m.width = 120
+	view := m.View()
+
+	if !strings.Contains(view, i18n.T("login.codex_pool_model_classified")) {
+		t.Errorf("view should show the model-classified row label; view=%q", view)
+	}
+	if flat := fmt.Sprintf(i18n.T("login.codex_pool_weight"), 3); strings.Contains(view, flat) {
+		t.Errorf("view must not render the sibling flat weight the kernel ignores; view=%q", view)
+	}
+	if strings.Contains(view, i18n.T("login.codex_pool_not_member")) {
+		t.Errorf("view must not show a flat not-in-pool label for a classified pool; view=%q", view)
+	}
+	note := fmt.Sprintf(i18n.T("login.codex_pool_model_classified_note"), 0)
+	if !strings.Contains(view, note) {
+		t.Errorf("view should show the classified-pool note with count 0; want %q in view=%q", note, view)
+	}
+	if strings.Contains(view, i18n.T("login.codex_pool_hint")) {
+		t.Errorf("footer must not advertise the inert +/-/0 pool keys on a classified pool; view=%q", view)
+	}
+
+	// The in-memory flat map still carries the sibling entry (display is what
+	// is gated on classification) — the inert keys must not mutate it.
+	if w := m.poolWeights[acctPath]; w != 3 {
+		t.Fatalf("precondition: sibling flat weight should load as 3; got %d", w)
+	}
+	for _, key := range []tea.KeyPressMsg{
+		{Text: "+", Code: '+'},
+		{Text: "-", Code: '-'},
+		{Text: "0", Code: '0'},
+	} {
+		var cmd tea.Cmd
+		m, cmd = m.Update(key)
+		if cmd != nil {
+			t.Fatalf("pool key %q on classified pool must not start a command", key.Text)
+		}
+		if m.message != note {
+			t.Errorf("key %q: message = %q, want the classified-pool note %q", key.Text, m.message, note)
+		}
+		if w := m.poolWeights[acctPath]; w != 3 {
+			t.Errorf("key %q: in-memory weights must stay untouched; weights=%v", key.Text, m.poolWeights)
+		}
+	}
+
+	got, err := os.ReadFile(codexPoolPath(globalDir))
+	if err != nil {
+		t.Fatalf("read pool file back: %v", err)
+	}
+	if string(got) != string(raw) {
+		t.Errorf("empty-models pool file must stay byte-identical after inert keys;\n got: %s\nwant: %s", got, raw)
 	}
 }
 
