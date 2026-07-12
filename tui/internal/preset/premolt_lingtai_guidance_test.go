@@ -81,6 +81,67 @@ func TestPreMoltLingtaiGuidance(t *testing.T) {
 	})
 }
 
+func TestCovenantLearnsFromSetbacks(t *testing.T) {
+	read := func(t *testing.T, path string) string {
+		t.Helper()
+		data, err := fs.ReadFile(covenantFS, path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		return string(data)
+	}
+
+	for _, c := range []struct {
+		name    string
+		path    string
+		needles []string
+	}{
+		{
+			name: "english covenant",
+			path: "covenant/en/covenant.md",
+			needles: []string{
+				"Learn from every setback",
+				"durable layer",
+				"`pad`",
+				"`psyche`",
+				"`knowledge`",
+				"`skills`",
+				"same place twice",
+			},
+		},
+		{
+			name: "zh covenant",
+			path: "covenant/zh/covenant.md",
+			needles: []string{
+				"吃一堑，长一智",
+				"长期记忆",
+				"手记",
+				"修行志",
+				"知识",
+				"技能",
+				"同一个地方再跌一次",
+			},
+		},
+		{
+			name: "wen covenant",
+			path: "covenant/wen/covenant.md",
+			needles: []string{
+				"吃一堑，长一智",
+				"「简」",
+				"「心印」",
+				"「知」",
+				"「技」",
+				"不复于同处再蹶",
+			},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			body := read(t, c.path)
+			mustContainAll(t, c.name, body, c.needles...)
+		})
+	}
+}
+
 func TestEnglishTutorialAssetsContainNoCJKPromptCues(t *testing.T) {
 	read := func(t *testing.T, fsys fs.FS, path string) string {
 		t.Helper()
