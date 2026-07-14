@@ -39,10 +39,25 @@ type asyncOwner struct {
 	activation uint64
 }
 
+// asyncTargetPolicy makes the target's activation/revalidation contract part of
+// every delayed-work identity. Its zero value is deliberately invalid.
+type asyncTargetPolicy uint8
+
+const (
+	asyncTargetPolicyInvalid asyncTargetPolicy = iota
+	asyncTargetHomeMain
+	// asyncTargetProjectVisit is the existing PR2 cross-project adapter. Owner:
+	// App visit coordinator. Reason: preserve cross-project navigation while the
+	// home rail is introduced independently. Expiry: PR7.
+	asyncTargetProjectVisit
+	asyncTargetHomeAgentRail
+)
+
 type asyncTarget struct {
 	directory          string
 	addressFingerprint string
-	inventoryBound     bool
+	policy             asyncTargetPolicy
+	pid                int
 }
 
 type asyncGeneration struct {
@@ -199,9 +214,9 @@ func acceptAsync(current asyncCurrent, got asyncEnvelope) bool {
 		return false
 	}
 
-	// Current state owns inventory policy: captured work cannot weaken it. Pulse
-	// is animation-only and deliberately avoids a four-times-per-second scan.
-	if binding.target.inventoryBound && asyncNeedsInventoryRevalidation(got.kind) {
+	// Current state owns target policy: captured work cannot weaken it. Pulse is
+	// animation-only and deliberately avoids a four-times-per-second scan.
+	if binding.target.requiresInventoryRevalidation() && asyncNeedsInventoryRevalidation(got.kind) {
 		return current.revalidateTarget != nil && current.revalidateTarget(binding.owner, binding.target)
 	}
 	return true
@@ -217,9 +232,27 @@ func validAsyncTarget(owner asyncOwner, target asyncTarget) bool {
 		!validAsyncAddressFingerprint(target.addressFingerprint) {
 		return false
 	}
+	switch target.policy {
+	case asyncTargetHomeMain:
+		// Main is the synthetic aggregate target through PR6; it is not process-
+		// inventory-backed and therefore carries no PID coordinate.
+		if target.pid != 0 {
+			return false
+		}
+	case asyncTargetProjectVisit, asyncTargetHomeAgentRail:
+		if target.pid <= 0 {
+			return false
+		}
+	default:
+		return false
+	}
 	rel, err := filepath.Rel(owner.projectID, target.directory)
 	return err == nil && rel != "." && rel != ".." && !filepath.IsAbs(rel) &&
 		!strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func (target asyncTarget) requiresInventoryRevalidation() bool {
+	return target.policy == asyncTargetProjectVisit || target.policy == asyncTargetHomeAgentRail
 }
 
 func validAsyncAddressFingerprint(fingerprint string) bool {

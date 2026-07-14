@@ -162,9 +162,27 @@ func newProjectMailStoreWithDeps(projectDir, humanDir string, scanner projectMai
 }
 
 // revalidateInventoryTarget performs one fresh inventory scan for substantive
-// work on a target that was activated from inventory. Display-only nickname
-// changes are intentionally irrelevant to target identity.
+// work on a process-backed target. Display-only nickname changes are
+// intentionally irrelevant to target identity.
 func revalidateInventoryTarget(owner asyncOwner, target asyncTarget) bool {
+	switch target.policy {
+	case asyncTargetProjectVisit:
+		return revalidateProjectVisitTarget(owner, target)
+	case asyncTargetHomeAgentRail:
+		return revalidateOrdinaryRailTarget(owner, target)
+	default:
+		return false
+	}
+}
+
+// revalidateProjectVisitTarget is the PR2 visit-policy bridge. It deliberately
+// retains global inventory.Record.Enterable semantics. Owner: App visit
+// coordinator. Reason: preserve cross-project visit behavior independently of
+// ordinary home-rail admission. Expiry: PR7.
+func revalidateProjectVisitTarget(owner asyncOwner, target asyncTarget) bool {
+	if target.policy != asyncTargetProjectVisit || !validAsyncOwner(owner) || !validAsyncTarget(owner, target) {
+		return false
+	}
 	snapshot, err := inventory.Scan(inventory.Options{FilterDir: filepath.Dir(owner.projectID)})
 	if err != nil {
 		return false
@@ -173,9 +191,42 @@ func revalidateInventoryTarget(owner asyncOwner, target asyncTarget) bool {
 		if inventory.NormalizePath(record.AgentDir) != target.directory {
 			continue
 		}
-		return record.Enterable &&
+		return record.Enterable && record.PID == target.pid && record.ManifestAddressVerified &&
 			canonicalProjectMailIdentity(filepath.Join(record.Project, ".lingtai")) == owner.projectID &&
 			fs.AddressFingerprint(record.Address) == target.addressFingerprint
+	}
+	return false
+}
+
+// ordinaryRailRecordEligible is the ordinary home-Agent admission contract. It
+// is intentionally separate from global project-visit Enterable semantics.
+func ordinaryRailRecordEligible(owner asyncOwner, target asyncTarget, record inventory.Record) bool {
+	if target.policy != asyncTargetHomeAgentRail || !validAsyncOwner(owner) || !validAsyncTarget(owner, target) {
+		return false
+	}
+	return inventory.NormalizePath(record.AgentDir) == target.directory &&
+		canonicalProjectMailIdentity(filepath.Join(record.Project, ".lingtai")) == owner.projectID &&
+		!record.Phantom && record.ReadError == "" && record.ManifestAddressVerified &&
+		!record.IsHuman && !record.IsOrchestrator && record.Role == inventory.RoleAgent &&
+		record.PID == target.pid &&
+		fs.AddressFingerprint(record.Address) == target.addressFingerprint
+}
+
+// revalidateOrdinaryRailTarget performs the fresh process/manifest check used by
+// ordinary rail activation and later substantive async acceptance. It does not
+// consult the global project-visit Enterable flag.
+func revalidateOrdinaryRailTarget(owner asyncOwner, target asyncTarget) bool {
+	if target.policy != asyncTargetHomeAgentRail || !validAsyncOwner(owner) || !validAsyncTarget(owner, target) {
+		return false
+	}
+	snapshot, err := inventory.Scan(inventory.Options{FilterDir: filepath.Dir(owner.projectID)})
+	if err != nil {
+		return false
+	}
+	for _, record := range snapshot.Records {
+		if inventory.NormalizePath(record.AgentDir) == target.directory {
+			return ordinaryRailRecordEligible(owner, target, record)
+		}
 	}
 	return false
 }
@@ -191,7 +242,7 @@ func (s *ProjectMailStore) setAsyncTargetRevalidator(revalidate func(asyncOwner,
 	s.syncAsyncState()
 }
 
-func (s *ProjectMailStore) bindMailModel(mail *MailModel, inventoryBound bool) {
+func (s *ProjectMailStore) bindMailModel(mail *MailModel, policy asyncTargetPolicy, pid int) {
 	if s == nil || mail == nil || s.id == 0 {
 		return
 	}
@@ -204,7 +255,8 @@ func (s *ProjectMailStore) bindMailModel(mail *MailModel, inventoryBound bool) {
 		target: asyncTarget{
 			directory:          inventory.NormalizePath(mail.orchestrator),
 			addressFingerprint: fs.AddressFingerprint(mail.orchAddr),
-			inventoryBound:     inventoryBound,
+			policy:             policy,
+			pid:                pid,
 		},
 		generation: mail.generation,
 	}

@@ -75,6 +75,10 @@ type Record struct {
 	Nickname  string
 	State     string
 
+	// ManifestAddressVerified distinguishes a successfully read, nonempty
+	// manifest address from the display-only basename fallback in Address.
+	ManifestAddressVerified bool
+
 	IsHuman        bool
 	IsOrchestrator bool
 	Role           Role
@@ -225,6 +229,7 @@ func enrichRecord(r *Record) {
 
 	node, err := fs.ReadAgent(r.AgentDir)
 	if err == nil {
+		r.ManifestAddressVerified = strings.TrimSpace(node.Address) != ""
 		r.Address = firstNonEmpty(node.Address, fallback)
 		r.AgentName = firstNonEmpty(node.AgentName, fallback)
 		r.Nickname = node.Nickname

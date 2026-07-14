@@ -28,15 +28,16 @@ func bindMailModelForAsyncTest(t *testing.T, m *MailModel, generation uint64) Pr
 	}
 	projectDir := m.baseDir
 	probe := asyncOwner{projectID: canonicalProjectMailIdentity(projectDir), storeID: 1, activation: 1}
-	target := asyncTarget{directory: inventory.NormalizePath(m.orchestrator), addressFingerprint: "invalid"}
+	target := asyncTarget{directory: inventory.NormalizePath(m.orchestrator), addressFingerprint: "invalid", policy: asyncTargetHomeMain}
 	if projectDir == "" || !validAsyncTarget(probe, asyncTarget{
 		directory:          target.directory,
 		addressFingerprint: fs.AddressFingerprint(m.orchAddr),
+		policy:             asyncTargetHomeMain,
 	}) {
 		projectDir = filepath.Dir(m.orchestrator)
 	}
 	store := newProjectMailStore(projectDir, m.humanDir)
-	store.bindMailModel(m, false)
+	store.bindMailModel(m, asyncTargetHomeMain, 0)
 	return store
 }
 
@@ -52,7 +53,7 @@ func bindExistingStoreMailForAsyncTest(t *testing.T, store *ProjectMailStore, m 
 	if m.orchAddr == "" {
 		m.orchAddr = "mail-test-address"
 	}
-	store.bindMailModel(m, false)
+	store.bindMailModel(m, asyncTargetHomeMain, 0)
 }
 
 // acceptedInitialMailRefresh drives the real outer App.Update acceptance and

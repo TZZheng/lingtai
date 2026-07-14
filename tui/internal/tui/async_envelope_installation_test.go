@@ -503,6 +503,8 @@ type installationResolvedTarget struct {
 	projectID          string
 	directory          string
 	addressFingerprint string
+	policy             asyncTargetPolicy
+	pid                int
 	eligible           bool
 	nickname           string
 }
@@ -516,7 +518,8 @@ func (r *installationInventoryResolver) resolve(owner asyncOwner, target asyncTa
 	r.calls.Add(1)
 	record := r.record
 	return record.present && record.eligible && record.projectID == owner.projectID &&
-		record.directory == target.directory && record.addressFingerprint == target.addressFingerprint
+		record.directory == target.directory && record.addressFingerprint == target.addressFingerprint &&
+		record.policy == target.policy && record.pid == target.pid
 }
 
 func installationExactResolvedTarget(envelope asyncEnvelope) installationResolvedTarget {
@@ -525,6 +528,8 @@ func installationExactResolvedTarget(envelope asyncEnvelope) installationResolve
 		projectID:          envelope.owner.projectID,
 		directory:          envelope.target.directory,
 		addressFingerprint: envelope.target.addressFingerprint,
+		policy:             envelope.target.policy,
+		pid:                envelope.target.pid,
 		eligible:           true,
 		nickname:           "Original nickname",
 	}
@@ -1031,8 +1036,8 @@ func TestAsyncInventoryDisappearanceRejectsInstallForVisitedTarget(t *testing.T)
 	installationInjectResolver(t, &gateApp, probeResolver.resolve)
 	gateRefresh := installationRefreshResult(t, &gateApp, true)
 	gateEnvelope := installationProducedEnvelope(t, &gateRefresh, asyncInitialRebuild)
-	if !gateEnvelope.target.inventoryBound {
-		t.Fatal("visited target producer did not capture inventoryBound=true")
+	if gateEnvelope.target.policy != asyncTargetProjectVisit || gateEnvelope.target.pid <= 0 {
+		t.Fatalf("visited target producer captured policy=%v pid=%d, want project-visit policy with exact PID", gateEnvelope.target.policy, gateEnvelope.target.pid)
 	}
 
 	// Fail transparently until the real App/store resolver injection exists. This

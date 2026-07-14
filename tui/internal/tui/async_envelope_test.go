@@ -64,6 +64,7 @@ func directAsyncCurrent(scope string, generation uint64) asyncCurrent {
 			target: asyncTarget{
 				directory:          targetDir,
 				addressFingerprint: fs.AddressFingerprint(directAsyncAddress(scope)),
+				policy:             asyncTargetHomeMain,
 			},
 			generation: generation,
 		},
@@ -312,8 +313,9 @@ func (r *directFakeInventoryResolver) revalidate(owner asyncOwner, target asyncT
 			continue
 		}
 		recordProjectID := canonicalProjectMailIdentity(filepath.Join(record.Project, ".lingtai"))
-		return recordProjectID == owner.projectID &&
-			record.Enterable &&
+		return target.policy == asyncTargetProjectVisit && target.pid > 0 &&
+			recordProjectID == owner.projectID && record.Enterable &&
+			record.PID == target.pid && record.ManifestAddressVerified &&
 			fs.AddressFingerprint(record.Address) == target.addressFingerprint
 	}
 	return false
@@ -321,12 +323,14 @@ func (r *directFakeInventoryResolver) revalidate(owner asyncOwner, target asyncT
 
 func directInventoryRecord(current asyncCurrent) inventory.Record {
 	return inventory.Record{
-		Project:   filepath.Dir(current.binding.owner.projectID),
-		AgentDir:  current.binding.target.directory,
-		Address:   directAsyncAddress("inventory"),
-		AgentName: "Main",
-		Nickname:  "Original nickname",
-		Enterable: true,
+		PID:                     current.binding.target.pid,
+		Project:                 filepath.Dir(current.binding.owner.projectID),
+		AgentDir:                current.binding.target.directory,
+		Address:                 directAsyncAddress("inventory"),
+		AgentName:               "Main",
+		Nickname:                "Original nickname",
+		ManifestAddressVerified: true,
+		Enterable:               true,
 	}
 }
 
@@ -351,7 +355,8 @@ func TestAsyncPredicateDirectInventoryRevalidation(t *testing.T) {
 	for _, tc := range inventoryKinds {
 		t.Run(tc.name, func(t *testing.T) {
 			base := directAsyncCurrent("inventory", 7)
-			base.binding.target.inventoryBound = true
+			base.binding.target.policy = asyncTargetProjectVisit
+			base.binding.target.pid = 97
 			exactRecord := directInventoryRecord(base)
 
 			exactResolver := &directFakeInventoryResolver{records: []inventory.Record{exactRecord}}
@@ -402,7 +407,8 @@ func TestAsyncPredicateDirectInventoryRevalidation(t *testing.T) {
 
 	t.Run("liveness_pulse_skips_process_inventory", func(t *testing.T) {
 		current := directAsyncCurrent("inventory", 7)
-		current.binding.target.inventoryBound = true
+		current.binding.target.policy = asyncTargetProjectVisit
+		current.binding.target.pid = 97
 		resolver := &directFakeInventoryResolver{}
 		current.revalidateTarget = resolver.revalidate
 		directAssertAsyncAccepted(t, "liveness_pulse", "animation_only_pulse_uses_binding_not_process_scan", current, captureAsync(asyncLivenessPulse, current))
@@ -414,7 +420,8 @@ func TestAsyncPredicateDirectNonInventoryMainAndCurrentPolicy(t *testing.T) {
 	for _, tc := range directAsyncKindCases {
 		t.Run(tc.name, func(t *testing.T) {
 			current := directAsyncCurrent("stopped-main", 7)
-			current.binding.target.inventoryBound = false
+			current.binding.target.policy = asyncTargetHomeMain
+			current.binding.target.pid = 0
 			resolver := &directFakeInventoryResolver{}
 			current.revalidateTarget = resolver.revalidate
 			got := captureAsync(tc.kind, current)
@@ -434,11 +441,13 @@ func TestAsyncPredicateDirectNonInventoryMainAndCurrentPolicy(t *testing.T) {
 
 	t.Run("captured_work_cannot_weaken_current_inventory_policy", func(t *testing.T) {
 		current := directAsyncCurrent("inventory", 7)
-		current.binding.target.inventoryBound = true
+		current.binding.target.policy = asyncTargetProjectVisit
+		current.binding.target.pid = 97
 		resolver := &directFakeInventoryResolver{}
 		current.revalidateTarget = resolver.revalidate
 		got := captureAsync(asyncEditorDone, current)
-		got.target.inventoryBound = false
-		directAssertAsyncRejected(t, "editor_done", "captured_inventory_bound_false_cannot_bypass_current_bound_policy", current, got)
+		got.target.policy = asyncTargetHomeMain
+		got.target.pid = 0
+		directAssertAsyncRejected(t, "editor_done", "captured_main_policy_cannot_bypass_current_visit_policy", current, got)
 	})
 }

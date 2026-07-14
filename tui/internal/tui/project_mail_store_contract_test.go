@@ -96,6 +96,7 @@ func TestProjectMailStoreOwnsTheOnlyGlobalCache(t *testing.T) {
 func TestProjectMailTargetRevalidationBlocksDirectAndPendingInitialLaunch(t *testing.T) {
 	a := visitTestApp(t)
 	a.visiting = true
+	a.visitTargetPID = 42
 	a.installMailModel(a.mail)
 
 	calls := 0
@@ -677,7 +678,8 @@ func TestSupersededMailGenerationCannotInstallRootRefresh(t *testing.T) {
 	a.mailStore = newProjectMailStoreWithDeps(a.projectDir, a.mail.humanDir, filesystemProjectMailScanner{}, func(string) {
 		locations.Add(1)
 	})
-	a.mailStore.bindMailModel(&a.mail, a.visiting)
+	policy, pid := a.currentMailTargetPolicy()
+	a.mailStore.bindMailModel(&a.mail, policy, pid)
 	a.mail.acceptedSnapshot = nil
 
 	steadyCmd := a.beginProjectMailRefresh(false)

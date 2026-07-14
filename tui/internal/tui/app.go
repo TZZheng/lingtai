@@ -48,10 +48,10 @@ const doubleEscReturnWindow = 600 * time.Millisecond
 var appNow = time.Now
 
 // visitReturnState is the one temporary App visit adapter retained by PR2.
-// Owner: App visit coordinator. Reason: preserve the current back-navigation
-// target/UI state until ThreadState exists. Expiry: PR7. MailModel no longer
-// contains a project cache or mail tick; the suspended ProjectMailStore remains
-// separately root-owned below.
+// Owner: App visit coordinator. Reason: preserve full-model cross-project
+// back-navigation independently from the ordinary home-Agent rail. Expiry: PR7.
+// MailModel no longer contains a project cache or mail tick; the suspended
+// ProjectMailStore remains separately root-owned below.
 type visitReturnState struct {
 	projectDir string
 	orchDir    string
@@ -113,18 +113,28 @@ type App struct {
 	projectsActivationID   uint64
 	mailStore              ProjectMailStore
 	suspendedHomeMailStore *ProjectMailStore
+	currentThread          ThreadState
+	threadLoads            ThreadLoadCoordinator
 
 	visiting              bool
 	visitReturn           *visitReturnState
 	visitTargetProjectDir string
 	visitTargetAgentDir   string
 	visitTargetAgentName  string
+	visitTargetPID        int
 	doubleEscArmed        bool
 	doubleEscFirstAt      time.Time
 }
 
 func humanAddr(projectDir string) string {
 	return "human"
+}
+
+func (a App) currentMailTargetPolicy() (asyncTargetPolicy, int) {
+	if a.visiting {
+		return asyncTargetProjectVisit, a.visitTargetPID
+	}
+	return asyncTargetHomeMain, 0
 }
 
 func (a *App) installMailModel(m MailModel) {
@@ -139,8 +149,19 @@ func (a *App) installMailModel(m MailModel) {
 	a.mailGeneration++
 	m.generation = a.mailGeneration
 	m.acceptedSnapshot = a.mailStore.snapshot
-	a.mailStore.bindMailModel(&m, a.visiting)
+	policy, pid := a.currentMailTargetPolicy()
+	a.mailStore.bindMailModel(&m, policy, pid)
 	a.mail = m
+	a.currentThread = newColdThreadState(a.mailStore.binding.target, m.generation, a.mailStore.version, m.sessionCache)
+}
+
+func (a *App) syncCurrentThreadFromMail() {
+	if a == nil || a.currentThread.generation != a.mail.generation ||
+		a.currentThread.target != a.mail.asyncBinding.target {
+		return
+	}
+	a.currentThread.acceptedSnapshotVersion = a.mail.asyncStoreVersion
+	a.currentThread.sessionCache = a.mail.sessionCache
 }
 
 func (a *App) setAsyncTargetRevalidator(revalidate func(asyncOwner, asyncTarget) bool) {
@@ -368,11 +389,13 @@ func (a *App) invalidateProjectMailForReset() {
 	a.mail.invalidateAsync()
 	a.mailStore = ProjectMailStore{}
 	a.suspendedHomeMailStore = nil
+	a.currentThread = ThreadState{}
 	a.visiting = false
 	a.visitReturn = nil
 	a.visitTargetProjectDir = ""
 	a.visitTargetAgentDir = ""
 	a.visitTargetAgentName = ""
+	a.visitTargetPID = 0
 }
 
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -418,6 +441,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.mail.asyncStoreVersion = snapshot.Version()
 		var mailCmd tea.Cmd
 		a.mail, mailCmd = a.mail.Update(msg.mail)
+		a.syncCurrentThreadFromMail()
 		// Capture the accepted target/status state in the deferred authoritative
 		// rebuild rather than the pre-refresh model snapshot.
 		pendingInitialCmd := a.mailStore.beginPendingInitialRefresh(a.mail)
@@ -441,6 +465,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// cannot drop Mail's state machine; MailModel owns shared envelope acceptance.
 		var cmd tea.Cmd
 		a.mail, cmd = a.mail.Update(msg)
+		a.syncCurrentThreadFromMail()
 		return a, cmd
 
 	case ViewChangeMsg:
@@ -1709,6 +1734,7 @@ func (a App) enterVisitedAgent(msg ProjectsAgentSelectedMsg) (App, tea.Cmd) {
 	a.visitTargetProjectDir = a.projectDir
 	a.visitTargetAgentDir = a.orchDir
 	a.visitTargetAgentName = a.orchName
+	a.visitTargetPID = r.PID
 	a.currentView = appViewMail
 	a.selectMode = false
 	a.doubleEscArmed = false
@@ -1748,6 +1774,7 @@ func (a App) returnFromVisit() (App, tea.Cmd) {
 	a.visitTargetProjectDir = ""
 	a.visitTargetAgentDir = ""
 	a.visitTargetAgentName = ""
+	a.visitTargetPID = 0
 	a.doubleEscArmed = false
 	if a.currentView == appViewProjects {
 		a.projects = ret.projects
