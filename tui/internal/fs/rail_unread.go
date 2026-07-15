@@ -161,11 +161,20 @@ func (s *RailUnreadStore) MarkSeen(target DirectTarget, snapshot []MailMessage, 
 	if state.AddressFingerprint != fingerprint {
 		return fmt.Errorf("direct target identity changed; synchronize targets before marking seen")
 	}
-	s.state.Targets[key] = unreadTargetState{
+	nextTargets := make(map[string]unreadTargetState, len(s.state.Targets))
+	for existingKey, existingState := range s.state.Targets {
+		nextTargets[existingKey] = existingState
+	}
+	next := railUnreadState{Version: s.state.Version, Targets: nextTargets}
+	next.Targets[key] = unreadTargetState{
 		AddressFingerprint: fingerprint,
 		LastSeen:           incomingBoundary(snapshot, humanAddress, target.Address),
 	}
-	return s.write()
+	if err := s.writeState(next); err != nil {
+		return err
+	}
+	s.state = next
+	return nil
 }
 
 func (s *RailUnreadStore) targetState(target DirectTarget) (unreadTargetState, bool) {
@@ -190,10 +199,14 @@ func (s *RailUnreadStore) baselineTargets(targets []DirectTarget, snapshot []Mai
 }
 
 func (s *RailUnreadStore) write() error {
+	return s.writeState(s.state)
+}
+
+func (s *RailUnreadStore) writeState(state railUnreadState) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return fmt.Errorf("create rail unread directory: %w", err)
 	}
-	data, err := json.MarshalIndent(s.state, "", "  ")
+	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal rail unread state: %w", err)
 	}
