@@ -283,6 +283,33 @@ func (a *App) bindRailUnreadHome(projectDir string) {
 	}
 }
 
+func (a *App) visibleMainRailUnreadRow(snapshot *ProjectMailSnapshot) *railRow {
+	if a == nil || snapshot == nil || a.visiting || a.currentView != appViewMail ||
+		!a.mail.ready || a.mail.initialLoading {
+		return nil
+	}
+	binding := a.mailStore.binding
+	if binding.target.policy != asyncTargetHomeMain || a.mail.asyncBinding != binding ||
+		a.mail.generation != binding.generation || a.currentThread.target != binding.target ||
+		a.currentThread.generation != binding.generation || a.mail.acceptedSnapshot != snapshot ||
+		a.mail.asyncStoreVersion != snapshot.Version() ||
+		a.currentThread.acceptedSnapshotVersion != snapshot.Version() {
+		return nil
+	}
+	for i := range a.agentRail.rows {
+		row := &a.agentRail.rows[i]
+		if !row.originalMain {
+			continue
+		}
+		if inventory.NormalizePath(row.directTarget.Directory) != binding.target.directory ||
+			fs.AddressFingerprint(row.directTarget.Address) != binding.target.addressFingerprint {
+			return nil
+		}
+		return row
+	}
+	return nil
+}
+
 // reconcileRailUnread joins only root-accepted values: the exact current home
 // owner inventory and an accepted ProjectMailSnapshot from that same owner
 // lifetime. It performs no mailbox scan and is called only from Update after the
@@ -317,6 +344,14 @@ func (a *App) reconcileRailUnread() {
 		row := &a.agentRail.rows[i]
 		row.unread = a.railUnreadStore.UnreadCount(row.directTarget, messages, a.mail.humanAddr)
 	}
+	mainRow := a.visibleMainRailUnreadRow(a.mailStore.snapshot)
+	if mainRow == nil || mainRow.unread == 0 {
+		return
+	}
+	if err := a.railUnreadStore.MarkSeen(mainRow.directTarget, messages, a.mail.humanAddr); err != nil {
+		return
+	}
+	mainRow.unread = a.railUnreadStore.UnreadCount(mainRow.directTarget, messages, a.mail.humanAddr)
 }
 
 func (a *App) installMailModel(m MailModel) {
