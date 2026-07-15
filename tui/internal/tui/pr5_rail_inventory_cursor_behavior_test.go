@@ -86,14 +86,14 @@ func TestPR5Stage3RailInstallsEligibleOrdinaryRowsAndMovesCursor(t *testing.T) {
 		t.Fatal("precondition: Tab must focus the visible rail")
 	}
 	budget := a.layoutBudget()
-	before := a.agentRail.View(budget.RailWidth, budget.ChildHeight, a.mail.orchDisplayName())
+	before := a.agentRail.View(budget.RailWidth, budget.ChildHeight)
 	a = pr5UpdateRailFocusApp(t, a, tea.KeyPressMsg{Code: tea.KeyDown})
-	afterDown := a.agentRail.View(budget.RailWidth, budget.ChildHeight, a.mail.orchDisplayName())
+	afterDown := a.agentRail.View(budget.RailWidth, budget.ChildHeight)
 	if afterDown == before {
 		t.Fatal("Down on a focused multi-row rail did not move the visible selection from Main to the first ordinary Agent")
 	}
 	a = pr5UpdateRailFocusApp(t, a, tea.KeyPressMsg{Code: tea.KeyUp})
-	afterUp := a.agentRail.View(budget.RailWidth, budget.ChildHeight, a.mail.orchDisplayName())
+	afterUp := a.agentRail.View(budget.RailWidth, budget.ChildHeight)
 	if afterUp != before {
 		t.Fatal("Up did not return the visible rail selection to synthetic Main")
 	}

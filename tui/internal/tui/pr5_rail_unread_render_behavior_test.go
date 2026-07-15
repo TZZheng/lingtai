@@ -50,7 +50,7 @@ func TestPR5Stage4RailRowsRenderAcceptedUnreadCountsWithoutScanning(t *testing.T
 	scanner.messages = []fs.MailMessage{historyA, historyB}
 	app, _ = installationAcceptInitial(t, app)
 
-	baselineView := ansi.Strip(app.agentRail.View(24, 10, app.mail.orchDisplayName()))
+	baselineView := ansi.Strip(app.agentRail.View(24, 10))
 	baselineA := pr5RailRenderedLine(t, baselineView, "Agent A")
 	baselineB := pr5RailRenderedLine(t, baselineView, "Agent B")
 	pr5RequireNoRenderedUnreadCount(t, baselineA, 1)
@@ -111,7 +111,7 @@ func TestPR5Stage4RailRowsRenderAcceptedUnreadCountsWithoutScanning(t *testing.T
 		"future unaccepted Agent B mail", "2026-07-15T00:05:00Z",
 	))
 	for i := 0; i < 5; i++ {
-		view := ansi.Strip(app.agentRail.View(24, 10, app.mail.orchDisplayName()))
+		view := ansi.Strip(app.agentRail.View(24, 10))
 		pr5RequireRenderedUnreadCount(t, pr5RailRenderedLine(t, view, "Agent A"), 1)
 		pr5RequireRenderedUnreadCount(t, pr5RailRenderedLine(t, view, "Agent B"), 2)
 		pr5RequireNoRenderedUnreadCount(t, pr5RailRenderedLine(t, view, "Agent B"), 3)

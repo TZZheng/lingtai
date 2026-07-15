@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/anthropics/lingtai-tui/i18n"
 	"github.com/anthropics/lingtai-tui/internal/fs"
 )
 
@@ -150,8 +151,8 @@ func TestPR5Stage4VisibleMainRefreshAdvancesOnlyMainNotCursorOrAggregateRows(t *
 		t.Fatalf("cached Main/Agent A unread = %d/%d, want 0/1", app.agentRail.rows[0].unread, app.agentRail.rows[1].unread)
 	}
 
-	railView := ansi.Strip(app.agentRail.View(24, 8, app.mail.orchDisplayName()))
-	pr5RequireNoRenderedUnreadCount(t, pr5RailRenderedLine(t, railView, app.mail.orchDisplayName()), 1)
+	railView := ansi.Strip(app.agentRail.View(24, 8))
+	pr5RequireNoRenderedUnreadCount(t, pr5RailRenderedLine(t, railView, i18n.T("rail.main")), 1)
 	pr5RequireRenderedUnreadCount(t, pr5RailRenderedLine(t, railView, "Agent A"), 1)
 
 	reopened, err := fs.OpenRailUnreadStore(projectRoot, targets, acceptedMessages, app.mail.humanAddr)

@@ -165,9 +165,9 @@ func TestPR5Stage5RenderedSyntheticMainUsesLocalizedLabel(t *testing.T) {
 	if len(app.agentRail.rows) == 0 || !app.agentRail.rows[0].originalMain {
 		t.Fatalf("precondition synthetic Main missing: %#v", app.agentRail.rows)
 	}
-	app.agentRail.installMain(app.mail.orchDisplayName(), app.agentRail.rows[0].directTarget)
+	app.agentRail.installMain(app.agentRail.rows[0].directTarget)
 
-	rendered := app.agentRail.View(24, 6, app.mail.orchDisplayName())
+	rendered := app.agentRail.View(24, 6)
 	if !strings.Contains(rendered, i18n.T("rail.main")) {
 		t.Fatalf("rendered synthetic Main=%q, want localized label %q", rendered, i18n.T("rail.main"))
 	}

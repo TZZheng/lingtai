@@ -120,6 +120,36 @@ func (s *agentRailInventoryLifecycleState) invalidate() {
 	s.mu.Unlock()
 }
 
+// invalidatePendingRequests rejects every inventory result launched before a
+// cross-project visit without discarding the exact accepted home inventory.
+// The retained record set remains bound to its old activation until visit
+// return explicitly rebinds that same store owner.
+func (s *agentRailInventoryLifecycleState) invalidatePendingRequests() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.nextRequestSequenceLocked()
+	s.mu.Unlock()
+}
+
+// rebindAcceptedOwner carries last-good home inventory across only the exact
+// same ProjectMailStore activation. Coordinate equality still rejects every
+// pre-visit async envelope after the store activates again.
+func (s *agentRailInventoryLifecycleState) rebindAcceptedOwner(previous, current asyncOwner) bool {
+	if s == nil || !validAsyncOwner(previous) || !validAsyncOwner(current) ||
+		previous.projectID != current.projectID || previous.storeID != current.storeID {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.acceptedReady || s.acceptedOwner != previous {
+		return false
+	}
+	s.acceptedOwner = current
+	return true
+}
+
 func (s *agentRailInventoryLifecycleState) acceptLatest(
 	requestSequence uint64,
 	owner asyncOwner,
@@ -433,7 +463,11 @@ func (a *App) installMailModel(m MailModel) {
 		// Invalidate the shared execution token before discarding a current
 		// store so any delayed location command becomes a no-op.
 		if a.mailStore.id != 0 {
-			inventoryLifecycle.invalidate()
+			if a.visiting && a.suspendedHomeMailStore != nil {
+				inventoryLifecycle.invalidatePendingRequests()
+			} else {
+				inventoryLifecycle.invalidate()
+			}
 			if a.mailStore.active {
 				a.mailStore.suspend()
 			}
@@ -447,7 +481,7 @@ func (a *App) installMailModel(m MailModel) {
 	policy, pid := a.currentMailTargetPolicy(m)
 	a.mailStore.bindMailModel(&m, policy, pid)
 	if policy == asyncTargetHomeMain {
-		a.agentRail.installMain(m.orchDisplayName(), fs.DirectTarget{
+		a.agentRail.installMain(fs.DirectTarget{
 			Directory: m.orchestrator,
 			Address:   m.orchAddr,
 		})
@@ -2299,6 +2333,7 @@ func (a App) returnFromVisit() (App, tea.Cmd) {
 	a.mailStore.suspend() // stop the visited owner before restoring home
 	ret := *a.visitReturn
 	restored := ret.mail
+	previousHomeOwner := restored.asyncBinding.owner
 	restored.copyMode = false
 	restored.visitExitHint = false
 	// Do not publish the suspended snapshot. Home becomes visible again only
@@ -2313,6 +2348,9 @@ func (a App) returnFromVisit() (App, tea.Cmd) {
 	a.currentView = ret.view
 	a.mailStore = *a.suspendedHomeMailStore
 	a.mailStore.activate()
+	currentHomeOwner := a.mailStore.binding.owner
+	a.ensureAgentRailInventoryLifecycle().rebindAcceptedOwner(previousHomeOwner, currentHomeOwner)
+	a.agentRail.rebindAcceptedInventoryOwner(previousHomeOwner, currentHomeOwner)
 	a.selectMode = false
 	a.visiting = false
 	a.visitReturn = nil

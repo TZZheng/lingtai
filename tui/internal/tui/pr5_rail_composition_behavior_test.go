@@ -7,6 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/anthropics/lingtai-tui/i18n"
 )
 
 func TestPR5Stage3RootComposesVisibleRailAndChatFromOneBudget(t *testing.T) {
@@ -48,8 +50,8 @@ func TestPR5Stage3RootComposesVisibleRailAndChatFromOneBudget(t *testing.T) {
 	if !strings.Contains(rail, "Agents") {
 		t.Fatalf("visible rail does not render the existing localized Agents heading:\n%s", rail)
 	}
-	if !strings.Contains(rail, "main") {
-		t.Fatalf("visible rail does not include the original Main target:\n%s", rail)
+	if !strings.Contains(rail, i18n.T("rail.main")) {
+		t.Fatalf("visible rail does not include the localized synthetic Main target:\n%s", rail)
 	}
 }
 

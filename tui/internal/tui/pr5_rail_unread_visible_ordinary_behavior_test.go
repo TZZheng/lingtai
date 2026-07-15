@@ -199,7 +199,7 @@ func TestPR5Stage4VisibleOrdinaryAcceptedColdProjectionAdvancesOnlyActiveTarget(
 			published.agentRail.rows[0].unread, published.agentRail.rows[1].unread, published.agentRail.rows[2].unread,
 		)
 	}
-	railView := ansi.Strip(published.agentRail.View(24, 10, published.mail.orchDisplayName()))
+	railView := ansi.Strip(published.agentRail.View(24, 10))
 	pr5RequireNoRenderedUnreadCount(t, pr5RailRenderedLine(t, railView, "Agent A"), 1)
 	pr5RequireRenderedUnreadCount(t, pr5RailRenderedLine(t, railView, "Agent B"), 1)
 

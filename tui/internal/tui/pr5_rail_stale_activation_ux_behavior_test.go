@@ -44,7 +44,7 @@ func TestPR5Stage5StaleAcceptedRailAddressKeepsMainRescansAndSurfacesLocalizedSt
 
 	initialInventoryResult := pr5RunTrailingRailInventoryScan(t, app.Init(), displayInventory)
 	app, _ = installationDeliverApp(t, app, initialInventoryResult)
-	pr5RequireRailLifecycleRows(t, app, []string{"Main", "Agent A"})
+	pr5RequireRailLifecycleRows(t, app, []string{i18n.T("rail.main"), "Agent A"})
 
 	app, _ = installationAcceptInitial(t, app)
 	if got := mailboxScanner.scans.Load(); got != 1 {
@@ -115,7 +115,7 @@ func TestPR5Stage5StaleAcceptedRailAddressKeepsMainRescansAndSurfacesLocalizedSt
 	if got := pr5StaleActivationOwnerState(refreshed, mailboxScanner); !reflect.DeepEqual(got, beforeOwnerState) {
 		t.Fatalf("accepted stale-address rescan mutated active Main owner state\n got: %#v\nwant: %#v", got, beforeOwnerState)
 	}
-	pr5RequireRailLifecycleRows(t, refreshed, []string{"Main", "Agent A"})
+	pr5RequireRailLifecycleRows(t, refreshed, []string{i18n.T("rail.main"), "Agent A"})
 	updatedRow, ok := refreshed.agentRail.selectedRow()
 	if !ok || updatedRow.originalMain || updatedRow.target.directory != selected.target.directory ||
 		updatedRow.target.addressFingerprint != fs.AddressFingerprint(replacementAddress) ||

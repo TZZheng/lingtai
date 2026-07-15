@@ -293,14 +293,21 @@ func (s *AgentRailState) clearInventoryAcceptance() {
 	}
 }
 
-func (s *AgentRailState) installMain(label string, directTarget fs.DirectTarget) {
+func (s *AgentRailState) rebindAcceptedInventoryOwner(previous, current asyncOwner) bool {
+	if s == nil || !validAsyncOwner(previous) || !validAsyncOwner(current) ||
+		previous.projectID != current.projectID || previous.storeID != current.storeID ||
+		!s.acceptedInventoryReady || s.acceptedInventoryOwner != previous {
+		return false
+	}
+	s.acceptedInventoryOwner = current
+	return true
+}
+
+func (s *AgentRailState) installMain(directTarget fs.DirectTarget) {
 	if s == nil {
 		return
 	}
-	label = strings.TrimSpace(label)
-	if label == "" {
-		label = i18n.T("rail.main")
-	}
+	label := i18n.T("rail.main")
 	for i := range s.rows {
 		if s.rows[i].originalMain {
 			s.rows[i].label = label
@@ -316,18 +323,16 @@ func (s *AgentRailState) installMain(label string, directTarget fs.DirectTarget)
 	s.clampCursor()
 }
 
-func (s AgentRailState) rowsForView(mainLabel string) []railRow {
+func (s AgentRailState) rowsForView() []railRow {
 	rows := append([]railRow(nil), s.rows...)
 	for i := range rows {
 		if rows[i].originalMain {
-			if current := strings.TrimSpace(mainLabel); current != "" {
-				rows[i].label = current
-			}
+			rows[i].label = i18n.T("rail.main")
 			return rows
 		}
 	}
 	fallback := AgentRailState{}
-	fallback.installMain(mainLabel, fs.DirectTarget{})
+	fallback.installMain(fs.DirectTarget{})
 	return append(fallback.rows, rows...)
 }
 
@@ -341,7 +346,7 @@ func fixedRailLine(text string, width int) string {
 
 // View renders exactly the rectangle supplied by the root LayoutBudget. It does
 // not choose a width or height of its own.
-func (s AgentRailState) View(width, height int, mainLabel string) string {
+func (s AgentRailState) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
@@ -350,7 +355,7 @@ func (s AgentRailState) View(width, height int, mainLabel string) string {
 		StyleTitle.Render("  " + i18n.T("props.network_agents")),
 		"",
 	}
-	rows := s.rowsForView(mainLabel)
+	rows := s.rowsForView()
 	cursor := s.cursor
 	if cursor < 0 {
 		cursor = 0
@@ -395,7 +400,7 @@ func (a App) composeMailWithRail(mailContent string) string {
 		return mailContent
 	}
 
-	rail := a.agentRail.View(budget.RailWidth, budget.ChildHeight, a.mail.orchDisplayName())
+	rail := a.agentRail.View(budget.RailWidth, budget.ChildHeight)
 	chat := fixedMailBlock(mailContent, budget.ContentWidth, budget.ChildHeight)
 	return lipgloss.JoinHorizontal(lipgloss.Top, rail, chat)
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/anthropics/lingtai-tui/i18n"
 	"github.com/anthropics/lingtai-tui/internal/fs"
 )
 
@@ -109,8 +110,8 @@ func TestPR5Stage4VisibleMainMarkSeenFailurePreservesUnreadAndSurfacesStatus(t *
 	if app.agentRail.rows[0].unread != 1 || app.agentRail.rows[1].unread != 0 {
 		t.Fatalf("cached Main/Agent A unread after failed MarkSeen = %d/%d, want 1/0", app.agentRail.rows[0].unread, app.agentRail.rows[1].unread)
 	}
-	railView := ansi.Strip(app.agentRail.View(24, 8, app.mail.orchDisplayName()))
-	pr5RequireRenderedUnreadCount(t, pr5RailRenderedLine(t, railView, app.mail.orchDisplayName()), 1)
+	railView := ansi.Strip(app.agentRail.View(24, 8))
+	pr5RequireRenderedUnreadCount(t, pr5RailRenderedLine(t, railView, i18n.T("rail.main")), 1)
 	pr5RequireNoRenderedUnreadCount(t, pr5RailRenderedLine(t, railView, "Agent A"), 1)
 
 	// Restore the exact pre-mark durable bytes after removing the deterministic
