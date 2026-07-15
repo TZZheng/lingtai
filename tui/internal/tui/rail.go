@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -22,6 +23,7 @@ type railRow struct {
 	originalMain bool
 	target       asyncTarget
 	directTarget fs.DirectTarget
+	unread       int
 }
 
 // AgentRailState is the root-owned display projection for the home Agent rail.
@@ -286,6 +288,9 @@ func (s *AgentRailState) clearInventoryAcceptance() {
 	}
 	s.acceptedInventoryOwner = asyncOwner{}
 	s.acceptedInventoryReady = false
+	for i := range s.rows {
+		s.rows[i].unread = 0
+	}
 }
 
 func (s *AgentRailState) installMain(label string, directTarget fs.DirectTarget) {
@@ -357,7 +362,11 @@ func (s AgentRailState) View(width, height int, mainLabel string) string {
 		if i != cursor {
 			marker = "  "
 		}
-		logical = append(logical, marker+StyleTitle.Render(row.label))
+		label := StyleTitle.Render(row.label)
+		if row.unread > 0 {
+			label = StyleAccent.Render(strconv.Itoa(row.unread)) + " " + label
+		}
+		logical = append(logical, marker+label)
 	}
 
 	lines := make([]string, height)

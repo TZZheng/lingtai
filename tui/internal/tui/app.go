@@ -309,10 +309,13 @@ func (a *App) reconcileRailUnread() {
 			return
 		}
 		a.railUnreadStore = store
+	} else if err := a.railUnreadStore.SyncTargets(targets, messages, a.mail.humanAddr); err != nil {
+		a.mail.AddSystemMessage(fmt.Sprintf("Unread status unavailable: %v", err))
 		return
 	}
-	if err := a.railUnreadStore.SyncTargets(targets, messages, a.mail.humanAddr); err != nil {
-		a.mail.AddSystemMessage(fmt.Sprintf("Unread status unavailable: %v", err))
+	for i := range a.agentRail.rows {
+		row := &a.agentRail.rows[i]
+		row.unread = a.railUnreadStore.UnreadCount(row.directTarget, messages, a.mail.humanAddr)
 	}
 }
 
