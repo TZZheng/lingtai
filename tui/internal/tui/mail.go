@@ -995,7 +995,7 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		// This nested value is synchronous presentation payload, not another gate.
 		var persistCmd tea.Cmd
 		var countCmd tea.Cmd
-		if msg.sessionCache != nil {
+		if msg.sessionCache != nil && !msg.stageProjection {
 			if msg.initial {
 				// A new activation owns one fresh source/horizon count task. Never
 				// carry accepted metadata across an authoritative initial snapshot.
