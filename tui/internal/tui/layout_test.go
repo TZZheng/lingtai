@@ -205,7 +205,7 @@ func TestLayoutBudgetClampsSmallHeight(t *testing.T) {
 	}
 }
 
-func TestLayoutBudgetOwnsHorizontalGeometryWithoutChangingCurrentWidth(t *testing.T) {
+func TestLayoutBudgetOwnsHorizontalGeometryBelowRailThreshold(t *testing.T) {
 	a := budgetApp(t, "")
 	a.width = 80
 	a.height = 24
@@ -218,13 +218,13 @@ func TestLayoutBudgetOwnsHorizontalGeometryWithoutChangingCurrentWidth(t *testin
 		t.Fatalf("ContentWidth = %d, want unchanged current width 80", got)
 	}
 	if got := b.RailWidth; got != 0 {
-		t.Fatalf("RailWidth = %d, want 0 in the layout-foundation PR", got)
+		t.Fatalf("RailWidth = %d, want 0 below the rail threshold", got)
 	}
 	if got := b.MinChatWidth; got != minimumChatWidth {
 		t.Fatalf("MinChatWidth = %d, want contract value %d", got, minimumChatWidth)
 	}
 	if b.RailVisible {
-		t.Fatal("RailVisible = true, want false while RailWidth is zero")
+		t.Fatal("RailVisible = true, want false below the rail threshold")
 	}
 	if got := b.ChildWindowSize().Width; got != b.ContentWidth {
 		t.Fatalf("child width = %d, want ContentWidth", got)
