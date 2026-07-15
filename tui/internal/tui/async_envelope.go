@@ -20,6 +20,7 @@ const (
 	asyncRefreshTick
 	asyncLivenessPulse
 	asyncEditorDone
+	asyncColdThreadLoad
 )
 
 type asyncFieldMask uint16
@@ -99,7 +100,7 @@ type asyncCurrent struct {
 func asyncRequiredMask(kind asyncKind) (asyncFieldMask, bool) {
 	base := asyncHasOwner | asyncHasTarget | asyncHasGeneration
 	switch kind {
-	case asyncInitialRebuild, asyncSteadyRefresh:
+	case asyncInitialRebuild, asyncSteadyRefresh, asyncColdThreadLoad:
 		return base | asyncHasStoreVersion, true
 	case asyncSessionPersist, asyncOlderPage:
 		return base | asyncHasSourceCache | asyncHasStoreVersion, true
@@ -150,7 +151,8 @@ func asyncNeedsInventoryRevalidation(kind asyncKind) bool {
 		asyncOlderPage,
 		asyncExactHistoryCount,
 		asyncRefreshTick,
-		asyncEditorDone:
+		asyncEditorDone,
+		asyncColdThreadLoad:
 		return true
 	default:
 		return false

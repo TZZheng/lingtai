@@ -30,6 +30,7 @@ var asyncSourceLogicalPaths = []asyncSourceLogicalPath{
 	{label: "refresh tick", kind: "asyncRefreshTick", completion: "projectMailTickMsg"},
 	{label: "liveness pulse", kind: "asyncLivenessPulse", completion: "pulseTickMsg"},
 	{label: "external editor completion", kind: "asyncEditorDone", completion: "EditorDoneMsg"},
+	{label: "cold ordinary thread load", kind: "asyncColdThreadLoad", completion: "threadLoadResultMsg"},
 }
 
 var asyncSourceCompletionProducers = map[string][]string{
@@ -40,6 +41,7 @@ var asyncSourceCompletionProducers = map[string][]string{
 	"projectMailTickMsg":    {"projectMailTickEvery"},
 	"pulseTickMsg":          {"pulseTick"},
 	"EditorDoneMsg":         {"MailModel.launchEditor"},
+	"threadLoadResultMsg":   {"ThreadLoadCoordinator.request"},
 }
 
 type asyncSourceConsumerContract struct {
@@ -55,6 +57,7 @@ var asyncSourceConsumers = []asyncSourceConsumerContract{
 	{message: "mailHistoryCountMsg", owner: "MailModel.Update"},
 	{message: "pulseTickMsg", owner: "MailModel.Update"},
 	{message: "EditorDoneMsg", owner: "MailModel.Update"},
+	{message: "threadLoadResultMsg", owner: "App.Update"},
 }
 
 type asyncSourceExclusion struct {
@@ -118,10 +121,10 @@ func loadAsyncSourceInventory(t *testing.T) *asyncSourceInventory {
 	return inv
 }
 
-func TestAsyncEnvelopeSourceInventoryHasExactlyEightLogicalKinds(t *testing.T) {
+func TestAsyncEnvelopeSourceInventoryHasExactlyNineLogicalKinds(t *testing.T) {
 	inv := loadAsyncSourceInventory(t)
 	if _, ok := inv.files["async_envelope.go"]; !ok {
-		t.Fatalf("async_envelope.go missing: want one shared protocol defining the exact eight target-mail logical kinds")
+		t.Fatalf("async_envelope.go missing: want one shared protocol defining the exact nine target-mail logical kinds")
 	}
 	if _, ok := inv.types["asyncKind"]; !ok {
 		t.Fatalf("async_envelope.go: asyncKind type missing")
@@ -133,7 +136,7 @@ func TestAsyncEnvelopeSourceInventoryHasExactlyEightLogicalKinds(t *testing.T) {
 	}
 	got := inv.constantsOfType("asyncKind")
 	if missing, unexpected := setDifference(want, got), setDifference(got, want); len(missing) != 0 || len(unexpected) != 0 {
-		t.Fatalf("asyncKind inventory mismatch: got %v; missing %v; unexpected %v; want exactly the issue's eight logical paths", got, missing, unexpected)
+		t.Fatalf("asyncKind inventory mismatch: got %v; missing %v; unexpected %v; want exactly the issue's nine logical paths", got, missing, unexpected)
 	}
 }
 
@@ -230,8 +233,8 @@ func TestAsyncEnvelopeSourceInventoryScopesNonMilestoneAsyncMessagesExplicitly(t
 	for _, completion := range asyncCompletionNames() {
 		completionSet[completion] = true
 	}
-	if len(asyncSourceLogicalPaths) != 8 || len(completionSet) != 7 {
-		t.Fatalf("invalid test contract: eight logical paths must map to seven completion structs; got %d paths and %d structs", len(asyncSourceLogicalPaths), len(completionSet))
+	if len(asyncSourceLogicalPaths) != 9 || len(completionSet) != 8 {
+		t.Fatalf("invalid test contract: nine logical paths must map to eight completion structs; got %d paths and %d structs", len(asyncSourceLogicalPaths), len(completionSet))
 	}
 
 	for _, exclusion := range asyncSourceExclusions {
@@ -242,7 +245,7 @@ func TestAsyncEnvelopeSourceInventoryScopesNonMilestoneAsyncMessagesExplicitly(t
 			issues = append(issues, exclusion.message+": documented non-milestone async type missing; update the explicit scope inventory if it was intentionally renamed or removed")
 		}
 		if completionSet[exclusion.message] {
-			issues = append(issues, exclusion.message+": explicit exclusion was accidentally added to the seven target-mail completion structs")
+			issues = append(issues, exclusion.message+": explicit exclusion was accidentally added to the eight target-mail completion structs")
 		}
 		if got := inv.namedFieldTypes(exclusion.message, "envelope"); len(got) != 0 {
 			issues = append(issues, exclusion.message+": explicit PR4 exclusion unexpectedly carries the target-mail envelope")
@@ -544,7 +547,7 @@ func (inv *asyncSourceInventory) refreshKindCaptureIssues(owner string) []string
 			}
 		}
 	}
-	return []string{owner + ": capture must select both asyncInitialRebuild and asyncSteadyRefresh; the shared completion/request is not a ninth kind"}
+	return []string{owner + ": capture must select both asyncInitialRebuild and asyncSteadyRefresh; their shared completion/request is not an additional kind"}
 }
 
 func (inv *asyncSourceInventory) consumerIssues(owner, message string) []string {

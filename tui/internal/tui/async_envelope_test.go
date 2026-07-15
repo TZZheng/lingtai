@@ -22,12 +22,13 @@ var directAsyncKindCases = []directAsyncKindCase{
 	{name: "refresh_tick", kind: asyncRefreshTick},
 	{name: "liveness_pulse", kind: asyncLivenessPulse},
 	{name: "editor_done", kind: asyncEditorDone},
+	{name: "cold_thread_load", kind: asyncColdThreadLoad},
 }
 
 func directAsyncRequiredMask(kind asyncKind) asyncFieldMask {
 	base := asyncHasOwner | asyncHasTarget | asyncHasGeneration
 	switch kind {
-	case asyncInitialRebuild, asyncSteadyRefresh:
+	case asyncInitialRebuild, asyncSteadyRefresh, asyncColdThreadLoad:
 		return base | asyncHasStoreVersion
 	case asyncSessionPersist, asyncOlderPage:
 		return base | asyncHasSourceCache | asyncHasStoreVersion
@@ -111,6 +112,7 @@ func TestAsyncPredicateDirectRequiredFieldMatrix(t *testing.T) {
 		{name: "steady_refresh", kind: asyncSteadyRefresh},
 		{name: "session_persist", kind: asyncSessionPersist},
 		{name: "older_page", kind: asyncOlderPage},
+		{name: "cold_thread_load", kind: asyncColdThreadLoad},
 	} {
 		t.Run(tc.name+"_zero_store_version_present", func(t *testing.T) {
 			current := directAsyncCurrent(tc.name+"-zero", 7)

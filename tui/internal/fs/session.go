@@ -220,6 +220,21 @@ func (sc *SessionCache) RebuildFromSourcesWindowedInMemory(cache MailCache, huma
 	sc.rebuildFromSources(cache, humanAddr, orchDir, orchName, false, window)
 }
 
+// RebuildDirectThreadWindowedInMemory is the compiling production seam for an
+// ordinary Agent's direct NoPersist session. It intentionally remains inert
+// until the accepted-message, bounded-event, and bounded-inquiry behavior tests
+// are written against this exact signature.
+func (sc *SessionCache) RebuildDirectThreadWindowedInMemory(
+	acceptedMessages []MailMessage,
+	humanAddress string,
+	targetAddress string,
+	targetDir string,
+	targetDisplayName string,
+	eventWindow int,
+	inquiryWindow int,
+) {
+}
+
 // Complete reports whether the cache currently holds the full history. A windowed
 // rebuild that truncated older events leaves this false; a full rebuild, or a
 // windowed rebuild whose window covered the entire history, leaves it true.
