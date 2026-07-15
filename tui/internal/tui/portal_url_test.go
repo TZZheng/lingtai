@@ -51,7 +51,7 @@ func writeFakePortal(t *testing.T, dir, pidFile string) {
 	} else {
 		script = "#!/bin/sh\n" +
 			"printf '%s' \"$$\" > " + shellQuote(pidFile) + "\n" +
-			"exec env GO_WANT_FAKE_PORTAL=1 " +
+			"exec env GO_WANT_FAKE_PORTAL=1 GO_FAKE_PORTAL_PID_FILE= " +
 			shellQuote(self) + " -test.run=TestHelperFakePortal\n"
 	}
 	path := filepath.Join(dir, name)
