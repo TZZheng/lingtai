@@ -112,6 +112,31 @@ func TestPR5Stage1ColdLoaderSurfaceContract(t *testing.T) {
 	t.Fatalf("missing PR5 behavioral cold-loader surface:\n  - %s", strings.Join(issues, "\n  - "))
 }
 
+// TestPR5Stage5OrdinaryActivationUsesOneProjectionOwner prevents the rail from
+// constructing a second MailModel for an ordinary target and then repairing a
+// mirrored ThreadState after every completion. ThreadState owns the active
+// target coordinates; MailModel is the single reusable presentation surface.
+func TestPR5Stage5OrdinaryActivationUsesOneProjectionOwner(t *testing.T) {
+	inv := loadAsyncSourceInventory(t)
+	var issues []string
+
+	ordinary := inv.findFunction("App.activateOrdinaryRailRow")
+	if ordinary == nil {
+		issues = append(issues, "App.activateOrdinaryRailRow production function is absent")
+	} else if got := countCalls(ordinary.Body, "NewMailModel"); got != 0 {
+		issues = append(issues, "App.activateOrdinaryRailRow constructs NewMailModel; want the existing presentation surface rebound to one active ThreadState")
+	}
+	if inv.findFunction("App.syncCurrentThreadFromMail") != nil {
+		issues = append(issues, "App.syncCurrentThreadFromMail mirror remains; want accepted state projected at the owning publication seam")
+	}
+
+	if len(issues) == 0 {
+		return
+	}
+	sort.Strings(issues)
+	t.Fatalf("ordinary rail activation still has split projection ownership:\n  - %s", strings.Join(issues, "\n  - "))
+}
+
 func pr5NamedFieldTypes(inv *asyncSourceInventory, typeName, fieldName string) []string {
 	typeSpec := inv.types[typeName]
 	if typeSpec == nil {
