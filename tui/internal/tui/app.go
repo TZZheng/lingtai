@@ -474,6 +474,9 @@ func (a App) activateOrdinaryRailRow(row railRow) (App, tea.Cmd) {
 	mail.generation = nextGeneration
 	mail.acceptedSnapshot = a.mailStore.snapshot
 	mail.sessionCache = fs.NewSessionCache(mail.humanDir, filepath.Dir(mail.baseDir), fs.NoPersist)
+	if childSize := a.layoutBudget().ChildWindowSize(); childSize.Width > 0 && childSize.Height > 0 {
+		mail, _ = mail.Update(childSize)
+	}
 	mail.input.Blur()
 
 	rootSnapshot := a.mailStore.snapshot
