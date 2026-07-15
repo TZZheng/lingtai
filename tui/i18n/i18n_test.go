@@ -335,6 +335,36 @@ func TestLocaleJSONKeySetsAreComplete(t *testing.T) {
 	}
 }
 
+func TestPR5RailAndMailStatusStringsAreLocalized(t *testing.T) {
+	t.Cleanup(func() { SetLang("en") })
+
+	for _, tc := range []struct {
+		locale     string
+		main       string
+		unreadText string
+		sendText   string
+	}{
+		{locale: "en", main: "Main", unreadText: "Unread status unavailable: disk", sendText: "Send failed: denied"},
+		{locale: "zh", main: "本我", unreadText: "未读状态不可用：disk", sendText: "发送失败：denied"},
+		{locale: "wen", main: "本我", unreadText: "未读之状不可得：disk", sendText: "传书未成：denied"},
+	} {
+		t.Run(tc.locale, func(t *testing.T) {
+			if err := SetLang(tc.locale); err != nil {
+				t.Fatalf("SetLang(%q): %v", tc.locale, err)
+			}
+			if got := T("rail.main"); got != tc.main {
+				t.Fatalf("rail.main = %q, want %q", got, tc.main)
+			}
+			if got := TF("rail.unread_status_unavailable", "disk"); got != tc.unreadText {
+				t.Fatalf("rail.unread_status_unavailable = %q, want %q", got, tc.unreadText)
+			}
+			if got := TF("mail.send_failed", "denied"); got != tc.sendText {
+				t.Fatalf("mail.send_failed = %q, want %q", got, tc.sendText)
+			}
+		})
+	}
+}
+
 func TestTInUsesRequestedLocale(t *testing.T) {
 	t.Cleanup(func() { SetLang("en") })
 

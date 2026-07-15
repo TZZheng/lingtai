@@ -158,6 +158,33 @@ func TestDuplicateProcessPrefersRuntimePID(t *testing.T) {
 	}
 }
 
+func TestEmptyManifestAddressKeepsDisplayFallbackUnverified(t *testing.T) {
+	project := t.TempDir()
+	agentDir := filepath.Join(project, ".lingtai", "display-only-agent")
+	if err := os.MkdirAll(agentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"address":"  ","agent_name":"","nickname":"Visible Nick","state":"IDLE","admin":{}}`
+	if err := os.WriteFile(filepath.Join(agentDir, ".agent.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	snap := FromProcesses([]processscan.AgentProcess{{PID: 7, AgentDir: agentDir}}, Options{})
+	if len(snap.Records) != 1 {
+		t.Fatalf("records = %+v", snap.Records)
+	}
+	r := snap.Records[0]
+	if r.ReadError != "" {
+		t.Fatalf("successful manifest read reported an error: %+v", r)
+	}
+	if r.Address != "display-only-agent" || r.AgentName != "display-only-agent" || r.Nickname != "Visible Nick" {
+		t.Fatalf("display fallback was not preserved: %+v", r)
+	}
+	if r.ManifestAddressVerified {
+		t.Fatalf("empty manifest address must not become an actionable identity: %+v", r)
+	}
+}
+
 func TestUnreadableAndPhantomRecordsRenderAsDisabled(t *testing.T) {
 	root := t.TempDir()
 	project := filepath.Join(root, "project")
