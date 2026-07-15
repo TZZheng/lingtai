@@ -226,11 +226,12 @@ type MailModel struct {
 	// Home telemetry is resolved asynchronously off the render/input path (its
 	// I/O reaches sqlite + the token ledger + .status.json, which can stall on a
 	// locked/slow sidecar). View()/hasHomeTelemetry()/syncViewportHeight() read
-	// this cached snapshot ONLY; the fetchHomeTelemetry background command
-	// refreshes it via homeTelemetryMsg. See home_telemetry.go's async note.
+	// this cached snapshot ONLY; the scheduled background command refreshes it via
+	// homeTelemetryMsg. See home_telemetry.go's async note.
 	homeTelemetry          homeTelemetry // last-known snapshot; zero value renders no row
 	homeTelemetryLoaded    bool          // true once a background fetch has completed at least once
-	homeTelemetryInFlight  bool          // true while a fetchHomeTelemetry command is running (debounce)
+	homeTelemetryInFlight  bool          // true while a telemetry command is running (debounce)
+	homeTelemetryEnvelope  asyncEnvelope // exact physical completion token for debounce settlement
 	homeTelemetryLastFetch time.Time     // completion time of the last fetch, for the TTL floor
 }
 
@@ -307,6 +308,7 @@ func (m *MailModel) invalidateAsync() {
 	m.historyCountCache = nil
 	m.historyCountIdentity = ""
 	m.homeTelemetryInFlight = false
+	m.homeTelemetryEnvelope = asyncEnvelope{}
 }
 
 func (m MailModel) asyncCurrent() asyncCurrent {
@@ -1185,7 +1187,10 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		return m, m.asyncPulseCmd()
 
 	case homeTelemetryMsg:
-		if msg.generation != m.generation {
+		if !m.settleHomeTelemetry(msg.envelope) {
+			return m, nil
+		}
+		if !acceptAsync(m.asyncCurrent(), msg.envelope) {
 			return m, nil
 		}
 		// A background telemetry fetch completed. Land the snapshot; only re-sync
@@ -2218,7 +2223,7 @@ func (m MailModel) View() string {
 	footer := sep + "\n" + inputSection + "\n"
 	// Read the cached telemetry snapshot ONLY — never gatherHomeTelemetry — so the
 	// render path performs no sqlite/filesystem/JSONL work. The snapshot is
-	// refreshed asynchronously by fetchHomeTelemetry (see home_telemetry.go).
+	// refreshed asynchronously by the telemetry scheduler (see home_telemetry.go).
 	// Gate on hasHomeTelemetry() (which carries the homeTelemetryLoaded guard) so
 	// View and syncViewportHeight share the exact same visibility predicate and can
 	// never disagree about whether the row occupies a line.

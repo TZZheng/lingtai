@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -39,7 +40,11 @@ func TestHomeTelemetryUIPathReadsCacheNotDisk(t *testing.T) {
 	m, _ = m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	m, _ = m.Update(acceptedInitialMailRefresh(t, &m))
 	// Async fetch round-trip: this is the ONE place telemetry I/O happens.
-	m, _ = m.Update(m.fetchHomeTelemetry())
+	telemetryCmd := m.maybeScheduleHomeTelemetry(time.Now())
+	if telemetryCmd == nil {
+		t.Fatal("telemetry scheduler did not start the background fetch")
+	}
+	m, _ = m.Update(runCmd(telemetryCmd))
 	if !m.hasHomeTelemetry() {
 		t.Fatal("setup: telemetry snapshot should be loaded after the async fetch")
 	}

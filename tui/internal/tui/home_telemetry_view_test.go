@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -59,11 +60,15 @@ func newReadyMailModelWithTelemetry(t *testing.T, w, h int) MailModel {
 	// notification populates the session cache. No Ctrl+O, verbose stays off.
 	m, _ = m.Update(acceptedInitialMailRefresh(t, &m))
 	// Home telemetry is now resolved asynchronously: gathering it does I/O off the
-	// UI path via the fetchHomeTelemetry command, and the model only shows the row
+	// UI path via the scheduled telemetry command, and the model only shows the row
 	// once the resulting homeTelemetryMsg has landed. Drive that round-trip here
 	// (run the command, feed its message back through Update) exactly as the
 	// runtime would, so the cached snapshot is populated before we render.
-	m, _ = m.Update(m.fetchHomeTelemetry())
+	telemetryCmd := m.maybeScheduleHomeTelemetry(time.Now())
+	if telemetryCmd == nil {
+		t.Fatal("telemetry scheduler did not start the background fetch")
+	}
+	m, _ = m.Update(runCmd(telemetryCmd))
 	// Re-sync height now that telemetry visibility flipped on.
 	m.lastInputLines = -1
 	m.syncViewportHeight()

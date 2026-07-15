@@ -19,6 +19,7 @@ const (
 	asyncExactHistoryCount
 	asyncRefreshTick
 	asyncLivenessPulse
+	asyncHomeTelemetry
 	asyncEditorRequest
 	asyncEditorDone
 	asyncColdThreadLoad
@@ -110,7 +111,7 @@ func asyncRequiredMask(kind asyncKind) (asyncFieldMask, bool) {
 		return base | asyncHasSourceCache, true
 	case asyncRefreshTick, asyncLivenessPulse:
 		return base | asyncHasEpoch, true
-	case asyncEditorRequest, asyncEditorDone, asyncBoundSend:
+	case asyncHomeTelemetry, asyncEditorRequest, asyncEditorDone, asyncBoundSend:
 		return base, true
 	default:
 		return 0, false
@@ -153,6 +154,7 @@ func asyncNeedsInventoryRevalidation(kind asyncKind) bool {
 		asyncOlderPage,
 		asyncExactHistoryCount,
 		asyncRefreshTick,
+		asyncHomeTelemetry,
 		asyncEditorRequest,
 		asyncEditorDone,
 		asyncColdThreadLoad,

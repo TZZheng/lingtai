@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -96,7 +97,11 @@ func TestHomeTelemetryContextVisibleWithoutCtrlO(t *testing.T) {
 	// hasHomeTelemetry reads the cached snapshot the async fetch populates, not
 	// gatherHomeTelemetry directly. Drive the background fetch round-trip (run the
 	// command, feed its message back) so the snapshot reflects the notification.
-	m, _ = m.Update(m.fetchHomeTelemetry())
+	telemetryCmd := m.maybeScheduleHomeTelemetry(time.Now())
+	if telemetryCmd == nil {
+		t.Fatal("telemetry scheduler did not start the background fetch")
+	}
+	m, _ = m.Update(runCmd(telemetryCmd))
 	if !m.hasHomeTelemetry() {
 		t.Fatal("hasHomeTelemetry() is false at verboseOff despite a context-bearing notification in the session cache — the bar would be hidden until Ctrl+O")
 	}

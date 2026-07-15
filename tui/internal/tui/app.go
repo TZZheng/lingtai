@@ -1816,6 +1816,7 @@ func (a App) returnFromVisit() (App, tea.Cmd) {
 		// and a fresh authoritative initial refresh is accepted.
 		a.mail.acceptedSnapshot = nil
 		a.mail.homeTelemetryInFlight = false
+		a.mail.homeTelemetryEnvelope = asyncEnvelope{}
 		a.pauseProjectMail()
 		return a, nil
 	}
@@ -1830,6 +1831,7 @@ func (a *App) resumeMailModel(restored MailModel) tea.Cmd {
 	// for the fresh initial result.
 	a.mail.acceptedSnapshot = nil
 	a.mail.homeTelemetryInFlight = false
+	a.mail.homeTelemetryEnvelope = asyncEnvelope{}
 	return a.resumeProjectMail(a.mail.initialLoading)
 }
 

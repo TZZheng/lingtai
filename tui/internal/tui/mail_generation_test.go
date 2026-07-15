@@ -38,7 +38,9 @@ func TestMailModelIgnoresOldGenerationAsyncMessages(t *testing.T) {
 	m := NewMailModel("", "", "", "", "agent", 10, "", "en", false, 0)
 	bindMailModelForAsyncTest(t, &m, 2)
 	m.initialLoading = true
-	m.homeTelemetryInFlight = true
+	if telemetryCmd := m.maybeScheduleHomeTelemetry(time.Now()); telemetryCmd == nil {
+		t.Fatal("test precondition: current telemetry flight was not scheduled")
+	}
 
 	stale := m.asyncCurrent()
 	stale.binding.generation = 1
@@ -46,7 +48,7 @@ func TestMailModelIgnoresOldGenerationAsyncMessages(t *testing.T) {
 	cases := []tea.Msg{
 		mailPersistMsg{envelope: captureAsync(asyncSessionPersist, stale), sessionCache: m.sessionCache},
 		pulseTickMsg{envelope: captureAsync(asyncLivenessPulse, stale)},
-		homeTelemetryMsg{generation: 1, t: homeTelemetry{apiCalls: 9}},
+		homeTelemetryMsg{envelope: captureAsync(asyncHomeTelemetry, stale), t: homeTelemetry{apiCalls: 9}},
 		EditorDoneMsg{envelope: captureAsync(asyncEditorDone, stale), Text: "old editor text"},
 	}
 	for _, msg := range cases {
@@ -127,13 +129,20 @@ func TestReturnFromVisitResumesInitialLoadingWithNewGenerationRebuild(t *testing
 
 func TestReturnFromVisitClearsTelemetryInFlightAndAllowsNewFetch(t *testing.T) {
 	a := visitTestApp(t)
-	origGen := a.mail.generation
 	a.mail.initialLoading = false
-	a.mail.homeTelemetryInFlight = true
 	a.mail.homeTelemetryLoaded = false
+	staleTelemetryCmd := a.mail.maybeScheduleHomeTelemetry(time.Now())
+	if staleTelemetryCmd == nil {
+		t.Fatal("test precondition: original telemetry flight was not scheduled")
+	}
+	staleRaw := runCmd(staleTelemetryCmd)
+	staleTelemetry, ok := staleRaw.(homeTelemetryMsg)
+	if !ok {
+		t.Fatalf("original telemetry command produced %T, want homeTelemetryMsg", staleRaw)
+	}
 
 	visited, _ := a.enterVisitedAgent(ProjectsAgentSelectedMsg{Record: visitRecord(filepath.Join(filepath.Dir(filepath.Dir(a.projectDir)), "target"), "worker", "Worker")})
-	model, cmd := visited.Update(homeTelemetryMsg{generation: origGen, t: homeTelemetry{apiCalls: 9}})
+	model, cmd := visited.Update(staleTelemetry)
 	if cmd != nil {
 		t.Fatalf("stale original telemetry returned cmd %T", runCmd(cmd))
 	}
@@ -155,13 +164,20 @@ func TestReturnFromVisitClearsTelemetryInFlightAndAllowsNewFetch(t *testing.T) {
 		t.Fatalf("refresh generation = %d, want %d", storeMsg.envelope.generation.thread, restored.mail.generation)
 	}
 
-	if telemetryCmd := restored.mail.maybeScheduleHomeTelemetry(time.Now()); telemetryCmd == nil {
+	telemetryCmd := restored.mail.maybeScheduleHomeTelemetry(time.Now())
+	if telemetryCmd == nil {
 		t.Fatal("cleared telemetry in-flight flag should allow a new fetch command")
 	}
 	if !restored.mail.homeTelemetryInFlight {
 		t.Fatal("new telemetry fetch should mark in-flight")
 	}
-	updated, _ := restored.mail.Update(homeTelemetryMsg{generation: restored.mail.generation, t: homeTelemetry{apiCalls: 1}})
+	freshRaw := runCmd(telemetryCmd)
+	freshTelemetry, ok := freshRaw.(homeTelemetryMsg)
+	if !ok {
+		t.Fatalf("restored telemetry command produced %T, want homeTelemetryMsg", freshRaw)
+	}
+	freshTelemetry.t = homeTelemetry{apiCalls: 1}
+	updated, _ := restored.mail.Update(freshTelemetry)
 	if updated.homeTelemetryInFlight || !updated.homeTelemetryLoaded {
 		t.Fatalf("current telemetry completion did not land: inFlight=%v loaded=%v", updated.homeTelemetryInFlight, updated.homeTelemetryLoaded)
 	}

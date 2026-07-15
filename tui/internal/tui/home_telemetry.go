@@ -67,8 +67,8 @@ type homeTelemetry struct {
 // whole TUI.
 //
 // Instead the UI paths read a last-known snapshot cached on the model
-// (m.homeTelemetry), and the I/O runs in the background as a tea.Cmd
-// (fetchHomeTelemetry) that returns a homeTelemetryMsg to refresh the snapshot.
+// (m.homeTelemetry), and the I/O runs in the background as a tea.Cmd that
+// returns a homeTelemetryMsg to refresh the snapshot.
 // The snapshot only moves when the kernel writes new ledger/status data (seconds
 // to minutes apart), so a sub-second staleness on the boundary is invisible.
 //
@@ -90,20 +90,11 @@ const homeTelemetryTTL = 1 * time.Second
 // homeTelemetryMsg carries a freshly-gathered telemetry snapshot from the
 // background fetch back into the model on the Update path.
 type homeTelemetryMsg struct {
-	generation uint64
-	t          homeTelemetry
+	envelope asyncEnvelope
+	t        homeTelemetry
 }
 
-// fetchHomeTelemetry is the background worker: it performs all telemetry I/O
-// (sqlite/ledger/status/manifest) off the UI thread and returns a homeTelemetryMsg.
-// It is a value-receiver tea.Cmd, so it captures a snapshot of the model (orchestrator
-// path + session cache) independently of the project mail refresh — the running
-// command never touches live model state.
-func (m MailModel) fetchHomeTelemetry() tea.Msg {
-	return homeTelemetryMsg{generation: m.generation, t: m.gatherHomeTelemetry()}
-}
-
-// maybeScheduleHomeTelemetry returns a fetchHomeTelemetry command when a new
+// maybeScheduleHomeTelemetry returns a telemetry command when a new
 // background fetch is warranted, or nil to reuse the cached snapshot. It is the
 // single debounce/TTL/in-flight gate: callers (the poll tick and post-refresh)
 // funnel through it so no other path spawns telemetry I/O. It mutates only the
@@ -118,8 +109,25 @@ func (m *MailModel) maybeScheduleHomeTelemetry(now time.Time) tea.Cmd {
 	if m.homeTelemetryLoaded && now.Sub(m.homeTelemetryLastFetch) < homeTelemetryTTL {
 		return nil
 	}
+	envelope := captureAsync(asyncHomeTelemetry, m.asyncCurrent())
 	m.homeTelemetryInFlight = true
-	return m.fetchHomeTelemetry
+	m.homeTelemetryEnvelope = envelope
+	snapshot := *m
+	return func() tea.Msg {
+		return homeTelemetryMsg{envelope: envelope, t: snapshot.gatherHomeTelemetry()}
+	}
+}
+
+// settleHomeTelemetry clears only the exact physical flight represented by the
+// completion. This is non-publishing bookkeeping: shared target acceptance still
+// decides whether the gathered snapshot may become visible.
+func (m *MailModel) settleHomeTelemetry(envelope asyncEnvelope) bool {
+	if !m.homeTelemetryInFlight || envelope != m.homeTelemetryEnvelope {
+		return false
+	}
+	m.homeTelemetryInFlight = false
+	m.homeTelemetryEnvelope = asyncEnvelope{}
+	return true
 }
 
 // applyHomeTelemetry lands a background fetch result: it stores the snapshot,
@@ -137,6 +145,7 @@ func (m *MailModel) applyHomeTelemetry(t homeTelemetry, now time.Time) (visibili
 	m.homeTelemetry = t
 	m.homeTelemetryLoaded = true
 	m.homeTelemetryInFlight = false
+	m.homeTelemetryEnvelope = asyncEnvelope{}
 	m.homeTelemetryLastFetch = now
 	return m.hasHomeTelemetry() != was
 }
@@ -262,7 +271,7 @@ func (t homeTelemetry) hasData() bool {
 // It reads the last-known cached snapshot (m.homeTelemetry) ONLY — never
 // gatherHomeTelemetry — so it stays on the UI hot path without touching
 // sqlite/filesystem/JSONL. The snapshot is refreshed asynchronously by the
-// fetchHomeTelemetry background command (see the Async scheduling note above).
+// scheduled background command (see the Async scheduling note above).
 //
 // The homeTelemetryLoaded gate matters: a zero-value homeTelemetry has
 // contextUsage == 0, and hasData() treats contextUsage >= 0 as "present" (the
