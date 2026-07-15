@@ -73,14 +73,15 @@ func pulseTick(current asyncCurrent) tea.Cmd {
 // mailRefreshPayload is synchronous, already accepted presentation data carried
 // by projectMailRefreshMsg. It has no independent async identity or gate.
 type mailRefreshPayload struct {
-	snapshot     *ProjectMailSnapshot
-	sessionCache *fs.SessionCache
-	alive        bool
-	state        string // active, idle, stuck, asleep, suspended, or ""
-	activity     fs.NetworkActivity
-	orchName     string // agent name from .agent.json (may change at runtime)
-	orchNickname string // nickname from .agent.json
-	initial      bool   // true only for the deferred initial rebuild (clears the loading banner)
+	snapshot        *ProjectMailSnapshot
+	sessionCache    *fs.SessionCache
+	alive           bool
+	state           string // active, idle, stuck, asleep, suspended, or ""
+	activity        fs.NetworkActivity
+	orchName        string // agent name from .agent.json (may change at runtime)
+	orchNickname    string // nickname from .agent.json
+	initial         bool   // true only for the deferred initial rebuild (clears the loading banner)
+	stageProjection bool   // apply status metadata while retaining the rendered snapshot/messages
 }
 
 // mailPersistMsg is the post-frame phase of an accepted authoritative rebuild.
@@ -991,7 +992,9 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			// drop the loading banner. Periodic refreshes leave this untouched.
 			m.initialLoading = false
 		}
-		m.acceptedSnapshot = msg.snapshot
+		if !msg.stageProjection {
+			m.acceptedSnapshot = msg.snapshot
+		}
 		m.orchAlive = msg.alive
 		m.orchState = msg.state
 		m.networkActivity = msg.activity
@@ -1027,7 +1030,9 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			}
 		}
 		m.wasActive = isActive
-		m.buildMessages()
+		if !msg.stageProjection {
+			m.buildMessages()
+		}
 		// Track /btw inquiry lifecycle
 		if m.orchestrator != "" {
 			inquiryExists := fileExists(filepath.Join(m.orchestrator, ".inquiry"))

@@ -791,15 +791,22 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !settled {
 			return a, nil
 		}
+		stageVisibleOrdinary := a.mailStore.binding.target.policy == asyncTargetHomeAgentRail &&
+			a.visibleRailUnreadRow(a.mailStore.snapshot) != nil
 		snapshot := a.mailStore.installRefresh(msg)
 		if !a.visiting {
 			a.railUnreadSnapshotOwner = a.mailStore.binding.owner
 		}
 		msg.mail.snapshot = snapshot
-		a.mail.asyncStoreVersion = snapshot.Version()
+		msg.mail.stageProjection = stageVisibleOrdinary
+		if !stageVisibleOrdinary {
+			a.mail.asyncStoreVersion = snapshot.Version()
+		}
 		var mailCmd tea.Cmd
 		a.mail, mailCmd = a.mail.Update(msg.mail)
-		a.syncCurrentThreadFromMail()
+		if !stageVisibleOrdinary {
+			a.syncCurrentThreadFromMail()
+		}
 		threadLoadCmd := a.requestCurrentOrdinaryThreadLoad()
 		a.reconcileRailUnread()
 		// Capture the accepted target/status state in the deferred authoritative
