@@ -47,6 +47,25 @@ func (b LayoutBudget) ChildWindowSize() tea.WindowSizeMsg {
 	return tea.WindowSizeMsg{Width: b.ContentWidth, Height: b.ChildHeight}
 }
 
+func boundedLocalX(terminalX, origin, width, terminalWidth int) (int, bool) {
+	if terminalX < 0 || terminalX >= terminalWidth || terminalX < origin || terminalX >= origin+width {
+		return 0, false
+	}
+	return terminalX - origin, true
+}
+
+// ContentLocalX translates one terminal X coordinate into the child content
+// rectangle owned by this budget. Callers must not repeat ContentX arithmetic.
+func (b LayoutBudget) ContentLocalX(terminalX int) (int, bool) {
+	return boundedLocalX(terminalX, b.ContentX, b.ContentWidth, b.TerminalWidth)
+}
+
+// RailLocalX translates one terminal X coordinate into the visible rail. A
+// hidden rail has zero width and therefore never accepts an X coordinate.
+func (b LayoutBudget) RailLocalX(terminalX int) (int, bool) {
+	return boundedLocalX(terminalX, b.RailX, b.RailWidth, b.TerminalWidth)
+}
+
 // topChromeRows reports how many rows the root reserves at the top: one for the
 // startup banner when non-empty, plus one for the global select-mode indicator
 // when select mode is on (any non-mail view). They stack when present.

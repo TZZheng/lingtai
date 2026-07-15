@@ -111,8 +111,18 @@ func TestPR5Stage3TabMouseAndResizeOwnOneRailChatFocus(t *testing.T) {
 		t.Fatal("Tab must be inert for rail focus while the rail is hidden")
 	}
 
-	a.visiting = true
+	a.visiting = false
 	a = pr5UpdateRailFocusApp(t, a, tea.WindowSizeMsg{Width: 84, Height: 24})
+	a = pr5UpdateRailFocusApp(t, a, tea.KeyPressMsg{Code: tea.KeyTab})
+	if a.mail.input.Focused() {
+		t.Fatal("precondition: visible home rail must own focus before a visit")
+	}
+	a.visiting = true
+	visitBudget := a.layoutBudget()
+	a = pr5UpdateRailFocusApp(t, a, childWindowSizeMsg{WindowSizeMsg: visitBudget.ChildWindowSize()})
+	if !a.mail.input.Focused() {
+		t.Fatal("root-synthesized sizing must force chat focus when a visit hides the retained home rail")
+	}
 	a = pr5UpdateRailFocusApp(t, a, tea.KeyPressMsg{Code: tea.KeyTab})
 	if !a.mail.input.Focused() {
 		t.Fatal("Tab must be inert for the retained home rail during a cross-project visit")

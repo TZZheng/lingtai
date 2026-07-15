@@ -66,6 +66,7 @@ type App struct {
 	currentView   appView
 	mail          MailModel
 	agentRail     AgentRailState
+	mailFocus     mailPaneFocus
 	settings      SettingsModel
 	props         PropsModel
 	library       LibraryModel
@@ -156,6 +157,12 @@ func (a *App) installMailModel(m MailModel) {
 		a.agentRail.installMain(m.orchDisplayName())
 	}
 	a.mail = m
+	if policy == asyncTargetHomeMain && a.currentView == appViewMail && a.layoutBudget().RailVisible && a.mailFocus == mailFocusRail {
+		a.mail.input.Blur()
+	} else {
+		a.mailFocus = mailFocusChat
+		a.mail.input.Focus()
+	}
 	a.currentThread = newColdThreadState(a.mailStore.binding.target, m.generation, a.mailStore.version, m.sessionCache)
 }
 
@@ -406,7 +413,7 @@ func (a *App) invalidateProjectMailForReset() {
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case childWindowSizeMsg:
-		return a.updateChildWindowSize(msg.WindowSizeMsg)
+		return a.updateMailChildWindowSize(msg.WindowSizeMsg)
 
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
@@ -414,7 +421,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Derive both axes from the root layout budget, then forward the
 		// child content rectangle — never the raw terminal dimensions. See
 		// layout.go (LayoutBudget) for the contract.
-		return a.updateChildWindowSize(a.layoutBudget().ChildWindowSize())
+		budget := a.layoutBudget()
+		return a.updateMailChildWindowSize(budget.ChildWindowSize())
 
 	case tea.FocusMsg:
 		ApplyTerminalBG()
@@ -854,6 +862,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// === Global keys ===
 
+	case tea.MouseClickMsg:
+		if updated, cmd, handled := a.handleMailMouseClick(msg); handled {
+			return updated, cmd
+		}
+
 	case tea.KeyPressMsg:
 		if updated, cmd, handled := a.maybeHandleVisitEsc(msg); handled {
 			return updated, cmd
@@ -885,6 +898,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.currentView != appViewFirstRun && a.currentView != appViewMail && a.currentView != appViewProps && a.currentView != appViewAddon && a.currentView != appViewNirvana && a.currentView != appViewLibrary && a.currentView != appViewProjects && a.currentView != appViewLogin && a.currentView != appViewKnowledge && a.currentView != appViewMailbox && a.currentView != appViewSystem && a.currentView != appViewPresets && a.currentView != appViewDaemons && a.currentView != appViewNotification && a.currentView != appViewHelp {
 				return a, tea.Quit
 			}
+		}
+		if updated, cmd, handled := a.handleMailFocusKey(msg); handled {
+			return updated, cmd
 		}
 	}
 
