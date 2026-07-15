@@ -30,9 +30,10 @@ func TestHelperFakePortal(t *testing.T) {
 }
 
 // writeFakePortal drops a lingtai-portal wrapper into dir that re-executes the
-// current test binary in TestHelperFakePortal mode. The wrapper exec's the test
-// binary, so the running process keeps the wrapper's pid — the same pid
-// portalURL() sees via cmd.Process.Pid and the helper records to pidFile.
+// current test binary in TestHelperFakePortal mode. On Unix the wrapper records
+// its own pid before exec so race-instrumented Go startup cannot be killed before
+// the assertion has a pid to inspect. Exec preserves that pid — the same pid
+// portalURL() sees via cmd.Process.Pid and the helper later records to pidFile.
 func writeFakePortal(t *testing.T, dir, pidFile string) {
 	t.Helper()
 	self, err := os.Executable()
@@ -49,6 +50,7 @@ func writeFakePortal(t *testing.T, dir, pidFile string) {
 			`"` + self + `" -test.run=TestHelperFakePortal` + "\r\n"
 	} else {
 		script = "#!/bin/sh\n" +
+			"printf '%s' \"$$\" > " + shellQuote(pidFile) + "\n" +
 			"exec env GO_WANT_FAKE_PORTAL=1 " +
 			"GO_FAKE_PORTAL_PID_FILE=" + shellQuote(pidFile) + " " +
 			shellQuote(self) + " -test.run=TestHelperFakePortal\n"
