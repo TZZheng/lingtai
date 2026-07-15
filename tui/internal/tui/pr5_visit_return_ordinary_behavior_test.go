@@ -303,6 +303,108 @@ func TestPR5Stage5VisitReturnInitialRootRefreshStagesWithoutAggregatePersist(t *
 	}
 }
 
+func TestPR5Stage5VisitReturnStagedRefreshClearsDiscardedOlderPageLatch(t *testing.T) {
+	app, _, _ := installationNewApp(t, 0)
+	targetA := filepath.Join(app.projectDir, "agent-a")
+	installationWriteAgent(t, targetA, "agent-a", "Agent A", "Agent A")
+	installationWriteEvents(t, targetA, 150, "event-a")
+
+	initial := installationRefreshResult(t, &app, true)
+	app, _ = installationDeliverApp(t, app, initial)
+	rootSnapshot := app.mailStore.snapshot
+	if rootSnapshot == nil {
+		t.Fatal("precondition root refresh did not install a snapshot")
+	}
+	app.mailStore.setAsyncTargetRevalidator(func(asyncOwner, asyncTarget) bool { return true })
+	app.threadLoads = newThreadLoadCoordinator(directThreadLoadWorker{})
+	app = pr5ProjectColdDirectTarget(t, app, rootSnapshot, targetA, "Agent A", 7201, 8, "A1")
+	if app.mail.sessionCache == nil || app.mail.sessionCache.Complete() {
+		t.Fatalf("precondition ordinary cold cache=%p complete=%v, want partial NoPersist cache", app.mail.sessionCache, app.mail.sessionCache != nil && app.mail.sessionCache.Complete())
+	}
+
+	binding := app.mailStore.binding
+	lifecycle := app.ensureAgentRailInventoryLifecycle()
+	_, requestSequence := lifecycle.schedule()
+	record := inventory.Record{
+		PID:                     binding.target.pid,
+		Project:                 filepath.Dir(binding.owner.projectID),
+		AgentDir:                targetA,
+		Address:                 "agent-a",
+		AgentName:               "Agent A",
+		Nickname:                "Agent A",
+		ManifestAddressVerified: true,
+		Role:                    inventory.RoleAgent,
+	}
+	if !lifecycle.acceptLatest(requestSequence, binding.owner, []inventory.Record{record}, nil) ||
+		!lifecycle.revalidateTarget(binding.owner, binding.target) {
+		t.Fatal("precondition did not authorize the exact ordinary home target")
+	}
+	app.mailStore.setAsyncTargetRevalidator(nil)
+
+	mailWithLoad, olderCmd := app.mail.requestOlderPage()
+	app.mail = mailWithLoad
+	if olderCmd == nil || !app.mail.olderLoadInFlight || app.mail.olderLoadEnvelope.kind != asyncOlderPage {
+		t.Fatalf("precondition older load cmd=%v inFlight=%v envelope=%#v", olderCmd != nil, app.mail.olderLoadInFlight, app.mail.olderLoadEnvelope)
+	}
+	olderRaw := olderCmd()
+	olderPage, ok := olderRaw.(mailOlderPageMsg)
+	if !ok {
+		t.Fatalf("older-page command returned %T, want mailOlderPageMsg", olderRaw)
+	}
+
+	visited, _ := app.enterVisitedAgent(ProjectsAgentSelectedMsg{
+		Record: visitRecord(t.TempDir(), "worker", "Worker"),
+	})
+	visited, followup := installationDeliverApp(t, visited, olderPage)
+	if followup != nil {
+		t.Fatalf("discarded home older-page completion returned unexpected follow-up %T", runCmd(followup))
+	}
+	if visited.visitReturn == nil || !visited.visitReturn.mail.olderLoadInFlight {
+		t.Fatalf("discarded completion unexpectedly settled saved home latch: visitReturn=%#v", visited.visitReturn)
+	}
+
+	restored, resumeCmd := visited.returnFromVisit()
+	if resumeCmd == nil || !restored.mail.olderLoadInFlight {
+		t.Fatalf("visit return state cmd=%v inFlight=%v, want saved stale latch before refresh", resumeCmd != nil, restored.mail.olderLoadInFlight)
+	}
+	refresh, ok := findProjectMailRefresh(resumeCmd)
+	if !ok || !refresh.mail.initial {
+		t.Fatalf("ordinary visit return refresh: found=%v initial=%v", ok, refresh.mail.initial)
+	}
+	staged, postFrame := installationDeliverApp(t, restored, refresh)
+	if staged.mail.olderLoadInFlight || staged.mail.olderLoadEnvelope != (asyncEnvelope{}) || staged.mail.loadedExtra != 0 {
+		t.Fatalf(
+			"staged first frame preserved dead pagination state: inFlight=%v envelope=%#v loadedExtra=%d",
+			staged.mail.olderLoadInFlight, staged.mail.olderLoadEnvelope, staged.mail.loadedExtra,
+		)
+	}
+
+	var (
+		cold     threadLoadResultMsg
+		haveCold bool
+	)
+	for _, msg := range installationRunBatch(t, postFrame) {
+		if result, ok := msg.(threadLoadResultMsg); ok {
+			cold = result
+			haveCold = true
+		}
+	}
+	if !haveCold {
+		t.Fatal("staged refresh did not preserve the ordinary direct cold request")
+	}
+	accepted, followup := installationDeliverApp(t, staged, cold)
+	if followup != nil {
+		t.Fatalf("accepted ordinary cold completion returned unexpected follow-up %T", runCmd(followup))
+	}
+	if accepted.mail.sessionCache == nil || accepted.mail.sessionCache.Complete() {
+		t.Fatalf("accepted cold cache=%p complete=%v, want partial direct cache", accepted.mail.sessionCache, accepted.mail.sessionCache != nil && accepted.mail.sessionCache.Complete())
+	}
+	mailWithRetry, retryCmd := accepted.mail.requestOlderPage()
+	if retryCmd == nil || !mailWithRetry.olderLoadInFlight {
+		t.Fatal("visit-return ordinary thread remained debounced after fresh cold completion")
+	}
+}
+
 func TestPR5Stage5RenderedSyntheticMainUsesLocalizedLabel(t *testing.T) {
 	t.Cleanup(func() { _ = i18n.SetLang("en") })
 	if err := i18n.SetLang("zh"); err != nil {
