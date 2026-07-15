@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -8,20 +9,25 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/anthropics/lingtai-tui/i18n"
+	"github.com/anthropics/lingtai-tui/internal/fs"
+	"github.com/anthropics/lingtai-tui/internal/inventory"
 )
 
-// railRow is display-only rail state. It intentionally owns no MailModel,
+// railRow is display-only rail state. Its target is an immutable value copy of
+// the activation coordinates; the row intentionally owns no MailModel,
 // ProjectMailStore, MailCache, scanner, tick, or thread projection.
 type railRow struct {
 	label        string
 	originalMain bool
+	target       asyncTarget
 }
 
 // AgentRailState is the root-owned display projection for the home Agent rail.
 // Inventory-backed ordinary rows are installed into this projection separately;
 // rendering never scans the filesystem or process table.
 type AgentRailState struct {
-	rows []railRow
+	rows   []railRow
+	cursor int
 }
 
 type mailPaneFocus uint8
@@ -83,8 +89,18 @@ func (a App) handleMailFocusKey(msg tea.KeyPressMsg) (App, tea.Cmd, bool) {
 		return a, cmd, true
 	}
 
-	if a.mailFocus == mailFocusRail && key != copyModeToggleKey {
-		return a, nil, true
+	if a.mailFocus == mailFocusRail {
+		switch key {
+		case "up", "k":
+			a.agentRail.moveCursor(-1)
+			return a, nil, true
+		case "down", "j":
+			a.agentRail.moveCursor(1)
+			return a, nil, true
+		}
+		if key != copyModeToggleKey {
+			return a, nil, true
+		}
 	}
 	return a, nil, false
 }
@@ -114,6 +130,102 @@ func (a App) handleMailMouseClick(msg tea.MouseClickMsg) (App, tea.Cmd, bool) {
 	return a, nil, true
 }
 
+func (s *AgentRailState) clampCursor() {
+	if s == nil || len(s.rows) == 0 {
+		if s != nil {
+			s.cursor = 0
+		}
+		return
+	}
+	if s.cursor < 0 {
+		s.cursor = 0
+	} else if s.cursor >= len(s.rows) {
+		s.cursor = len(s.rows) - 1
+	}
+}
+
+func (s *AgentRailState) moveCursor(delta int) bool {
+	if s == nil || len(s.rows) == 0 || delta == 0 {
+		return false
+	}
+	s.clampCursor()
+	next := s.cursor + delta
+	if next < 0 || next >= len(s.rows) {
+		return false
+	}
+	s.cursor = next
+	return true
+}
+
+func (s AgentRailState) selectedRow() (railRow, bool) {
+	if s.cursor < 0 || s.cursor >= len(s.rows) {
+		return railRow{}, false
+	}
+	return s.rows[s.cursor], true
+}
+
+func sameRailRowIdentity(a, b railRow) bool {
+	if a.originalMain || b.originalMain {
+		return a.originalMain && b.originalMain
+	}
+	return a.target.policy == asyncTargetHomeAgentRail && b.target.policy == asyncTargetHomeAgentRail &&
+		a.target.directory != "" && a.target.directory == b.target.directory &&
+		a.target.addressFingerprint != "" && a.target.addressFingerprint == b.target.addressFingerprint
+}
+
+func railInventoryLabel(record inventory.Record, target asyncTarget) string {
+	label := firstNonEmpty(record.Nickname, record.AgentName, record.Address, record.Agent, filepath.Base(target.directory))
+	return strings.TrimSpace(label)
+}
+
+func (s *AgentRailState) installInventory(owner asyncOwner, snapshot inventory.Snapshot) {
+	if s == nil {
+		return
+	}
+
+	oldCursor := s.cursor
+	selected, hadSelection := s.selectedRow()
+	main := railRow{label: "Main", originalMain: true}
+	for _, row := range s.rows {
+		if row.originalMain {
+			if label := strings.TrimSpace(row.label); label != "" {
+				main.label = label
+			}
+			break
+		}
+	}
+
+	rows := make([]railRow, 1, len(snapshot.Records)+1)
+	rows[0] = main
+	for _, record := range snapshot.Records {
+		target := asyncTarget{
+			directory:          inventory.NormalizePath(record.AgentDir),
+			addressFingerprint: fs.AddressFingerprint(record.Address),
+			policy:             asyncTargetHomeAgentRail,
+			pid:                record.PID,
+		}
+		if !ordinaryRailRecordEligible(owner, target, record) {
+			continue
+		}
+		rows = append(rows, railRow{
+			label:  railInventoryLabel(record, target),
+			target: target,
+		})
+	}
+
+	s.rows = rows
+	s.cursor = oldCursor
+	if hadSelection {
+		for i, row := range s.rows {
+			if sameRailRowIdentity(selected, row) {
+				s.cursor = i
+				return
+			}
+		}
+	}
+	s.clampCursor()
+}
+
 func (s *AgentRailState) installMain(label string) {
 	if s == nil {
 		return
@@ -125,10 +237,15 @@ func (s *AgentRailState) installMain(label string) {
 	for i := range s.rows {
 		if s.rows[i].originalMain {
 			s.rows[i].label = label
+			s.clampCursor()
 			return
 		}
 	}
+	if len(s.rows) > 0 && s.cursor >= 0 && s.cursor < len(s.rows) {
+		s.cursor++
+	}
 	s.rows = append([]railRow{{label: label, originalMain: true}}, s.rows...)
+	s.clampCursor()
 }
 
 func (s AgentRailState) rowsForView(mainLabel string) []railRow {
@@ -165,8 +282,18 @@ func (s AgentRailState) View(width, height int, mainLabel string) string {
 		StyleTitle.Render("  " + i18n.T("props.network_agents")),
 		"",
 	}
-	for _, row := range s.rowsForView(mainLabel) {
+	rows := s.rowsForView(mainLabel)
+	cursor := s.cursor
+	if cursor < 0 {
+		cursor = 0
+	} else if cursor >= len(rows) {
+		cursor = len(rows) - 1
+	}
+	for i, row := range rows {
 		marker := StyleAccent.Render("› ")
+		if i != cursor {
+			marker = "  "
+		}
 		logical = append(logical, marker+StyleTitle.Render(row.label))
 	}
 
