@@ -219,13 +219,13 @@ func (s *AgentRailState) installInventory(owner asyncOwner, snapshot inventory.S
 
 	oldCursor := s.cursor
 	selected, hadSelection := s.selectedRow()
-	main := railRow{label: "Main", originalMain: true}
+	main := railRow{label: i18n.T("rail.main"), originalMain: true}
 	for _, row := range s.rows {
 		if row.originalMain {
 			main = row
 			main.originalMain = true
 			if strings.TrimSpace(main.label) == "" {
-				main.label = "Main"
+				main.label = i18n.T("rail.main")
 			}
 			break
 		}
@@ -299,7 +299,7 @@ func (s *AgentRailState) installMain(label string, directTarget fs.DirectTarget)
 	}
 	label = strings.TrimSpace(label)
 	if label == "" {
-		label = "Main"
+		label = i18n.T("rail.main")
 	}
 	for i := range s.rows {
 		if s.rows[i].originalMain {

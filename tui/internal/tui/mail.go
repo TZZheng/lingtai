@@ -1271,7 +1271,7 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			return m, nil
 		}
 		if err := fs.WriteMail(msg.recipientDir, msg.senderDir, msg.fromAddr, msg.toAddr, "", msg.text); err != nil {
-			m.AddSystemMessage(fmt.Sprintf("Send failed: %v", err))
+			m.AddSystemMessage(i18n.TF("mail.send_failed", err))
 			return m, nil
 		}
 		if m.pendingMessage == msg.text {

@@ -392,12 +392,12 @@ func (a *App) reconcileRailUnread() {
 	if a.railUnreadStore == nil {
 		store, err := fs.OpenRailUnreadStore(filepath.Dir(a.projectDir), targets, messages, a.mail.humanAddr)
 		if err != nil {
-			a.mail.AddSystemMessage(fmt.Sprintf("Unread status unavailable: %v", err))
+			a.mail.AddSystemMessage(i18n.TF("rail.unread_status_unavailable", err))
 			return
 		}
 		a.railUnreadStore = store
 	} else if err := a.railUnreadStore.SyncTargets(targets, messages, a.mail.humanAddr); err != nil {
-		a.mail.AddSystemMessage(fmt.Sprintf("Unread status unavailable: %v", err))
+		a.mail.AddSystemMessage(i18n.TF("rail.unread_status_unavailable", err))
 		return
 	}
 	for i := range a.agentRail.rows {
@@ -409,7 +409,7 @@ func (a *App) reconcileRailUnread() {
 		return
 	}
 	if err := a.railUnreadStore.MarkSeen(activeRow.directTarget, messages, a.mail.humanAddr); err != nil {
-		a.mail.AddSystemMessage(fmt.Sprintf("Unread status unavailable: %v", err))
+		a.mail.AddSystemMessage(i18n.TF("rail.unread_status_unavailable", err))
 		return
 	}
 	activeRow.unread = a.railUnreadStore.UnreadCount(activeRow.directTarget, messages, a.mail.humanAddr)
