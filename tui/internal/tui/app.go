@@ -2306,6 +2306,10 @@ func (a App) switchToView(viewName string) (tea.Model, tea.Cmd) {
 			a.installMailModel(a.mail)
 			initial = true
 		}
+		// Reentry makes a retained exact Mail projection visible again. Reconcile
+		// before later refresh commands can advance the root snapshot; loading or
+		// otherwise inexact projections remain rejected by visibleRailUnreadRow.
+		a.reconcileRailUnread()
 		// Resume the one root-owned mail tick + refresh pipeline. A still-running
 		// chain is left alone; a paused chain gets one new invalidating generation.
 		// Also (re)start the app-level auto-refresh ticker: this is the path
