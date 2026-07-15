@@ -65,6 +65,7 @@ type visitReturnState struct {
 type App struct {
 	currentView   appView
 	mail          MailModel
+	agentRail     AgentRailState
 	settings      SettingsModel
 	props         PropsModel
 	library       LibraryModel
@@ -151,6 +152,9 @@ func (a *App) installMailModel(m MailModel) {
 	m.acceptedSnapshot = a.mailStore.snapshot
 	policy, pid := a.currentMailTargetPolicy()
 	a.mailStore.bindMailModel(&m, policy, pid)
+	if policy == asyncTargetHomeMain {
+		a.agentRail.installMain(m.orchDisplayName())
+	}
 	a.mail = m
 	a.currentThread = newColdThreadState(a.mailStore.binding.target, m.generation, a.mailStore.version, m.sessionCache)
 }
@@ -2019,7 +2023,7 @@ func (a App) View() tea.View {
 	case appViewFirstRun:
 		content = a.firstRun.View()
 	case appViewMail:
-		content = a.mail.View()
+		content = a.composeMailWithRail(a.mail.View())
 	case appViewSettings:
 		content = a.settings.View()
 	case appViewProps:
