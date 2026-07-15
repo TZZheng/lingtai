@@ -112,6 +112,19 @@ type EditorDoneMsg struct {
 	Text     string
 }
 
+// boundSendRequestMsg defers one exact-target mail write until it re-enters the
+// root-routed Mail state machine. The envelope owns permission; the remaining
+// fields are the captured fs.WriteMail payload and must still match Mail's
+// current coordinates before the side effect is attempted.
+type boundSendRequestMsg struct {
+	envelope     asyncEnvelope
+	recipientDir string
+	senderDir    string
+	fromAddr     string
+	toAddr       string
+	text         string
+}
+
 // MailModel is the main chat view — a single chronological stream.
 // verboseLevel controls what events.jsonl entries are shown
 type verboseLevel int
@@ -1143,21 +1156,54 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		}
 		return m, nil
 
+	case boundSendRequestMsg:
+		// The request carries a captured write payload as well as its envelope. Fail
+		// closed if either half no longer describes this exact Mail target.
+		if msg.text == "" ||
+			msg.recipientDir != m.orchestrator || msg.senderDir != m.humanDir ||
+			msg.fromAddr != m.humanAddr || msg.toAddr != m.orchAddr {
+			return m, nil
+		}
+		// Keep the one shared target/inventory predicate immediately adjacent to
+		// the irreversible side effect. No draft or sentinel mutation precedes it.
+		if !acceptAsync(m.asyncCurrent(), msg.envelope) {
+			return m, nil
+		}
+		if err := fs.WriteMail(msg.recipientDir, msg.senderDir, msg.fromAddr, msg.toAddr, "", msg.text); err != nil {
+			m.AddSystemMessage(fmt.Sprintf("Send failed: %v", err))
+			return m, nil
+		}
+		if m.pendingMessage == msg.text {
+			m.pendingMessage = ""
+		}
+		if m.input.Value() == msg.text {
+			m.input.Reset()
+		}
+		m.syncViewportHeight()
+		// Only Main owns the shared automatic-insight lifecycle. An ordinary or
+		// visited Agent send must never re-arm Main's sentinel.
+		if msg.envelope.target.policy == asyncTargetHomeMain {
+			_ = os.Remove(filepath.Join(m.baseDir, ".tui-asset", ".insight.done"))
+		}
+		return m, m.requestMailRefresh(false)
+
 	case SendMsg:
 		var text string
-		fromPending := false
-		if m.pendingMessage != "" {
-			fromPending = true
+		fromPending := m.pendingMessage != ""
+		if fromPending {
 			text = m.pendingMessage
-			m.pendingMessage = ""
 		} else {
 			text = m.input.Value()
 		}
 		if text == "" {
 			return m, nil
 		}
-		// If text starts with /, treat as slash command
+		// If text starts with /, preserve the existing synchronous slash-command
+		// behavior; only real mail text enters the bound-send protocol.
 		if len(text) > 1 && text[0] == '/' {
+			if fromPending {
+				m.pendingMessage = ""
+			}
 			parts := strings.SplitN(text[1:], " ", 2)
 			cmd := parts[0]
 			args := ""
@@ -1169,19 +1215,16 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			return m, func() tea.Msg { return PaletteSelectMsg{Command: cmd, Args: args} }
 		}
 		if m.orchestrator != "" {
-			if err := fs.WriteMail(m.orchestrator, m.humanDir, m.humanAddr, m.orchAddr, "", text); err != nil {
-				if fromPending {
-					m.pendingMessage = text
-				}
-				m.input.SetValue(text)
-				m.AddSystemMessage(i18n.TF("mail.send_failed", err))
-				return m, nil
+			envelope := captureAsync(asyncBoundSend, m.asyncCurrent())
+			request := boundSendRequestMsg{
+				envelope:     envelope,
+				recipientDir: m.orchestrator,
+				senderDir:    m.humanDir,
+				fromAddr:     m.humanAddr,
+				toAddr:       m.orchAddr,
+				text:         text,
 			}
-			// Human sent a real message — allow new insight after next idle
-			os.Remove(filepath.Join(m.baseDir, ".tui-asset", ".insight.done"))
-			m.input.Reset()
-			m.syncViewportHeight()
-			return m, m.requestMailRefresh(false)
+			return m, func() tea.Msg { return request }
 		}
 		return m, nil
 

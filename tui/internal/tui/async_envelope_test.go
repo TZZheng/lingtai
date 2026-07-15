@@ -23,6 +23,7 @@ var directAsyncKindCases = []directAsyncKindCase{
 	{name: "liveness_pulse", kind: asyncLivenessPulse},
 	{name: "editor_done", kind: asyncEditorDone},
 	{name: "cold_thread_load", kind: asyncColdThreadLoad},
+	{name: "bound_send", kind: asyncBoundSend},
 }
 
 func directAsyncRequiredMask(kind asyncKind) asyncFieldMask {
@@ -36,7 +37,7 @@ func directAsyncRequiredMask(kind asyncKind) asyncFieldMask {
 		return base | asyncHasSourceCache
 	case asyncRefreshTick, asyncLivenessPulse:
 		return base | asyncHasEpoch
-	case asyncEditorDone:
+	case asyncEditorDone, asyncBoundSend:
 		return base
 	default:
 		return 0

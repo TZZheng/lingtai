@@ -21,6 +21,7 @@ const (
 	asyncLivenessPulse
 	asyncEditorDone
 	asyncColdThreadLoad
+	asyncBoundSend
 )
 
 type asyncFieldMask uint16
@@ -108,7 +109,7 @@ func asyncRequiredMask(kind asyncKind) (asyncFieldMask, bool) {
 		return base | asyncHasSourceCache, true
 	case asyncRefreshTick, asyncLivenessPulse:
 		return base | asyncHasEpoch, true
-	case asyncEditorDone:
+	case asyncEditorDone, asyncBoundSend:
 		return base, true
 	default:
 		return 0, false
@@ -152,7 +153,8 @@ func asyncNeedsInventoryRevalidation(kind asyncKind) bool {
 		asyncExactHistoryCount,
 		asyncRefreshTick,
 		asyncEditorDone,
-		asyncColdThreadLoad:
+		asyncColdThreadLoad,
+		asyncBoundSend:
 		return true
 	default:
 		return false

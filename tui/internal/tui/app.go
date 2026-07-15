@@ -477,10 +477,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, cmd
 
-	case mailPersistMsg, mailHistoryCountMsg, mailOlderPageMsg, homeTelemetryMsg:
-		// Mail content/count rebuilds, older pages, post-frame persistence, and
-		// telemetry can outlive the view that launched them. Route all at the root so Projects/Help
-		// cannot drop Mail's state machine; MailModel owns shared envelope acceptance.
+	case mailPersistMsg, mailHistoryCountMsg, mailOlderPageMsg, boundSendRequestMsg, homeTelemetryMsg:
+		// Mail content/count rebuilds, older pages, post-frame persistence, bound
+		// sends, and telemetry can outlive the view that launched them. Route all at
+		// the root so Projects/Help cannot drop Mail's state machine; MailModel owns
+		// shared envelope acceptance.
 		var cmd tea.Cmd
 		a.mail, cmd = a.mail.Update(msg)
 		a.syncCurrentThreadFromMail()
