@@ -122,3 +122,28 @@ func TestBuildNetwork_WorkingDirAlwaysAbsolute(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildNetworkDeduplicatesLiteralRecipientsPerMessage(t *testing.T) {
+	base := setupTestNetwork(t)
+	writeJSON(t, filepath.Join(base, "bob", "mailbox", "inbox", "duplicate-to", "message.json"), MailMessage{
+		ID:         "duplicate-to",
+		From:       "alice",
+		To:         []interface{}{"bob", "bob"},
+		ReceivedAt: "2026-07-15T00:00:00Z",
+	})
+
+	net, err := BuildNetwork(base)
+	if err != nil {
+		t.Fatalf("build network: %v", err)
+	}
+
+	for _, edge := range net.MailEdges {
+		if edge.Sender == "alice" && edge.Recipient == "bob" {
+			if edge.Count != 1 {
+				t.Fatalf("duplicate To entries counted as %d mails, want one edge contribution", edge.Count)
+			}
+			return
+		}
+	}
+	t.Fatalf("missing alice→bob mail edge: %#v", net.MailEdges)
+}
