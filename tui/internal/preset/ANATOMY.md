@@ -5,6 +5,8 @@ related_files:
   - tui/internal/fs/ANATOMY.md
   - tui/internal/migrate/ANATOMY.md
   - tui/internal/tui/ANATOMY.md
+  - tui/internal/preset/capability_alias.go
+  - tui/internal/preset/capability_alias_test.go
   - tui/internal/preset/preset.go
   - tui/internal/preset/preset_test.go
   - tui/internal/preset/recipe_apply.go
@@ -57,6 +59,8 @@ The preset package owns the atomic `{llm, capabilities}` bundle layer — loadin
 | `Preset` struct | `tui/internal/preset/preset.go:61` | `Name` + `Description` (structured object) + `Manifest` (raw JSON) + `Source` (runtime-only) |
 | `PresetSource` | `tui/internal/preset/preset.go:75` | `SourceUnknown` / `SourceTemplate` / `SourceSaved` — directory-of-origin |
 | `PresetDescription` | `tui/internal/preset/preset.go:99` | Structured `{summary, tier, Extra}` with custom marshal/unmarshal |
+| `CanonicalizeCapabilities` | `tui/internal/preset/capability_alias.go:23` | read-side `bash` -> `shell` aliasing; conflicting configurations fail closed |
+| `NormalizeLegacyCapabilities` | `tui/internal/preset/capability_alias.go:46` | applies capability canonicalization to a preset before display/write |
 | `Load(name)` | `tui/internal/preset/preset.go:257` | saved/ first, then templates/; sets `Source` |
 | `List()` | `tui/internal/preset/preset.go:210` | saved (alphabetical) + templates (canonical order); each carries `Source` |
 | `Save(p)` | `tui/internal/preset/preset.go:373` | ALWAYS to `saved/`; never templates |

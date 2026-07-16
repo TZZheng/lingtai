@@ -19,6 +19,8 @@ related_files:
   - tui/internal/migrate/m037_preset_skills_paths.go
   - tui/internal/migrate/m038_agent_init_skills_paths.go
   - tui/internal/migrate/m039_agent_init_context_preset_repair.go
+  - tui/internal/migrate/m040_shell_capability.go
+  - tui/internal/migrate/m040_shell_capability_test.go
 maintenance: |
   Keep related_files as repo-relative paths to real files. Include neighboring
   ANATOMY.md files so the anatomy graph stays connected rather than isolated;
@@ -39,9 +41,9 @@ Versioned, append-only, forward-only migration system for per-project `.lingtai/
 
 | Symbol | Citation | Purpose |
 |--------|----------|---------|
-| `CurrentVersion` | `tui/internal/migrate/migrate.go:18` | latest version compiled into this binary (currently 39) |
+| `CurrentVersion` | `tui/internal/migrate/migrate.go:20` | latest version compiled into this binary (currently 40) |
 | `Migration` struct | `tui/internal/migrate/migrate.go:26` | `{Version int, Name string, Fn func(string) error}` |
-| `migrations` slice | `tui/internal/migrate/migrate.go:33` | ordered list of all m001..m039, append-only |
+| `migrations` slice | `tui/internal/migrate/migrate.go:33` | ordered list of all m001..m040, append-only |
 | `Run(lingtaiDir)` | `tui/internal/migrate/migrate.go:80` | reads `meta.json` → runs pending migrations → persists atomically |
 | `StampCurrent(lingtaiDir)` | `tui/internal/migrate/migrate.go:126` | stamps `CurrentVersion` without running migrations (fresh projects) |
 | `metaFile` struct | `tui/internal/migrate/migrate.go:20` | `{Version int, AddonCommentCleanupNotified bool}` |
@@ -58,8 +60,11 @@ Versioned, append-only, forward-only migration system for per-project `.lingtai/
 | m037 | `tui/internal/migrate/m037_preset_skills_paths.go` | patch saved preset skill path overrides for the shared-library split |
 | m038 | `tui/internal/migrate/m038_agent_init_skills_paths.go` | restore missing `skills.paths` in per-agent `init.json` (PR #340) |
 | m039 | `tui/internal/migrate/m039_agent_init_context_preset_repair.go` | combined catch-up: (1) calls m038 idempotently to cover projects stamped at v38 by the PR #357 binary, (2) copies legacy root `context_limit` into `llm.context_limit`, (3) rewrites stale codex preset refs (PR #357 + collision resolution) |
+| m040 | `tui/internal/migrate/m040_shell_capability.go:17-91` | canonicalizes legacy `bash` capability entries to `shell` in existing agent `init.json`; malformed/non-object and conflicting entries fail closed during preflight |
 
 **Versions 38 and 39 — collision history.** PR #340 and PR #357 independently claimed migration version 38. The collision was discovered when a project migrated by one branch binary got `data version 38 is newer than this binary supports (37)` after returning to origin/main. Resolution in `fix/migration-version-collision-20260620`: PR #340's repair (skills-paths) takes v38; PR #357's repair (context/preset) takes v39 as a combined catch-up that also calls m038 idempotently, so any project previously stamped at v38 by either old binary still receives both repairs.
+
+m040 canonicalizes the legacy `bash` capability to `shell` in existing agent `init.json`; malformed/non-object shapes or a conflicting pair return explicit errors during preflight, before any candidate file is rewritten.
 
 Each migration file exports one `func migrateXxx(lingtaiDir string) error`. m002 is a no-op `func(_ string) error { return nil }` — it preserves the version slot.
 

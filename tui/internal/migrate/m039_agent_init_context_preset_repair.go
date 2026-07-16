@@ -1,11 +1,12 @@
 package migrate
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/anthropics/lingtai-tui/internal/preset"
 )
 
 // staleCodexRef is the legacy saved-preset ref that no longer resolves on
@@ -109,7 +110,7 @@ func migrateAgentInitContextPresetRepairOnly(lingtaiDir string) error {
 			continue
 		}
 		var init map[string]interface{}
-		if err := json.Unmarshal(data, &init); err != nil {
+		if err := preset.DecodeJSONUseNumber(data, &init); err != nil {
 			fmt.Fprintf(os.Stderr, "m039: skipping %s — unparseable init.json: %v\n",
 				agentDir, err)
 			continue

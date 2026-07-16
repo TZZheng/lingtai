@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/anthropics/lingtai-tui/internal/preset"
 )
 
 // migrateAgentInitSkillsPaths is the per-project companion to m037. m037
@@ -59,7 +61,7 @@ func patchAgentInitSkillsPathsFile(path string) {
 		return // dirs without init.json are not agents
 	}
 	var doc map[string]interface{}
-	if err := json.Unmarshal(data, &doc); err != nil {
+	if err := preset.DecodeJSONUseNumber(data, &doc); err != nil {
 		fmt.Fprintf(os.Stderr, "m038: skipping %s — unparseable init.json: %v\n", path, err)
 		return
 	}

@@ -62,7 +62,7 @@ func patchAgentInitSkillsPathsFile(path string) {
 		return // dirs without init.json are not agents
 	}
 	var doc map[string]interface{}
-	if err := json.Unmarshal(data, &doc); err != nil {
+	if err := portalDecodeJSONUseNumber(data, &doc); err != nil {
 		fmt.Fprintf(os.Stderr, "m038: skipping %s — unparseable init.json: %v\n", path, err)
 		return
 	}

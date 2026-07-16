@@ -14,7 +14,9 @@ import (
 //	38 — agent-init-skills-paths (shared): from PR #340
 //	39 — agent-init-context-preset-repair (shared): from PR #357
 //	     (both PRs independently claimed v38; resolved in fix/migration-version-collision-20260620)
-const CurrentVersion = 39
+//
+//	40 - shell-capability (shared): mirrors TUI m040 for per-agent init.json
+const CurrentVersion = 40
 
 type metaFile struct {
 	Version int `json:"version"`
@@ -77,6 +79,7 @@ var migrations = []Migration{
 	{Version: 37, Name: "preset-skills-paths", Fn: func(_ string) error { return nil }},                   // TUI-only: patches saved preset skill path overrides
 	{Version: 38, Name: "agent-init-skills-paths", Fn: migrateAgentInitSkillsPaths},                       // shared: restores missing skills.paths in agent init.json (PR #340)
 	{Version: 39, Name: "agent-init-context-preset-repair", Fn: migrateAgentInitContextPresetRepair},      // shared: copies legacy root context_limit into llm + rewrites stale codex preset pointers (PR #357)
+	{Version: 40, Name: "shell-capability", Fn: migrateShellCapability},                                   // shared: canonicalizes legacy bash in agent init.json
 }
 
 // StampCurrent writes meta.json at CurrentVersion without running any
@@ -128,6 +131,12 @@ func Run(lingtaiDir string) error {
 
 	if current == CurrentVersion {
 		return nil // already up to date
+	}
+
+	// Check alias conflicts before any pending historical migration can rewrite
+	// init.json and round an arbitrary capability number.
+	if err := preflightShellCapabilityConflicts(lingtaiDir); err != nil {
+		return fmt.Errorf("shell capability preflight: %w", err)
 	}
 
 	for _, m := range migrations {

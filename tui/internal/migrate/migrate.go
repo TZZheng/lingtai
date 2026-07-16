@@ -15,7 +15,9 @@ import (
 //	38 — agent-init-skills-paths (m038): from PR #340
 //	39 — agent-init-context-preset-repair (m039): from PR #357
 //	     (both PRs independently claimed v38; resolved in fix/migration-version-collision-20260620)
-const CurrentVersion = 39
+//
+//	40 - shell-capability (m040): canonicalizes legacy bash in agent init.json
+const CurrentVersion = 40
 
 type metaFile struct {
 	Version                     int  `json:"version"`
@@ -78,6 +80,7 @@ var migrations = []Migration{
 	{Version: 37, Name: "preset-skills-paths", Fn: migratePresetSkillsPaths},
 	{Version: 38, Name: "agent-init-skills-paths", Fn: migrateAgentInitSkillsPaths},
 	{Version: 39, Name: "agent-init-context-preset-repair", Fn: migrateAgentInitContextPresetRepair},
+	{Version: 40, Name: "shell-capability", Fn: migrateShellCapability},
 }
 
 // Run executes all pending migrations on the given .lingtai/ directory.
@@ -105,6 +108,12 @@ func Run(lingtaiDir string) error {
 
 	if current == CurrentVersion {
 		return nil // already up to date
+	}
+
+	// Check alias conflicts before any pending historical migration can rewrite
+	// init.json and round an arbitrary capability number.
+	if err := preflightShellCapabilityConflicts(lingtaiDir); err != nil {
+		return fmt.Errorf("shell capability preflight: %w", err)
 	}
 
 	for _, m := range migrations {

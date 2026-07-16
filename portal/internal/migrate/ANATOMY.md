@@ -18,6 +18,8 @@ related_files:
   - portal/internal/migrate/m035_remove_brief.go
   - portal/internal/migrate/m038_agent_init_skills_paths.go
   - portal/internal/migrate/m039_agent_init_context_preset_repair.go
+  - portal/internal/migrate/m040_shell_capability.go
+  - portal/internal/migrate/m040_shell_capability_test.go
 maintenance: |
   Keep related_files as repo-relative paths to real files. Include neighboring
   ANATOMY.md files so the anatomy graph stays connected rather than isolated;
@@ -37,10 +39,10 @@ Versioned, append-only, forward-only migration system for per-project `.lingtai/
 ## Components
 
 ### Registry (`migrate.go`)
-- `CurrentVersion` (`portal/internal/migrate/migrate.go:17`) — `39`. Must match the TUI's `CurrentVersion` exactly; the cross-binary contract requires lockstep bumps.
+- `CurrentVersion` (`portal/internal/migrate/migrate.go:19`) — `40`. Must match the TUI's `CurrentVersion` exactly; the cross-binary contract requires lockstep bumps.
 - `metaFile` struct (`portal/internal/migrate/migrate.go:19-21`) — `{"version": N}` shape of `.lingtai/meta.json`.
 - `Migration` type (`portal/internal/migrate/migrate.go:24-28`) — version + name + function.
-- `migrations` slice (`portal/internal/migrate/migrate.go:31-71`) — the append-only ordered list of all 39 migrations. **Real** entries have a named migration function; **no-op stubs** use `func(_ string) error { return nil }`.
+- `migrations` slice (`portal/internal/migrate/migrate.go:33-83`) — the ordered list of all 40 migrations. **Real** entries have a named migration function; **no-op stubs** use `func(_ string) error { return nil }`.
 
 ### Real migrations (touch shared on-disk state)
 - **m001** — `topology-to-portal` (`portal/internal/migrate/m001_topology.go:9-31`). Portal-only: moves `topology.jsonl` from `.tui-asset/` to `.portal/`.
@@ -58,11 +60,12 @@ Versioned, append-only, forward-only migration system for per-project `.lingtai/
 - **m035** — `remove-brief` (`portal/internal/migrate/m035_remove_brief.go:13`). Portal mirror of the TUI's brief-cleanup migration: deletes `system/brief.md` for each agent, drops `brief`/`brief_file` from `init.json`, and drops `brief` from `human/settings.json`. Touches shared on-disk state — either binary may be the first to open a post-secretary-removal project, so identical logic lives in both packages.
 - **m038** — `agent-init-skills-paths` (`m038_agent_init_skills_paths.go`). Restores missing `skills.paths` in per-agent `init.json` files hit by the preset editor model-switch bug (PR #312). Shared on-disk state — whichever binary migrates first must repair.
 - **m039** — `agent-init-context-preset-repair` (`m039_agent_init_context_preset_repair.go`). Combined catch-up: (1) calls `migrateAgentInitSkillsPaths` idempotently, then (2) copies legacy root `manifest.context_limit` into `manifest.llm.context_limit`, and (3) rewrites stale codex.json preset refs. The dual call ensures projects stamped at v38 by either old branch binary receive both repairs. See "Versions 38 and 39 — collision history" below.
+- **m040** — `shell-capability` (`m040_shell_capability.go`). Mirrors TUI m040: canonicalizes legacy `bash` to `shell` in per-agent `init.json`, preserves the configuration object and unrelated data, and fails closed on malformed/non-object shapes or conflicting keys before rewriting any sibling.
 
 **Versions 38 and 39 — collision history.** PR #340 (`docs/guide-custom-preset-tutorial`) and PR #357 (`fix/agent-init-context-preset-migration-20260615`) independently claimed migration version 38. The collision was discovered when a project migrated by one branch binary got `data version 38 is newer than this binary supports (37)` after returning to origin/main. Resolution in `fix/migration-version-collision-20260620`: PR #340's repair (skills-paths) takes v38; PR #357's repair (context/preset) takes v39. m039 calls m038's function idempotently first, so any project previously stamped at v38 by either old binary still receives both repairs. See `tui/internal/migrate/ANATOMY.md` for the canonical version and the collision-recovery pattern note.
 
 ### No-op stubs (preserve version slots)
-m005 (`soul-inquiry-source`), m007 (`normalize-ledger`), m008 (`recipe-state`), m009 (`procedures`), m010 (`legacy-addons-warn`), m011 (`session-backfill`), m012 (`session-resort`), m013 (`agora-rename`), m014 (`skills-groups`), m016 (`rename-pad-codex-library`), m017 (`rename-preset-caps`), m018 (`library-split`), m019 (`procedures-english-only`), m020 (`pseudo-agent-subscriptions`), m021 (`library-paths`), m022 (`recipe-lang-suffix`), m023 (`recipe-state-rename`), m024 (`add-active-preset`), m025 (`preset-description-object`), m032 (`cleanup-codex-oauth`), m033 (`strip-codex-api-key-env`), m034 (`library-skills-caps`), m036 (`sqlite-log-backfill`), m037 (`preset-skills-paths`). (m035, m038, m039 are real — listed above.)
+m005 (`soul-inquiry-source`), m007 (`normalize-ledger`), m008 (`recipe-state`), m009 (`procedures`), m010 (`legacy-addons-warn`), m011 (`session-backfill`), m012 (`session-resort`), m013 (`agora-rename`), m014 (`skills-groups`), m016 (`rename-pad-codex-library`), m017 (`rename-preset-caps`), m018 (`library-split`), m019 (`procedures-english-only`), m020 (`pseudo-agent-subscriptions`), m021 (`library-paths`), m022 (`recipe-lang-suffix`), m023 (`recipe-state-rename`), m024 (`add-active-preset`), m025 (`preset-description-object`), m032 (`cleanup-codex-oauth`), m033 (`strip-codex-api-key-env`), m034 (`library-skills-caps`), m036 (`sqlite-log-backfill`), m037 (`preset-skills-paths`). (m035, m038, m039, m040 are real — listed above.)
 
 All stubs are `TUI-only` — they touch `.tui-asset/`, global preset files, the TUI's saved-preset directory, or TUI-side capability aliases. The portal doesn't care about these but must hold the version slot so `meta.json` version numbers match.
 
