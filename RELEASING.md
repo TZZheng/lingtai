@@ -16,84 +16,28 @@ git push origin v0.X.Y
 ```
 
 Pushing a `v*` tag triggers the root GitHub Actions workflow at
-`.github/workflows/release.yml`. That workflow has three jobs:
+`.github/workflows/release.yml`. The workflow is source-only and has two jobs:
 
-- **`release-assets`** — cross-builds `lingtai-tui` + `lingtai-portal` for
-  darwin/linux × amd64/arm64, packages each as
-  `lingtai-<tag>-<os>-<arch>.tar.gz` (+ `.sha256`), creates the GitHub Release
-  if absent, and uploads the tarballs. `install.sh` downloads these for a fast,
-  build-free install; the asset name here MUST stay in sync with
-  `install.sh`'s `asset_name()`.
-- **`publish-bundle`** (`needs: release-assets`) — reads the repo-owned kernel
-  pin at [`kernel-release.json`](kernel-release.json), verifies that exact
-  kernel release already exists on `Lingtai-AI/lingtai-kernel` with a
-  `lingtai-kernel-release-manifest.json` (fails the job loud if not — this
-  never ships a half-bundle), downloads the four archives `release-assets`
-  just uploaded (same bytes, no rebuild), and writes a small bundle manifest
-  (schema `lingtai.tui.bundle/v1`) binding: this TUI tag/commit, the pinned
-  kernel tag/version, the kernel manifest filename, and the archive
-  filenames/checksums. Uploads the bundle manifest to the GitHub release, then
-  non-force-synchronizes the exact commit/tag to Gitee and publishes the
-  bundle there — **for real** when `GITEE_ACCESS_TOKEN` is configured, since
-  this job only ever runs on a genuine `v*` tag push (there is no separate
-  manual-dispatch trigger for this workflow — the tag push IS the authorized
-  release action). See "Gitee publication" below.
-- **`update-homebrew`** — computes the source tarball checksum and updates
-  `Lingtai-AI/homebrew-lingtai`.
+- **`source-release`** — verifies the pushed tag and creates the public GitHub
+  Release when it does not already exist. GitHub supplies the tag source archives;
+  the workflow does not build or upload prebuilt binaries, checksums, or bundles.
+- **`update-homebrew`** — computes the GitHub source-tarball checksum and updates
+  the source-build formula in `Lingtai-AI/homebrew-lingtai`.
 
-### Bumping the kernel pin
+### Kernel compatibility metadata
 
-[`kernel-release.json`](kernel-release.json) is the **one source of truth**
-for which kernel release a TUI release binds into its bundle manifest. Bump it
-deliberately, in the same commit/PR that intends to ship against a new kernel
-version — the release workflow never resolves "latest kernel" on its own; it
-only reads this file. See `lingtai-kernel`'s own `RELEASING.md` for how kernel
-releases publish their `lingtai-kernel-release-manifest.json`.
+[`kernel-release.json`](kernel-release.json) remains compatibility metadata for
+explicit/manual bundle tooling. The source-only tag workflow does not read it or
+publish a TUI/kernel bundle.
 
 ### Gitee publication
 
-`install.sh` prefers Gitee (`huangzesen1997/lingtai` +
-`huangzesen1997/lingtai-kernel`) for mainland-China installs (`--source auto`,
-bounded public-IP country lookup, fail-open to GitHub). For that to actually
-work, both mirrors need release assets — which requires the
-`GITEE_ACCESS_TOKEN` secret to be configured. Once it is, `publish-bundle`
-publishes automatically on every `v*` tag push:
-
-1. **[`scripts/sync_gitee_mirror.sh`](scripts/sync_gitee_mirror.sh)**
-   non-force-pushes the exact release commit to Gitee's `main` (fast-forward
-   only) and creates the exact release tag (create-only, never overwrites an
-   existing tag). Either failing is a **fail-loud stop** — the workflow does
-   not proceed to Gitee upload against an unsynchronized mirror. The token
-   travels via a short-lived, owner-only-permission `GIT_ASKPASS` helper file
-   (deleted after use), never in argv/a URL/a log line.
-2. **[`scripts/publish_bundle_to_gitee.sh`](scripts/publish_bundle_to_gitee.sh)**
-   verifies local asset bytes against the bundle manifest, re-verifies the
-   Gitee tag is synchronized (belt-and-braces after step 1), creates the
-   release if needed, and uploads any attachment not already present by name
-   — never delete-and-replace.
-
-When `GITEE_ACCESS_TOKEN` is unset, both steps skip cleanly (print why, exit
-0) — the GitHub release side of `publish-bundle` still completes normally.
-Every mutating action in both scripts requires the explicit `--execute` flag;
-`publish-bundle` passes it on the real tag-push trigger. For local/manual
-testing without touching the token or the live workflow:
-
-```bash
-# dry run — no token required, prints the plan only
-./scripts/sync_gitee_mirror.sh --commit "$(git rev-parse HEAD)" --tag vX.Y.Z --branch main
-./scripts/publish_bundle_to_gitee.sh --tag vX.Y.Z --bundle-dir <dir-with-archives+manifest>
-```
-
-```bash
-# real publish — maintainer-run only, outside this task's authorization
-export GITEE_ACCESS_TOKEN=...  # never echo or log this
-./scripts/sync_gitee_mirror.sh --commit "$(git rev-parse HEAD)" --tag vX.Y.Z --branch main --execute
-./scripts/publish_bundle_to_gitee.sh --tag vX.Y.Z --bundle-dir <dir-with-archives+manifest> --execute
-```
-
-As of this writing the Gitee TUI mirror's `main` matches GitHub's current
-`main`, but release tags lag — do not assume a release tag exists there
-without step 1 running first.
+The source-only tag workflow does not synchronize to Gitee and does not
+publish TUI binary/bundle assets there. The existing
+[`scripts/sync_gitee_mirror.sh`](scripts/sync_gitee_mirror.sh) and
+[`scripts/publish_bundle_to_gitee.sh`](scripts/publish_bundle_to_gitee.sh)
+remain explicit maintainer tools; running them requires separate release authority
+and is not part of the automatic `v*` workflow.
 
 ### 3. Create the GitHub release
 
@@ -149,9 +93,10 @@ release checklist and are not decided here.
 
 ## Installing without Homebrew
 
-The one-shot installer is the Homebrew-free path. It installs the latest
-release (prebuilt asset when available, else a source build) and sets up the
-Python runtime venv:
+The current release workflow is source-only. Homebrew and the manual commands
+below build `lingtai-tui` and `lingtai-portal` from the tagged source. The
+one-shot installer may still consume compatible assets from older or explicitly
+published releases, but the tag workflow no longer produces them:
 
 ```bash
 curl -fsSL https://lingtai.ai/install.sh | bash
@@ -173,6 +118,10 @@ cd ../portal && make build
 Requires Go toolchain and Node.js (for portal web frontend).
 
 ### Source selection (GitHub vs Gitee) and the Python runtime
+
+The behavior below remains compatibility support for older or separately
+published bundle releases; the source-only tag workflow does not create or mirror
+these bundle artifacts.
 
 `install.sh --source auto|github|gitee` (or `LINGTAI_SOURCE` env var) controls
 where the TUI/portal archives, the bundle manifest, and the pinned kernel
