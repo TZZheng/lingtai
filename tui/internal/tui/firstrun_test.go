@@ -99,6 +99,28 @@ func TestFirstRunAndSetupViewsOmitObsoletePrincipleControl(t *testing.T) {
 	}
 }
 
+// TestFirstRunContextLimitDefault pins the wizard's fresh-agent context-limit
+// input to 300000, mirroring preset.DefaultAgentOpts (see
+// TestDefaultAgentOpts_ContextLimit). Explicit-override preservation through
+// GenerateInitJSONWithOpts is covered separately by
+// TestGenerateInitJSON_WritesContextLimit.
+func TestFirstRunContextLimitDefault(t *testing.T) {
+	i18n.SetLang("en")
+
+	baseDir := filepath.Join(t.TempDir(), ".lingtai")
+	globalDir := t.TempDir()
+	m := NewFirstRunModel(baseDir, globalDir, true, "")
+	m.presets = []preset.Preset{{
+		Name:     "test",
+		Manifest: map[string]interface{}{"language": "en"},
+	}}
+	m.enterAgentNameDir(m.currentPreset())
+
+	if got := m.ctxLimitInput.Value(); got != "300000" {
+		t.Fatalf("fresh-agent ctxLimitInput = %q, want %q", got, "300000")
+	}
+}
+
 func TestGetPresetProvider(t *testing.T) {
 	m := FirstRunModel{}
 
