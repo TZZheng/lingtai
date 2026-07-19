@@ -49,7 +49,7 @@ $RepoRoot  = Split-Path -Parent $ScriptDir
 $InstallScript = Join-Path $RepoRoot 'install.ps1'
 
 # ---------------------------------------------------------------------------
-# Tiny test harness (no external module dependency — Pester is not guaranteed
+# Tiny test harness (no external module dependency -- Pester is not guaranteed
 # to be present on windows-latest for both PS 5.1 and PS 7).
 # ---------------------------------------------------------------------------
 $script:Failures = 0
@@ -119,16 +119,18 @@ function New-IsolatedHome {
       by callers (via Join-Path on this home), so child-process argument quoting
       and Windows spaced-path handling are exercised end to end.
     #>
-    $home = Join-Path $TestRoot ("home dir {0}" -f ([Guid]::NewGuid().ToString('N')))
-    $localAppData = Join-Path $home 'AppData\Local'
-    $tempDir = Join-Path $home 'Temp'
-    New-Item -ItemType Directory -Force -Path $home, $localAppData, $tempDir | Out-Null
-    [Environment]::SetEnvironmentVariable('HOME', $home, 'Process')
-    [Environment]::SetEnvironmentVariable('USERPROFILE', $home, 'Process')
+    # PowerShell variable names are case-insensitive; `$home` would collide with
+    # the automatic read-only `$HOME` variable on PowerShell 7.
+    $isolatedHome = Join-Path $TestRoot ("home dir {0}" -f ([Guid]::NewGuid().ToString('N')))
+    $localAppData = Join-Path $isolatedHome 'AppData\Local'
+    $tempDir = Join-Path $isolatedHome 'Temp'
+    New-Item -ItemType Directory -Force -Path $isolatedHome, $localAppData, $tempDir | Out-Null
+    [Environment]::SetEnvironmentVariable('HOME', $isolatedHome, 'Process')
+    [Environment]::SetEnvironmentVariable('USERPROFILE', $isolatedHome, 'Process')
     [Environment]::SetEnvironmentVariable('LOCALAPPDATA', $localAppData, 'Process')
     [Environment]::SetEnvironmentVariable('TEMP', $tempDir, 'Process')
     [Environment]::SetEnvironmentVariable('TMP', $tempDir, 'Process')
-    return $home
+    return $isolatedHome
 }
 
 # ---------------------------------------------------------------------------
@@ -156,7 +158,7 @@ function New-IsolatedHome {
 # fixtures.
 # ---------------------------------------------------------------------------
 
-# Resolve the Go toolchain once. Fail loudly (not silently) if absent — a fixture
+# Resolve the Go toolchain once. Fail loudly (not silently) if absent -- a fixture
 # that cannot produce a real .exe would make the whole suite dishonest.
 $script:GoExe = $null
 function Get-GoToolchain {
@@ -164,7 +166,7 @@ function Get-GoToolchain {
     $go = Get-Command -Name 'go' -CommandType Application -ErrorAction SilentlyContinue |
         Select-Object -First 1
     if (-not $go) {
-        throw "fixture setup: 'go' toolchain not found on PATH. A real native lingtai-tui.exe / lingtai-portal.exe fixture cannot be built offline without it. Install Go on the runner (already present on windows-latest) — do NOT fall back to a non-PE shim."
+        throw "fixture setup: 'go' toolchain not found on PATH. A real native lingtai-tui.exe / lingtai-portal.exe fixture cannot be built offline without it. Install Go on the runner (already present on windows-latest) -- do NOT fall back to a non-PE shim."
     }
     $script:GoExe = $go.Source
     return $script:GoExe
@@ -176,7 +178,7 @@ function New-StubExe {
       `<path> version` or `<path> --version`, prints $VersionLine to stdout and
       exits 0. Built offline from a stdlib-only Go program via `go build`.
       The installer resolves and runs the explicit .exe path, so this must be a
-      genuine PE image — no text/.cmd shim.
+      genuine PE image -- no text/.cmd shim.
     #>
     param(
         [string]$Path,
@@ -370,7 +372,7 @@ function Invoke-Installer {
     }
 }
 
-# Snapshot of an ENTIRE tree — every descendant directory AND file — for DryRun
+# Snapshot of an ENTIRE tree -- every descendant directory AND file -- for DryRun
 # no-write assertions. Enumerating files only would let the creation of empty
 # directories evade the no-write claim, so directories are captured too. Each
 # entry is recorded as "<D|F>\t<relative-path>" using a path relative to $Path so
@@ -400,7 +402,7 @@ try {
     Assert-True $installerPresent "install.ps1 exists at repo root ($InstallScript)"
     if (-not $installerPresent) {
         Write-Host ''
-        Write-Host "install.ps1 is absent — the contract suite is RED by design (test-first)."
+        Write-Host "install.ps1 is absent -- the contract suite is RED by design (test-first)."
         Write-Host "Every contract test below will now fail for the same reason. Implement"
         Write-Host "install.ps1 against the public seams to turn this suite green."
     }
@@ -444,7 +446,7 @@ try {
     Assert-True (Test-Path -LiteralPath (Join-Path $binDir1 'lingtai-portal.exe')) 'installed lingtai-portal.exe under BinDir'
 
     # -----------------------------------------------------------------------
-    # CONTRACT 2: checksum enforcement — wrong checksum fails loudly, no install.
+    # CONTRACT 2: checksum enforcement -- wrong checksum fails loudly, no install.
     # -----------------------------------------------------------------------
     Write-Section 'contract: fail-loud on wrong checksum'
     $home2 = New-IsolatedHome
@@ -568,7 +570,7 @@ try {
     $after7 = @(Get-TreeSnapshot $binDir7) + @(Get-TreeSnapshot $globalDir7)
     Assert-Equal 0 $r7.ExitCode 'DryRun exits 0'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $binDir7 'lingtai-tui.exe'))) 'DryRun did not install the TUI binary'
-    # Full-tree comparison (files AND directories) — a DryRun that created an
+    # Full-tree comparison (files AND directories) -- a DryRun that created an
     # empty directory would be caught here, not just one that wrote a file.
     Assert-Equal ($before7 -join "`n") ($after7 -join "`n") 'DryRun left the complete tree (files and directories) unchanged'
 
@@ -592,7 +594,7 @@ try {
     Assert-True ($r8.ExitCode -ne 0) 'nonexistent archive path exits non-zero'
 
     # -----------------------------------------------------------------------
-    # CONTRACT 9: SkipVenv is honored — no runtime venv is created under
+    # CONTRACT 9: SkipVenv is honored -- no runtime venv is created under
     # GlobalDir when -SkipVenv is passed. (The full venv path needs Python and
     # network and is out of scope for the offline smoke; here we assert the
     # negative: the skip seam prevents venv creation.)
