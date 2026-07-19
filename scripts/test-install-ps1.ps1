@@ -9,11 +9,10 @@
     scripts/test-install-sh.sh and is designed to run *identically* under both
     Windows PowerShell 5.1 (Desktop) and PowerShell 7+ (Core) on windows-latest.
 
-    The installer does not exist yet. Until install.ps1 is added at the
-    repository root, EVERY contract test below fails loudly at the "installer
-    script is present" precondition. That RED state is intentional and correct:
-    it proves the suite exercises a real script rather than a stub, and it must
-    stay red until the installer is implemented against exactly these seams.
+    The suite begins with an explicit "installer script is present"
+    precondition. If install.ps1 is missing, the contract fails loudly instead
+    of silently exercising a stub; when present, every behavior below is driven
+    only through the documented public parameter seams.
 
     The installer is exercised ONLY through its public parameter seams so the
     contract stays independent of implementation details:
@@ -444,6 +443,18 @@ try {
     $tui1 = Join-Path $binDir1 'lingtai-tui.exe'
     Assert-True (Test-Path -LiteralPath $tui1) 'installed lingtai-tui.exe under BinDir'
     Assert-True (Test-Path -LiteralPath (Join-Path $binDir1 'lingtai-portal.exe')) 'installed lingtai-portal.exe under BinDir'
+    $metaPath1 = Join-Path $globalDir1 'install.json'
+    Assert-True (Test-Path -LiteralPath $metaPath1) 'successful install wrote install.json'
+    $metaBytes1 = [System.IO.File]::ReadAllBytes($metaPath1)
+    $hasUtf8Bom1 = ($metaBytes1.Length -ge 3) -and `
+        ($metaBytes1[0] -eq 0xEF) -and ($metaBytes1[1] -eq 0xBB) -and ($metaBytes1[2] -eq 0xBF)
+    Assert-True (-not $hasUtf8Bom1) 'install.json is UTF-8 without BOM on this host'
+    $meta1 = $null
+    try { $meta1 = Get-Content -LiteralPath $metaPath1 -Raw | ConvertFrom-Json } catch { $meta1 = $null }
+    Assert-True ($null -ne $meta1) 'install.json parses as JSON'
+    if ($null -ne $meta1) {
+        Assert-Equal 'powershell' $meta1.install_method 'install.json records powershell install method'
+    }
 
     # -----------------------------------------------------------------------
     # CONTRACT 2: checksum enforcement -- wrong checksum fails loudly, no install.

@@ -328,7 +328,12 @@ function Write-InstallMetadata {
     }
     $metaPath = Join-Path $GlobalDir 'install.json'
     New-Item -ItemType Directory -Force -Path $GlobalDir | Out-Null
-    ($meta | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath $metaPath -Encoding UTF8
+    $json = $meta | ConvertTo-Json -Depth 5
+    # Windows PowerShell 5.1's Set-Content -Encoding UTF8 emits a BOM, while
+    # Go's encoding/json rejects BOM-prefixed input. Use one explicit BOM-less
+    # encoding on both Desktop 5.1 and PowerShell Core.
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($metaPath, $json, $utf8NoBom)
     Write-Ok "Wrote install metadata -> $metaPath"
 }
 
@@ -451,6 +456,8 @@ function Install-FromPublicRelease {
 
     $tag = $Requested
     if ([string]::IsNullOrWhiteSpace($tag)) { $tag = '<latest>' }
+    $localVersionHint = $Requested
+    if ([string]::IsNullOrWhiteSpace($localVersionHint)) { $localVersionHint = '<exact-archive-release-tag>' }
     $assetName = "lingtai-$tag-windows-amd64.zip"
 
     Fail @"
@@ -463,7 +470,7 @@ a hard stop rather than a silent degrade.
 
 Options:
   - Install from a local artifact you already have:
-      .\install.ps1 -ArchivePath <path-to>.zip -ChecksumPath <path-to>.zip.sha256 -Version $tag -SkipVenv
+      .\install.ps1 -ArchivePath <path-to>.zip -ChecksumPath <path-to>.zip.sha256 -Version $localVersionHint -SkipVenv
   - Use WSL2 + install.sh for a full-parity install:
       wsl --install
       curl -fsSL https://lingtai.ai/install.sh | bash
