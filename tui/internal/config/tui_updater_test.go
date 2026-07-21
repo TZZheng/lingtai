@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -812,5 +813,23 @@ func TestSourceInstallCommandUsesCanonicalWebsiteInstallerAndForwardsAllArgs(t *
 		if !strings.Contains(joined, want) {
 			t.Fatalf("sourceInstallCommand args %q do not contain %q", joined, want)
 		}
+	}
+}
+
+func TestSourceInstallCommandMatchesRealInstallerParser(t *testing.T) {
+	installerPath, err := filepath.Abs(filepath.Join("..", "..", "..", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, args := sourceInstallCommand(installerPath, "/tmp/lingtai prefix", "v0.11.0")
+	if name != "bash" || len(args) < 2 || args[0] != installerPath {
+		t.Fatalf("local sourceInstallCommand = %q %#v, want bash followed by %s and update args", name, args, installerPath)
+	}
+
+	parser := `set -euo pipefail; export LINGTAI_INSTALL_SH_SOURCE_ONLY=1; source "$1"; shift; parse_args "$@"`
+	parserArgs := []string{"-c", parser, "lingtai-installer-parser", installerPath}
+	parserArgs = append(parserArgs, args[1:]...)
+	if output, err := exec.Command("bash", parserArgs...).CombinedOutput(); err != nil {
+		t.Fatalf("source updater arguments are rejected by install.sh's real parser: %v\n%s", err, output)
 	}
 }
