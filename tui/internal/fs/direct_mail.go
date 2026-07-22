@@ -62,26 +62,21 @@ func NormalizeMailEndpoints(value interface{}) []string {
 }
 
 // IsDirectMail reports whether msg belongs to the strict human-target thread.
-// Only From and To participate; CC never creates membership.
+// Direct mail has exactly one primary recipient and no CC participants; group or
+// copied mail must not leak into either endpoint's one-to-one transcript.
 func IsDirectMail(msg MailMessage, humanAddress, targetAddress string) bool {
 	humanAddress = strings.TrimSpace(humanAddress)
 	targetAddress = strings.TrimSpace(targetAddress)
 	from := strings.TrimSpace(msg.From)
-	if humanAddress == "" || targetAddress == "" {
+	if humanAddress == "" || targetAddress == "" || len(msg.CC) != 0 {
 		return false
 	}
 	to := NormalizeMailEndpoints(msg.To)
+	if len(to) != 1 {
+		return false
+	}
 	if from == humanAddress {
-		return endpointListContains(to, targetAddress)
+		return to[0] == targetAddress
 	}
-	return from == targetAddress && endpointListContains(to, humanAddress)
-}
-
-func endpointListContains(endpoints []string, address string) bool {
-	for _, endpoint := range endpoints {
-		if endpoint == address {
-			return true
-		}
-	}
-	return false
+	return from == targetAddress && to[0] == humanAddress
 }
