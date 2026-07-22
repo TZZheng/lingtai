@@ -928,9 +928,8 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			// drop the loading banner. Periodic refreshes leave this untouched.
 			m.initialLoading = false
 		}
-		acceptedCache := msg.cache.Clone()
-		m.cache = acceptedCache
-		m.acceptedSnapshot = newAcceptedMailSnapshot(acceptedCache)
+		m.cache = msg.cache
+		m.acceptedSnapshot = newAcceptedMailSnapshot(msg.cache)
 		m.orchAlive = msg.alive
 		m.orchState = msg.state
 		m.networkActivity = msg.activity
