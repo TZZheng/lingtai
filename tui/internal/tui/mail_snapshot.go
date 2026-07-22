@@ -21,3 +21,9 @@ func (s acceptedMailSnapshot) cacheCopy(humanDir string) fs.MailCache {
 	}
 	return s.cache.Clone()
 }
+
+// messagesForUnread is a compile-only RED scaffold. It intentionally exposes
+// no accepted messages until the detached unread accessor is implemented.
+func (s acceptedMailSnapshot) messagesForUnread(humanDir string) []fs.MailMessage {
+	return nil
+}
