@@ -173,10 +173,11 @@ type MailModel struct {
 	baseDir              string // .lingtai/ directory
 	visitExitHint        bool   // append subtle Esc-Esc return hint to the title row
 	verbose              verboseLevel
-	messages             []ChatMessage // derived from cache on each refresh
-	cache                fs.MailCache  // incremental mail cache
-	pageSize             int           // max messages shown (from settings)
-	loadedExtra          int           // additional older messages loaded via ctrl+u
+	messages             []ChatMessage        // derived from the accepted mailbox snapshot
+	cache                fs.MailCache         // sole incremental mail producer
+	acceptedSnapshot     acceptedMailSnapshot // private consumer view installed after generation acceptance
+	pageSize             int                  // max messages shown (from settings)
+	loadedExtra          int                  // additional older messages loaded via ctrl+u
 	viewport             viewport.Model
 	input                InputModel
 	palette              PaletteModel
@@ -340,7 +341,7 @@ func (m MailModel) requestOlderPage() (MailModel, tea.Cmd) {
 // and api-call-group consistent. The rebuilt cache is command-local until Update
 // accepts this generation.
 func (m MailModel) olderPageCmd(window int, generation uint64) tea.Msg {
-	cache := m.cache.Refresh()
+	cache := m.acceptedSnapshot.cacheCopy(m.humanDir)
 	sessionCache := fs.NewSessionCache(m.humanDir, filepath.Dir(m.baseDir), fs.MainAggregateWriter)
 	sessionCache.RebuildFromSourcesWindowedInMemory(cache, m.humanAddr, m.orchestrator, m.orchDisplayName(), window)
 	return mailOlderPageMsg{
@@ -585,12 +586,13 @@ func (m MailModel) orchDisplayName() string {
 
 // buildMessages refreshes the session cache from all sources, then builds
 // the display message list filtered by verbose level and insights settings.
-// Mail is projected exactly once from the live MailCache instead of from the
-// derived session entries, so real mailbox messages cannot disappear behind a
-// partial event window or be rendered twice.
+// Mail is projected exactly once from Main's accepted mailbox snapshot instead
+// of the live producer or derived session entries, so unaccepted refresh work
+// cannot leak into rendering or older-history reconstruction.
 func (m *MailModel) buildMessages() {
-	// Ingest new entries from all sources into session.jsonl.
-	m.sessionCache.Refresh(m.cache, m.humanAddr, m.orchestrator, m.orchDisplayName())
+	mailCache := m.acceptedSnapshot.cacheCopy(m.humanDir)
+	// Ingest only the accepted mailbox publication into session.jsonl.
+	m.sessionCache.Refresh(mailCache, m.humanAddr, m.orchestrator, m.orchDisplayName())
 	if m.historyCountLoaded {
 		// Refresh incrementally advances the accepted exact metadata at EOF.
 		m.historyStats = m.sessionCache.HistoryStats()
@@ -652,7 +654,7 @@ func (m *MailModel) buildMessages() {
 		cm := sessionEntryToChatMessage(e, m.humanAddr)
 		chatMsgs = append(chatMsgs, cm)
 	}
-	for _, msg := range m.cache.Messages {
+	for _, msg := range mailCache.Messages {
 		chatMsgs = append(chatMsgs, mailMessageToChatMessage(msg, m.humanAddr, m.orchDisplayName()))
 		m.auxiliaryMessages++
 	}
@@ -926,7 +928,9 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			// drop the loading banner. Periodic refreshes leave this untouched.
 			m.initialLoading = false
 		}
-		m.cache = msg.cache
+		acceptedCache := msg.cache.Clone()
+		m.cache = acceptedCache
+		m.acceptedSnapshot = newAcceptedMailSnapshot(acceptedCache)
 		m.orchAlive = msg.alive
 		m.orchState = msg.state
 		m.networkActivity = msg.activity
