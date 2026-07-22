@@ -64,8 +64,13 @@ func TestIsDirectMail(t *testing.T) {
 		{name: "human to scalar target", msg: MailMessage{From: human, To: main}, target: mainTarget, want: true},
 		{name: "human to singleton list target", msg: MailMessage{From: human, To: []interface{}{main}, Identity: map[string]interface{}{"agent_id": "id-human"}}, target: mainTarget, want: true},
 		{name: "target to scalar human with matching identity", msg: MailMessage{From: agentB, To: human, Identity: map[string]interface{}{"agent_id": "id-agent-b"}}, target: agentBTarget, want: true},
+		{name: "matching padded identities remain literal", msg: MailMessage{From: agentB, To: human, Identity: map[string]interface{}{"agent_id": " id-agent-b "}}, target: directTargetTestInput{ProjectDirectory: "/project", Directory: "/project/.lingtai/agent-b", AgentID: " id-agent-b ", Address: agentB}, want: true},
 		{name: "legacy target to human without identity", msg: MailMessage{From: agentB, To: human}, target: agentBTarget, want: true},
+		{name: "legacy target without manifest id still uses policy a address fallback", msg: MailMessage{From: agentB, To: human}, target: directTargetTestInput{ProjectDirectory: "/project", Directory: "/project/.lingtai/agent-b", Address: agentB}, want: true},
 		{name: "supplied mismatching identity is not direct", msg: MailMessage{From: agentB, To: human, Identity: map[string]interface{}{"agent_id": "id-main"}}, target: agentBTarget, want: false},
+		{name: "supplied padded identity is a literal mismatch", msg: MailMessage{From: agentB, To: human, Identity: map[string]interface{}{"agent_id": " id-agent-b "}}, target: agentBTarget, want: false},
+		{name: "supplied nil identity is not direct", msg: MailMessage{From: agentB, To: human, Identity: map[string]interface{}{"agent_id": nil}}, target: agentBTarget, want: false},
+		{name: "supplied identity with missing target id is not direct", msg: MailMessage{From: agentB, To: human, Identity: map[string]interface{}{"agent_id": "id-agent-b"}}, target: directTargetTestInput{ProjectDirectory: "/project", Directory: "/project/.lingtai/agent-b", Address: agentB}, want: false},
 		{name: "supplied empty identity is not direct", msg: MailMessage{From: agentB, To: human, Identity: map[string]interface{}{"agent_id": "  "}}, target: agentBTarget, want: false},
 		{name: "supplied non-string identity is not direct", msg: MailMessage{From: agentB, To: human, Identity: map[string]interface{}{"agent_id": 7}}, target: agentBTarget, want: false},
 		{name: "human multi-to is not direct for main", msg: MailMessage{From: human, To: []interface{}{main, agentB}}, target: mainTarget, want: false},
@@ -117,6 +122,7 @@ func TestDirectThreadKeyUsesProjectAndAgentID(t *testing.T) {
 	afterRename := directTargetTestInput{ProjectDirectory: "/project-a", Directory: "/project-a/.lingtai/new", AgentID: "id-agent", Address: "new"}
 	otherAgent := directTargetTestInput{ProjectDirectory: "/project-a", Directory: "/project-a/.lingtai/new", AgentID: "id-other", Address: "new"}
 	otherProject := directTargetTestInput{ProjectDirectory: "/project-b", Directory: "/project-b/.lingtai/new", AgentID: "id-agent", Address: "new"}
+	paddedAgentID := directTargetTestInput{ProjectDirectory: "/project-a", Directory: "/project-a/.lingtai/padded", AgentID: " id-agent ", Address: "padded"}
 
 	beforeKey := directThreadKeyForTest(beforeRename)
 	if beforeKey == "" {
@@ -130,6 +136,12 @@ func TestDirectThreadKeyUsesProjectAndAgentID(t *testing.T) {
 	}
 	if got := directThreadKeyForTest(otherProject); got == beforeKey {
 		t.Errorf("same agent_id in another project shared thread key %q", got)
+	}
+	if got := directThreadKeyForTest(paddedAgentID); got == "" || got == beforeKey {
+		t.Errorf("literal padded agent_id key = %q, want nonempty and distinct from %q", got, beforeKey)
+	}
+	if got := directThreadKeyForTest(directTargetTestInput{ProjectDirectory: "/project-a", AgentID: "   ", Address: "new"}); got != "" {
+		t.Errorf("whitespace-only agent_id produced thread key %q", got)
 	}
 	if got := directThreadKeyForTest(directTargetTestInput{AgentID: "id-agent", Address: "new"}); got != "" {
 		t.Errorf("missing project directory produced thread key %q", got)
