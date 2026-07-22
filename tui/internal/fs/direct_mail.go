@@ -22,8 +22,8 @@ type DirectTarget struct {
 // not include the target's current directory or address, so routing changes do
 // not split unread or selection state. Incomplete targets have no durable key.
 func DirectThreadKey(target DirectTarget) string {
-	agentID := strings.TrimSpace(target.AgentID)
-	if target.ProjectDirectory == "" || agentID == "" {
+	agentID := target.AgentID
+	if target.ProjectDirectory == "" || strings.TrimSpace(agentID) == "" {
 		return ""
 	}
 	sum := sha256.Sum256([]byte("direct-thread\x00" + target.ProjectDirectory + "\x00" + agentID))
@@ -122,15 +122,15 @@ func suppliedAgentIDMatches(identity map[string]interface{}, targetAgentID strin
 	if !ok {
 		return false
 	}
-	messageAgentID = strings.TrimSpace(messageAgentID)
-	targetAgentID = strings.TrimSpace(targetAgentID)
-	return messageAgentID != "" && targetAgentID != "" && messageAgentID == targetAgentID
+	return strings.TrimSpace(messageAgentID) != "" &&
+		strings.TrimSpace(targetAgentID) != "" &&
+		messageAgentID == targetAgentID
 }
 
 // IsDirectMail reports whether msg belongs to the strict human-target thread.
 // Direct mail has exactly one raw primary recipient and no CC participants.
 // Incoming mail must match the target's current address and any supplied
-// identity.agent_id; group, malformed, copied, or contradictory mail fails closed.
+// identity.agent_id literally; group, malformed, copied, or contradictory mail fails closed.
 func IsDirectMail(msg MailMessage, humanAddress string, target DirectTarget) bool {
 	humanAddress = strings.TrimSpace(humanAddress)
 	targetAddress := strings.TrimSpace(target.Address)
