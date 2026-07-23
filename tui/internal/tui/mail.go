@@ -984,6 +984,7 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 				m.viewport.GotoBottom()
 			}
 		}
+		m = m.clampAgentRail()
 		return m, nil
 
 	case mailRefreshMsg:

@@ -781,6 +781,17 @@ func TestVisibleRailV2ReorderResizeAndScroll(t *testing.T) {
 			X: 1, Y: budget.TopChromeRows + 3, Button: tea.MouseWheelDown,
 		})
 	}
+	beforeExpansion := visibleRailV2ObserveRail(app.mail).scrollOffset
+	if beforeExpansion <= 0 {
+		t.Fatalf("short window produced no positive rail scroll offset: %d", beforeExpansion)
+	}
+	app, _ = visibleRailV2Apply(app, tea.WindowSizeMsg{Width: 85, Height: 30})
+	if got, want := visibleRailV2ObserveRail(app.mail).scrollOffset,
+		agentRailMaxScroll(len(app.mail.agentSelector.rows), app.mail.height); got != want {
+		t.Fatalf("vertical expansion left stored rail scroll offset = %d, want clamped %d", got, want)
+	}
+	app, _ = visibleRailV2Apply(app, tea.WindowSizeMsg{Width: 85, Height: 8})
+	app.mail.agentRail.scrollOffset = beforeExpansion // isolate the remaining reorder proof
 
 	// Re-label A so its numeric index changes, then accept through the real V1
 	// prepared producer. Stable cursor identity and current identity are distinct.
