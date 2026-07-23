@@ -1,7 +1,7 @@
 # LingTai star trend
 
-- Latest: **580** stars (2026-07-22)
-- Last 7 days: **-120**
+- Latest: **580** stars (2026-07-23)
+- Last 7 days: **-121**
 - Since tracking began (2026-03-30): **+569**
-- Sparkline (last 60 days): `▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▂▂▂▃▃▃▄▄▄▄▅▅▅▅▅▅▅▅▆▆▆▆▆▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇█▇▇▆▆`
+- Sparkline (last 60 days): `▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▂▂▂▃▃▃▄▄▄▄▅▅▅▅▅▅▅▅▆▆▆▆▆▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇█▇▇▆▆▆`
 - Chart: `trend.png`
