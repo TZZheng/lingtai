@@ -2,9 +2,11 @@ package tui
 
 import (
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/anthropics/lingtai-tui/i18n"
@@ -20,7 +22,11 @@ type directChatState struct {
 	generation             uint64
 	acceptedSnapshotSerial uint64
 	projection             []ChatMessage
-	scrollOffset           int
+	viewport               viewport.Model
+	revealHorizon          int
+	hasOlder               bool
+	renderWidth            int
+	mainViewportDirty      bool
 	mainInput              InputModel
 	mainPendingMessage     string
 	mainComposeStored      bool
@@ -48,12 +54,20 @@ func (m MailModel) activateDirectTarget(target fs.DirectTarget) (MailModel, tea.
 
 	generation := nextDirectGeneration(m.directChat.generation)
 	accepted := m.acceptedSnapshot.messagesForUnread(m.humanDir)
+	projection, hasOlder := projectDirectMessages(m.humanAddr, target, accepted, m.pageSize)
+	directViewport := viewport.New()
+	directViewport.SetWidth(m.width)
+	directViewport.SetHeight(m.viewport.Height())
 	m.directChat = directChatState{
 		target:                 target,
 		threadKey:              threadKey,
 		generation:             generation,
 		acceptedSnapshotSerial: m.acceptedSnapshotSerial,
-		projection:             projectDirectMessages(m.humanAddr, target, accepted),
+		projection:             projection,
+		viewport:               directViewport,
+		revealHorizon:          m.pageSize,
+		hasOlder:               hasOlder,
+		mainViewportDirty:      m.directChat.mainViewportDirty,
 		mainInput:              m.directChat.mainInput,
 		mainPendingMessage:     m.directChat.mainPendingMessage,
 		mainComposeStored:      m.directChat.mainComposeStored,
@@ -61,7 +75,7 @@ func (m MailModel) activateDirectTarget(target fs.DirectTarget) (MailModel, tea.
 	m.agentSelector.selectedThreadKey = threadKey
 	m.lastInputLines = -1
 	m.syncViewportHeight()
-	m.directChat.scrollOffset = m.directScrollBottom()
+	m.publishDirectViewport(true)
 	return m, deferredDirectVisibilityCmd(projectRoot, threadKey, generation, m.acceptedSnapshotSerial)
 }
 
@@ -100,6 +114,17 @@ func (m MailModel) restoreMainCompose() MailModel {
 	}
 	m.input = m.directChat.mainInput
 	m.pendingMessage = m.directChat.mainPendingMessage
+	if m.ready && (m.directChat.mainViewportDirty || m.viewport.Width() != m.width) {
+		atBottom := m.viewport.AtBottom()
+		offset := m.viewport.YOffset()
+		m.viewport.SetWidth(m.width)
+		m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
+		if atBottom {
+			m.viewport.GotoBottom()
+		} else {
+			m.viewport.SetYOffset(offset)
+		}
+	}
 	return m
 }
 
@@ -124,10 +149,21 @@ func (m MailModel) publishAcceptedDirectSnapshot() (MailModel, tea.Cmd) {
 		return m, nil
 	}
 
+	horizon := m.directChat.revealHorizon
+	if horizon <= 0 {
+		horizon = m.pageSize
+	}
 	accepted := m.acceptedSnapshot.messagesForUnread(m.humanDir)
-	m.directChat.projection = projectDirectMessages(m.humanAddr, m.directChat.target, accepted)
+	projection, hasOlder := projectDirectMessages(m.humanAddr, m.directChat.target, accepted, horizon)
+	pageChanged := !reflect.DeepEqual(projection, m.directChat.projection)
+	widthChanged := m.directChat.renderWidth != m.width
+	m.directChat.projection = projection
+	m.directChat.revealHorizon = horizon
+	m.directChat.hasOlder = hasOlder
 	m.directChat.acceptedSnapshotSerial = m.acceptedSnapshotSerial
-	m.directChat.scrollOffset = m.directScrollBottom()
+	if pageChanged || widthChanged {
+		m.publishDirectViewport(pageChanged)
+	}
 	return m, deferredDirectVisibilityCmd(projectRoot, threadKey, m.directChat.generation, m.acceptedSnapshotSerial)
 }
 
@@ -292,59 +328,50 @@ func (m MailModel) activeRecipientLabel() string {
 	return m.orchDisplayName()
 }
 
-// activeViewportView renders the selected direct projection through a value
-// copy of Main's viewport. The copy reads the one current direct offset,
-// leaving Main's rich content and viewport position untouched for return to
-// Main.
+// publishDirectViewport is the only direct render/SetContent path. Content
+// changes follow the established tail policy; width-only reflow preserves an
+// existing bottom anchor and otherwise keeps the current scalar offset.
+func (m *MailModel) publishDirectViewport(goToTail bool) {
+	atBottom := m.directChat.viewport.AtBottom()
+	offset := m.directChat.viewport.YOffset()
+	m.directChat.viewport.SetWidth(m.width)
+	m.directChat.viewport.SetContent(m.renderMessages(m.directChat.projection))
+	m.directChat.renderWidth = m.width
+	if goToTail || atBottom {
+		m.directChat.viewport.GotoBottom()
+	} else {
+		m.directChat.viewport.SetYOffset(offset)
+	}
+}
+
+// activeViewportView reads only the installed current direct viewport. Main
+// keeps its own rich content and viewport position for return to Main.
 func (m MailModel) activeViewportView() string {
 	if _, ok := m.currentDirectTarget(); !ok {
 		return m.viewportWithChatTailHint()
 	}
-	directViewport := m.viewport
-	directViewport.SetContent(m.renderMessages(m.directChat.projection))
-	directViewport.SetYOffset(m.directChat.scrollOffset)
-	return directViewport.View()
+	return m.directChat.viewport.View()
 }
 
-// directScrollBottom establishes the fresh current projection at its tail. It
-// is used only when a direct projection is newly published, never by View.
-func (m MailModel) directScrollBottom() int {
-	directViewport := m.viewport
-	directViewport.SetContent(m.renderMessages(m.directChat.projection))
-	directViewport.GotoBottom()
-	return directViewport.YOffset()
-}
-
-// updateDirectScroll navigates a transient direct viewport and persists only
-// its scalar current offset. Main's viewport, rich messages, and history state
-// stay completely untouched.
+// updateDirectScroll navigates the stored current direct viewport directly.
+// It never renders or publishes content and never mutates Main's viewport.
 func (m MailModel) updateDirectScroll(msg tea.Msg) (MailModel, tea.Cmd) {
 	if _, ok := m.currentDirectTarget(); !ok || !m.ready {
 		return m, nil
 	}
-	directViewport := m.viewport
-	directViewport.SetContent(m.renderMessages(m.directChat.projection))
-	directViewport.SetYOffset(m.directChat.scrollOffset)
 	if key, ok := msg.(tea.KeyPressMsg); ok {
 		switch key.String() {
 		case "home":
-			directViewport.GotoTop()
+			m.directChat.viewport.GotoTop()
+			return m, nil
 		case "end", "ctrl+end":
-			directViewport.GotoBottom()
-		default:
-			var cmd tea.Cmd
-			directViewport, cmd = directViewport.Update(msg)
-			m.directChat.scrollOffset = directViewport.YOffset()
-			return m, cmd
+			m.directChat.viewport.GotoBottom()
+			return m, nil
 		}
-	} else {
-		var cmd tea.Cmd
-		directViewport, cmd = directViewport.Update(msg)
-		m.directChat.scrollOffset = directViewport.YOffset()
-		return m, cmd
 	}
-	m.directChat.scrollOffset = directViewport.YOffset()
-	return m, nil
+	var cmd tea.Cmd
+	m.directChat.viewport, cmd = m.directChat.viewport.Update(msg)
+	return m, cmd
 }
 
 func deferredDirectVisibilityCmd(projectRoot, threadKey string, directGeneration, acceptedSnapshotSerial uint64) tea.Cmd {
@@ -374,15 +401,31 @@ func nextAcceptedSnapshotSerial(current uint64) uint64 {
 	return next
 }
 
-// projectDirectMessages is the owner-neutral direct-mail projection seam. It
-// only filters the accepted detached snapshot and converts its matching mail;
-// it owns no state, lifecycle, or I/O behavior.
-func projectDirectMessages(humanAddr string, target fs.DirectTarget, accepted []fs.MailMessage) []ChatMessage {
-	projected := make([]ChatMessage, 0, len(accepted))
-	for _, message := range accepted {
-		if fs.IsDirectMail(message, humanAddr, target) {
-			projected = append(projected, mailMessageToChatMessage(message, humanAddr, target.Address))
-		}
+// projectDirectMessages is the owner-neutral bounded direct-mail projection
+// seam. It walks the accepted chronological snapshot newest-first, examines at
+// most horizon+1 strict matches to derive hasOlder, converts only the retained
+// horizon, then restores chronological order. It owns no I/O behavior and never
+// truncates the accepted snapshot used by selector/unread/MarkSeen.
+func projectDirectMessages(humanAddr string, target fs.DirectTarget, accepted []fs.MailMessage, horizon int) ([]ChatMessage, bool) {
+	if horizon < 1 {
+		return nil, false
 	}
-	return projected
+	capacity := min(horizon, len(accepted))
+	projected := make([]ChatMessage, 0, capacity)
+	hasOlder := false
+	for index := len(accepted) - 1; index >= 0; index-- {
+		message := accepted[index]
+		if !fs.IsDirectMail(message, humanAddr, target) {
+			continue
+		}
+		if len(projected) == horizon {
+			hasOlder = true
+			break
+		}
+		projected = append(projected, mailMessageToChatMessage(message, humanAddr, target.Address))
+	}
+	for left, right := 0, len(projected)-1; left < right; left, right = left+1, right-1 {
+		projected[left], projected[right] = projected[right], projected[left]
+	}
+	return projected, hasOlder
 }

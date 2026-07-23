@@ -447,7 +447,18 @@ func (m *MailModel) syncViewportHeight() bool {
 	if vpHeight < 1 {
 		vpHeight = 1
 	}
-	m.viewport.SetHeight(vpHeight)
+	if direct {
+		atBottom := m.directChat.viewport.AtBottom()
+		offset := m.directChat.viewport.YOffset()
+		m.directChat.viewport.SetHeight(vpHeight)
+		if atBottom {
+			m.directChat.viewport.GotoBottom()
+		} else {
+			m.directChat.viewport.SetYOffset(offset)
+		}
+	} else {
+		m.viewport.SetHeight(vpHeight)
+	}
 	return true
 }
 
@@ -469,7 +480,11 @@ func (m *MailModel) inputRegionBounds() (start, end int) {
 			bottomBannerLines = 1
 		}
 	}
-	start = 2 + topBannerLines + m.viewport.Height() + bottomBannerLines + 1 + paletteLines
+	viewportHeight := m.viewport.Height()
+	if _, direct := m.currentDirectTarget(); direct {
+		viewportHeight = m.directChat.viewport.Height()
+	}
+	start = 2 + topBannerLines + viewportHeight + bottomBannerLines + 1 + paletteLines
 	end = start + m.input.LineCount() + 1 // input rows plus border line
 	return start, end
 }
@@ -891,6 +906,18 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
 			m.lastInputLines = inputLines
 			m.ready = true
+		} else if _, direct := m.currentDirectTarget(); direct {
+			if m.viewport.Width() != msg.Width {
+				m.directChat.mainViewportDirty = true
+			}
+			m.lastInputLines = -1 // force active direct height recalculation
+			m.syncViewportHeight()
+			// Direct content is already hard-wrapped at the Mail child width. A real
+			// width change republishes the bounded page once; height-only changes
+			// update the stored viewport above without render/SetContent work.
+			if m.directChat.renderWidth != msg.Width {
+				m.publishDirectViewport(false)
+			}
 		} else {
 			m.viewport.SetWidth(msg.Width)
 			m.lastInputLines = -1 // force recalculate
@@ -1014,11 +1041,17 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			}
 		}
 		if m.ready {
-			atBottom := m.viewport.AtBottom()
-			m.syncViewportHeight()
-			m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
-			if atBottom {
-				m.viewport.GotoBottom()
+			if _, direct := m.currentDirectTarget(); direct {
+				// The accepted direct publication above owns any bounded direct
+				// repaint. Keep Main's viewport byte-for-byte dormant until return.
+				m.directChat.mainViewportDirty = true
+			} else {
+				atBottom := m.viewport.AtBottom()
+				m.syncViewportHeight()
+				m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
+				if atBottom {
+					m.viewport.GotoBottom()
+				}
 			}
 		}
 		// Let Bubble Tea paint the accepted history before the derived-cache write.
@@ -1081,8 +1114,12 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		m.historyCountLoaded = true
 		m.sessionCache.SetHistoryStats(m.historyStats)
 		if m.ready {
-			m.syncViewportHeight()
-			m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
+			if _, direct := m.currentDirectTarget(); direct {
+				m.directChat.mainViewportDirty = true
+			} else {
+				m.syncViewportHeight()
+				m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
+			}
 		}
 		return m, nil
 
@@ -1131,11 +1168,15 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		}
 		m.buildMessages()
 		if m.ready {
-			m.syncViewportHeight()
-			m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
-			// Keep the reveal anchored near the top so the user sees the older
-			// content they asked for rather than jumping to the tail.
-			m.viewport.GotoTop()
+			if _, direct := m.currentDirectTarget(); direct {
+				m.directChat.mainViewportDirty = true
+			} else {
+				m.syncViewportHeight()
+				m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
+				// Keep the reveal anchored near the top so the user sees the older
+				// content they asked for rather than jumping to the tail.
+				m.viewport.GotoTop()
+			}
 		}
 		// When the enlarged window has covered the whole history the cache is now
 		// complete and may be persisted as the authoritative derived file, exactly
@@ -1183,11 +1224,15 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		// the viewport height when the row's visibility flipped (data ⇄ no-data),
 		// so ordinary numeric updates don't thrash the layout.
 		if m.applyHomeTelemetry(msg.t, time.Now()) && m.ready {
-			atBottom := m.viewport.AtBottom()
-			m.syncViewportHeight()
-			m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
-			if atBottom {
-				m.viewport.GotoBottom()
+			if _, direct := m.currentDirectTarget(); direct {
+				m.directChat.mainViewportDirty = true
+			} else {
+				atBottom := m.viewport.AtBottom()
+				m.syncViewportHeight()
+				m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
+				if atBottom {
+					m.viewport.GotoBottom()
+				}
 			}
 		}
 		return m, nil
@@ -1403,9 +1448,13 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			// full-history older count switch to the new verbosity in the same frame.
 			m.buildMessages()
 			if m.ready {
-				m.syncViewportHeight()
-				m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
-				m.viewport.GotoBottom()
+				if _, direct := m.currentDirectTarget(); direct {
+					m.directChat.mainViewportDirty = true
+				} else {
+					m.syncViewportHeight()
+					m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
+					m.viewport.GotoBottom()
+				}
 				return m, nil
 			}
 			return m, m.refreshMail
@@ -1470,8 +1519,12 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			if changed {
 				m.buildMessages()
 				if m.ready {
-					m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
-					m.viewport.GotoBottom()
+					if _, direct := m.currentDirectTarget(); direct {
+						m.directChat.mainViewportDirty = true
+					} else {
+						m.viewport.SetContent(m.renderMessages(m.visibleMessages()))
+						m.viewport.GotoBottom()
+					}
 				}
 			}
 			return m, nil
