@@ -119,7 +119,30 @@ func humanAddr(projectDir string) string {
 func (a *App) installMailModel(m MailModel) {
 	a.mailGeneration++
 	m.generation = a.mailGeneration
+	// Durable direct-unread operation results are activation-local. A preserved
+	// Mail model can return after prior lane results were routed through a
+	// visited context, so a new activation must not retain unfinishable
+	// in-flight/coalesced markers or accept a previous activation's operation.
+	m.directUnreadOpInFlight = false
+	m.directUnreadSyncPending = false
+	m.directUnreadOpSerial = nextAcceptedSnapshotSerial(m.directUnreadOpSerial)
 	a.mail = m
+}
+
+// issueMailRefresh issues the one refresh request serial on the Update loop
+// for the installed Mail model, then detaches the real prepared-refresh command.
+func (a *App) issueMailRefresh() tea.Cmd {
+	var cmd tea.Cmd
+	a.mail, cmd = a.mail.issueRefreshRequest()
+	return cmd
+}
+
+// issueMailInitialRebuild re-dispatches the bounded initial rebuild under a
+// freshly issued request serial so its completion competes honestly with any
+// periodic refresh issued afterwards.
+func (a *App) issueMailInitialRebuild() tea.Cmd {
+	a.mail.refreshRequestSerial = nextAcceptedSnapshotSerial(a.mail.refreshRequestSerial)
+	return a.mail.initialRebuild
 }
 
 func (a *App) newMailForCurrentContext() MailModel {
@@ -301,7 +324,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// === Cross-view messages ===
 
-	case mailRefreshMsg, mailPersistMsg, mailHistoryCountMsg, mailOlderPageMsg, homeTelemetryMsg:
+	case mailRefreshMsg, mailPersistMsg, mailHistoryCountMsg, mailOlderPageMsg, homeTelemetryMsg, directUnreadResultMsg:
 		// Mail content/count rebuilds, older pages, post-frame persistence, and
 		// telemetry can outlive the view that launched them. Route all at the root so Projects/Help
 		// cannot drop Mail's state machine; MailModel owns generation acceptance.
@@ -322,7 +345,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Likewise clear any global select mode left on by the view we came from
 		// (mail owns its own copyMode; the two must never both be active).
 		a.selectMode = false
-		return a, tea.Batch(a.mail.refreshMail, tickEvery(a.mail.pollRate, a.mail.generation), pulseTick(a.mail.generation), a.sendSize())
+		return a, tea.Batch(a.issueMailRefresh(), tickEvery(a.mail.pollRate, a.mail.generation), pulseTick(a.mail.generation), a.sendSize())
 
 	case doctorResultMsg:
 		if a.currentView == appViewDoctor {
@@ -391,7 +414,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.mail.AddSystemMessage(i18n.T("mail.refreshed"))
 		}
-		cmds := []tea.Cmd{a.mail.refreshMail}
+		cmds := []tea.Cmd{a.issueMailRefresh()}
 		if a.currentView == appViewKnowledge {
 			var kcmd tea.Cmd
 			a.knowledge, kcmd = a.knowledge.reloadVisible()
@@ -410,7 +433,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.mail.AddSystemMessage(i18n.T("mail.clear_requested"))
 		}
-		return a, a.mail.refreshMail
+		return a, a.issueMailRefresh()
 
 	case refreshAllDoneMsg:
 		if msg.generation != 0 && msg.generation != a.mail.generation {
@@ -421,7 +444,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.mail.AddSystemMessage(i18n.TF("mail.refresh_all", msg.count))
 		}
-		return a, a.mail.refreshMail
+		return a, a.issueMailRefresh()
 
 	case PaletteSelectMsg:
 		return a.handlePaletteCommand(msg.Command, msg.Args)
@@ -1577,9 +1600,11 @@ func (a App) returnFromVisit() (App, tea.Cmd) {
 func (a *App) resumeMailModel(restored MailModel) tea.Cmd {
 	a.installMailModel(restored)
 	a.mail.homeTelemetryInFlight = false
-	refreshCmd := a.mail.refreshMail
+	var refreshCmd tea.Cmd
 	if a.mail.initialLoading {
-		refreshCmd = a.mail.initialRebuild
+		refreshCmd = a.issueMailInitialRebuild()
+	} else {
+		refreshCmd = a.issueMailRefresh()
 	}
 	return tea.Batch(refreshCmd, tickEvery(a.mail.pollRate, a.mail.generation), pulseTick(a.mail.generation), a.sendSize())
 }
@@ -1651,7 +1676,7 @@ func (a App) switchToView(viewName string) (tea.Model, tea.Cmd) {
 		a.mail.toolCallTruncate = a.tuiConfig.ToolCallTruncate
 		// Re-apply theme to textarea (settings may have changed it)
 		a.mail.input.ApplyTheme()
-		mailCmd := a.mail.refreshMail
+		mailCmd := a.issueMailRefresh()
 		if pageSizeChanged {
 			// The page size owns both visible batching and the bounded content
 			// snapshot. A preserved cache built with the previous setting cannot be

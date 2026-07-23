@@ -70,15 +70,20 @@ func pulseTick(generation uint64) tea.Cmd {
 }
 
 type mailRefreshMsg struct {
-	generation   uint64
-	cache        fs.MailCache     // incrementally updated cache
-	sessionCache *fs.SessionCache // command-local authoritative rebuild; installed only after generation acceptance
-	alive        bool
-	state        string // active, idle, stuck, asleep, suspended, or ""
-	activity     fs.NetworkActivity
-	orchName     string // agent name from .agent.json (may change at runtime)
-	orchNickname string // nickname from .agent.json
-	initial      bool   // true only for the deferred initial rebuild (clears the loading banner)
+	generation           uint64
+	refreshRequestSerial uint64           // the one monotonic request serial issued on the Update loop; 0 only for fabricated internal test messages
+	cache                fs.MailCache     // incrementally updated cache
+	sessionCache         *fs.SessionCache // command-local authoritative rebuild; installed only after generation acceptance
+	prepared             bool             // true only for real refresh commands prepared off the Bubble Tea loop
+	acceptedSnapshot     acceptedMailSnapshot
+	selectorRows         []agentSelectorRow
+	directPublication    *fs.DirectMailPublication
+	alive                bool
+	state                string // active, idle, stuck, asleep, suspended, or ""
+	activity             fs.NetworkActivity
+	orchName             string // agent name from .agent.json (may change at runtime)
+	orchNickname         string // nickname from .agent.json
+	initial              bool   // true only for the deferred initial rebuild (clears the loading banner)
 }
 
 // mailPersistMsg is the second, post-frame phase of an accepted authoritative
@@ -227,18 +232,32 @@ type MailModel struct {
 	generation           uint64                 // activation token; stale async messages are ignored without rescheduling
 	beforeRebuild        func()                 // optional deterministic test hook before deferred rebuild I/O
 
+	// The one monotonic refresh request serial with its newest-accepted
+	// completion watermark. Requests are issued only on the serialized Update
+	// loop; a completion older than the newest accepted request installs no
+	// mailbox/snapshot/selector/publication component. There is no second
+	// coordinate and no Main-session ordinal.
+	refreshRequestSerial         uint64 // newest request issued; 1 is reserved for the one-shot initial rebuild
+	acceptedRefreshRequestSerial uint64 // newest prepared completion accepted for this activation
+
 	// The /agents direct-conversation core: one accepted publication serial,
-	// the Mail-owned canonical conversation catalog/selection, and the one
-	// current-only direct state projected from the accepted snapshot.
+	// the Mail-owned canonical conversation catalog/selection, the one
+	// current-only direct state projected from the accepted publication, and
+	// the immutable fs-owned direct publication itself.
 	acceptedSnapshotSerial uint64
 	directChat             directChatState
 	agentSelector          agentSelectorState
+	directPublication      *fs.DirectMailPublication
+	directPrepared         bool
 
-	// The one Mail-owned durable direct unread store, opened and synchronized
-	// only from the accepted publication path. There is no second scanner,
-	// model, cache, or per-target store.
+	// Durable direct-unread work is serialized through one accepted-coordinate
+	// command at a time. A newer accepted publication coalesces into
+	// syncPending; no command mutates the store installed in the live model.
 	directUnread            *fs.DirectUnreadStore
 	directUnreadProjectRoot string
+	directUnreadOpSerial    uint64
+	directUnreadOpInFlight  bool
+	directUnreadSyncPending bool
 
 	// Home telemetry is resolved asynchronously off the render/input path (its
 	// I/O reaches sqlite + the token ledger + .status.json, which can stall on a
@@ -281,6 +300,9 @@ func NewMailModel(humanDir, humanAddr, baseDir, orchDir, orchName string, pageSi
 		toolCallTruncate:  toolCallTruncate,
 		dismissedInsights: make(map[string]bool),
 		sessionCache:      fs.NewSessionCache(humanDir, filepath.Dir(baseDir), fs.MainAggregateWriter),
+		// Serial 1 is reserved for the one-shot deferred initial rebuild issued
+		// by Init; every later request is issued on the Update loop.
+		refreshRequestSerial: 1,
 		// The authoritative session rebuild is deferred to initialRebuild() (see
 		// below), so the first frames render before history is loaded. Show a
 		// loading banner at the top of the stream until that rebuild's refresh
@@ -584,10 +606,29 @@ func (m MailModel) showChatTailHint() bool {
 	return m.chatTailRemainingLines() > m.viewport.Height()
 }
 
+// issueRefreshRequest assigns the one monotonic refresh request serial on the
+// serialized Update loop, then returns the detached prepared-refresh command
+// bound to the issuing model state. A completion older than the newest
+// accepted request can never install any payload component.
+func (m MailModel) issueRefreshRequest() (MailModel, tea.Cmd) {
+	m.refreshRequestSerial = nextAcceptedSnapshotSerial(m.refreshRequestSerial)
+	return m, m.refreshMail
+}
+
 func (m MailModel) refreshMail() tea.Msg {
-	// Incremental cache refresh — only reads new messages from disk. Human
-	// location refresh is launched by Update only after generation acceptance.
+	// Every value below is prepared on this tea.Cmd invocation, before Bubble
+	// Tea receives the completion: the incremental cache refresh, the deep
+	// accepted snapshot clone, canonical selector-row discovery, and the
+	// immutable direct publication. Update only validates and installs these
+	// detached results; it performs no manifest, unread, or clone work.
 	cache := m.cache.Refresh()
+	acceptedSnapshot := newAcceptedMailSnapshot(cache)
+	selectorRows := discoverAgentSelectorRows(m.baseDir)
+	directPublication := fs.NewDirectMailPublication(
+		m.humanAddr,
+		directTargetsForRows(selectorRows),
+		acceptedSnapshot.cache.Messages,
+	)
 
 	alive := m.orchestrator != "" && fs.IsAlive(m.orchestrator, 3.0)
 	var activity fs.NetworkActivity
@@ -615,7 +656,20 @@ func (m MailModel) refreshMail() tea.Msg {
 			state = "suspended"
 		}
 	}
-	return mailRefreshMsg{generation: m.generation, cache: cache, alive: alive, state: state, activity: activity, orchName: orchName, orchNickname: orchNickname}
+	return mailRefreshMsg{
+		generation:           m.generation,
+		refreshRequestSerial: m.refreshRequestSerial,
+		cache:                cache,
+		prepared:             true,
+		acceptedSnapshot:     acceptedSnapshot,
+		selectorRows:         selectorRows,
+		directPublication:    directPublication,
+		alive:                alive,
+		state:                state,
+		activity:             activity,
+		orchName:             orchName,
+		orchNickname:         orchNickname,
+	}
 }
 
 // orchDisplayName returns the nickname if set, otherwise the agent name.
@@ -938,9 +992,28 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		if msg.generation != m.generation {
 			return m, nil
 		}
-		// The detached command is read-only. Launch this best-effort network/cache
-		// refresh only after the generation gate; it remains off the Update path.
-		go fs.UpdateHumanLocation(m.humanDir)
+		// One monotonic request serial, newest-accepted-completion gate: a
+		// completion older than the newest accepted request installs no mailbox
+		// cache, accepted snapshot, selector rows, publication, or unread work,
+		// and schedules no side effect. Serial 0 marks fabricated internal test
+		// messages, which keep their established compatibility path. The
+		// one-shot initial rebuild is the single split acceptance: its bounded
+		// Main session result below stays generation-gated exactly as before,
+		// while its stale mailbox/direct payload is equally rejected.
+		staleRequest := msg.refreshRequestSerial != 0 &&
+			msg.refreshRequestSerial <= m.acceptedRefreshRequestSerial
+		if staleRequest && !msg.initial {
+			return m, nil
+		}
+		if !staleRequest && msg.refreshRequestSerial != 0 {
+			m.acceptedRefreshRequestSerial = msg.refreshRequestSerial
+		}
+		if !staleRequest {
+			// The detached command is read-only. Launch this best-effort
+			// network/cache refresh only after the acceptance gates; it remains
+			// off the Update path.
+			go fs.UpdateHumanLocation(m.humanDir)
+		}
 		var persistCmd tea.Cmd
 		var countCmd tea.Cmd
 		if msg.sessionCache != nil {
@@ -985,50 +1058,75 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			// drop the loading banner. Periodic refreshes leave this untouched.
 			m.initialLoading = false
 		}
-		m.cache = msg.cache
-		m.acceptedSnapshot = newAcceptedMailSnapshot(msg.cache)
-		m = m.publishAcceptedSelectorRows()
-		m = m.syncAcceptedDirectUnread()
 		var directVisibilityCmd tea.Cmd
-		m, directVisibilityCmd = m.publishAcceptedDirectSnapshot()
-		m.orchAlive = msg.alive
-		m.orchState = msg.state
-		m.networkActivity = msg.activity
-		if msg.orchName != "" {
-			m.orchName = msg.orchName
-		}
-		m.orchNickname = msg.orchNickname
-		isActive := strings.EqualFold(m.orchState, "ACTIVE")
-		isIdle := strings.EqualFold(m.orchState, "IDLE")
-		if isActive && !m.wasActive {
-			// Just became active — advance to next quote, reset pulse, start timer
-			m.quoteIdx++
-			m.pulseTick = 0
-			m.insightPending = false
-			m.activeSince = time.Now()
-		} else if !isActive {
-			// Not active — stop the elapsed timer so the badge drops it
-			m.activeSince = time.Time{}
-		}
-		insightDone := fileExists(filepath.Join(m.baseDir, ".tui-asset", ".insight.done"))
-		if isIdle && m.wasActive && !m.insightPending && !insightDone && m.insightsEnabled {
-			// Just became idle — schedule auto-insight in 5s
-			m.insightPending = true
-			m.insightAt = time.Now().Add(5 * time.Second)
-		}
-		if m.insightPending && time.Now().After(m.insightAt) {
-			m.insightPending = false
-			if m.orchestrator != "" && isIdle {
-				question := i18n.T("insight.auto_question")
-				fs.WriteInquiry(m.orchestrator, "insight", question)
-				// Write sentinel to prevent re-firing
-				os.WriteFile(filepath.Join(m.baseDir, ".tui-asset", ".insight.done"), []byte(""), 0o644)
+		var directUnreadCmd tea.Cmd
+		if !staleRequest {
+			m.cache = msg.cache
+			if msg.prepared && msg.acceptedSnapshot.ready && msg.directPublication != nil {
+				// One matching prepared payload installs atomically: mailbox
+				// cache, deep accepted snapshot, canonical selector rows, and
+				// the immutable direct publication all belong to this request.
+				m.acceptedSnapshot = msg.acceptedSnapshot
+				m = m.installSelectorRows(msg.selectorRows)
+				m.directPublication = msg.directPublication
+				m.directPrepared = true
+			} else {
+				// Compatibility for internal tests that construct mailRefreshMsg
+				// directly. No real producer reaches this discovery/clone path.
+				m.acceptedSnapshot = newAcceptedMailSnapshot(msg.cache)
+				m = m.publishAcceptedSelectorRows()
+				m.directPublication = fs.NewDirectMailPublication(
+					m.humanAddr,
+					directTargetsForRows(m.agentSelector.rows),
+					m.acceptedSnapshot.cache.Messages,
+				)
+				m.directPrepared = false
+				m = m.syncAcceptedDirectUnread()
 			}
+			m, directVisibilityCmd = m.publishAcceptedDirectSnapshot()
+			if m.directPrepared {
+				m.directUnreadSyncPending = true
+				m, directUnreadCmd = m.maybeStartDirectUnreadSync()
+			}
+			m.orchAlive = msg.alive
+			m.orchState = msg.state
+			m.networkActivity = msg.activity
+			if msg.orchName != "" {
+				m.orchName = msg.orchName
+			}
+			m.orchNickname = msg.orchNickname
+			isActive := strings.EqualFold(m.orchState, "ACTIVE")
+			isIdle := strings.EqualFold(m.orchState, "IDLE")
+			if isActive && !m.wasActive {
+				// Just became active — advance to next quote, reset pulse, start timer
+				m.quoteIdx++
+				m.pulseTick = 0
+				m.insightPending = false
+				m.activeSince = time.Now()
+			} else if !isActive {
+				// Not active — stop the elapsed timer so the badge drops it
+				m.activeSince = time.Time{}
+			}
+			insightDone := fileExists(filepath.Join(m.baseDir, ".tui-asset", ".insight.done"))
+			if isIdle && m.wasActive && !m.insightPending && !insightDone && m.insightsEnabled {
+				// Just became idle — schedule auto-insight in 5s
+				m.insightPending = true
+				m.insightAt = time.Now().Add(5 * time.Second)
+			}
+			if m.insightPending && time.Now().After(m.insightAt) {
+				m.insightPending = false
+				if m.orchestrator != "" && isIdle {
+					question := i18n.T("insight.auto_question")
+					fs.WriteInquiry(m.orchestrator, "insight", question)
+					// Write sentinel to prevent re-firing
+					os.WriteFile(filepath.Join(m.baseDir, ".tui-asset", ".insight.done"), []byte(""), 0o644)
+				}
+			}
+			m.wasActive = isActive
 		}
-		m.wasActive = isActive
 		m.buildMessages()
 		// Track /btw inquiry lifecycle
-		if m.orchestrator != "" {
+		if !staleRequest && m.orchestrator != "" {
 			inquiryExists := fileExists(filepath.Join(m.orchestrator, ".inquiry"))
 			takenExists := fileExists(filepath.Join(m.orchestrator, ".inquiry.taken"))
 			switch {
@@ -1058,19 +1156,16 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		// The command itself performs no I/O; mailPersistMsg re-enters Update for a
 		// second generation/cache-identity gate and serialized persistence.
 		if persistCmd != nil || countCmd != nil {
-			if directVisibilityCmd != nil {
-				return m, tea.Batch(persistCmd, countCmd, directVisibilityCmd)
-			}
-			return m, tea.Batch(persistCmd, countCmd)
+			return m, tea.Batch(persistCmd, countCmd, directVisibilityCmd, directUnreadCmd)
 		}
 		// Kick off the first background telemetry fetch as soon as a refresh has
 		// landed (including ordinary refreshes), so the row can appear without
 		// waiting a full poll tick. Initial rebuilds schedule it after persistence.
 		if cmd := m.maybeScheduleHomeTelemetry(time.Now()); cmd != nil {
-			if directVisibilityCmd != nil {
-				return m, tea.Batch(cmd, directVisibilityCmd)
-			}
-			return m, cmd
+			return m, tea.Batch(cmd, directVisibilityCmd, directUnreadCmd)
+		}
+		if directUnreadCmd != nil {
+			return m, tea.Batch(directVisibilityCmd, directUnreadCmd)
 		}
 		return m, directVisibilityCmd
 
@@ -1210,7 +1305,9 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		// Steady-state driver: alongside the incremental mail refresh, schedule a
 		// background telemetry fetch (debounced by in-flight + TTL). All telemetry
 		// I/O funnels through maybeScheduleHomeTelemetry — the UI path never gathers.
-		cmds = append(cmds, m.refreshMail, tickEvery(m.pollRate, m.generation))
+		var refreshCmd tea.Cmd
+		m, refreshCmd = m.issueRefreshRequest()
+		cmds = append(cmds, refreshCmd, tickEvery(m.pollRate, m.generation))
 		if cmd := m.maybeScheduleHomeTelemetry(time.Now()); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -1273,7 +1370,7 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			}
 			m.input.Reset()
 			m.syncViewportHeight()
-			return m, m.refreshMail
+			return m.issueRefreshRequest()
 		}
 		if m.orchestrator != "" {
 			if err := fs.WriteMail(m.orchestrator, m.humanDir, m.humanAddr, m.orchAddr, "", text); err != nil {
@@ -1288,12 +1385,15 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			os.Remove(filepath.Join(m.baseDir, ".tui-asset", ".insight.done"))
 			m.input.Reset()
 			m.syncViewportHeight()
-			return m, m.refreshMail
+			return m.issueRefreshRequest()
 		}
 		return m, nil
 
 	case directVisibilityMsg:
-		return m.handleDirectVisibility(msg), nil
+		return m.handleDirectVisibility(msg)
+
+	case directUnreadResultMsg:
+		return m.handleDirectUnreadResult(msg)
 
 	case OpenEditorMsg:
 		// Show editor intro page before launching
@@ -1326,7 +1426,9 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		// Refresh viewport and force a full repaint after the terminal returns from
 		// the external editor; editors such as vim can leave the alt screen visually
 		// stale until Bubble Tea draws a clean frame.
-		return m, tea.Batch(m.refreshMail, tea.ClearScreen)
+		var refreshCmd tea.Cmd
+		m, refreshCmd = m.issueRefreshRequest()
+		return m, tea.Batch(refreshCmd, tea.ClearScreen)
 
 	case PaletteSelectMsg:
 		m.input.Reset()
@@ -1433,7 +1535,7 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			// Refresh the mail thread and agent state from disk. ctrl+r is a
 			// control key, so it does not interfere with typing `r` into the
 			// compose textarea (which falls through to the default branch).
-			return m, m.refreshMail
+			return m.issueRefreshRequest()
 		case "ctrl+o":
 			// Cycle: normal → thinking → extended → normal
 			switch m.verbose {
@@ -1457,7 +1559,7 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 				}
 				return m, nil
 			}
-			return m, m.refreshMail
+			return m.issueRefreshRequest()
 
 		case "ctrl+u":
 			if m.ready && m.viewport.AtTop() {

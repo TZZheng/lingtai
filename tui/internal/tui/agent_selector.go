@@ -135,15 +135,32 @@ func discoverAgentSelectorRows(projectDir string) []agentSelectorRow {
 	return rows
 }
 
-// publishAcceptedSelectorRows installs the canonical conversation catalog from
-// the accepted-refresh path only. View never discovers targets. The mutable
-// cursor survives the row replacement by stable identity — the synthetic Main
-// row or the row's fs.DirectThreadKey — independently of the current selection.
+// publishAcceptedSelectorRows is the compatibility preparation path for
+// internally fabricated refresh messages. Real refresh commands discover rows
+// before returning to Bubble Tea and install them through installSelectorRows.
 func (m MailModel) publishAcceptedSelectorRows() MailModel {
+	return m.installSelectorRows(discoverAgentSelectorRows(m.baseDir))
+}
+
+// installSelectorRows publishes a command-prepared canonical catalog without
+// manifest discovery. The mutable cursor survives the row replacement by
+// stable identity — the synthetic Main row or the row's fs.DirectThreadKey —
+// independently of the current selection.
+func (m MailModel) installSelectorRows(rows []agentSelectorRow) MailModel {
 	cursorKey := m.agentSelector.cursorThreadKey()
-	m.agentSelector.rows = discoverAgentSelectorRows(m.baseDir)
+	m.agentSelector.rows = rows
 	m.agentSelector.restoreCursorByThreadKey(cursorKey)
 	return m
+}
+
+func directTargetsForRows(rows []agentSelectorRow) []fs.DirectTarget {
+	targets := make([]fs.DirectTarget, 0, len(rows))
+	for _, row := range rows {
+		if !row.Main {
+			targets = append(targets, row.Target)
+		}
+	}
+	return targets
 }
 
 // activateConversationRow is the one canonical activation path shared by every

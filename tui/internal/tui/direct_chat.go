@@ -53,8 +53,7 @@ func (m MailModel) activateDirectTarget(target fs.DirectTarget) (MailModel, tea.
 	}
 
 	generation := nextDirectGeneration(m.directChat.generation)
-	accepted := m.acceptedSnapshot.messagesForUnread(m.humanDir)
-	projection, hasOlder := projectDirectMessages(m.humanAddr, target, accepted, m.pageSize)
+	projection, hasOlder := m.projectPublishedDirectMessages(target, m.pageSize)
 	directViewport := viewport.New()
 	directViewport.SetWidth(m.width)
 	directViewport.SetHeight(m.viewport.Height())
@@ -153,8 +152,7 @@ func (m MailModel) publishAcceptedDirectSnapshot() (MailModel, tea.Cmd) {
 	if horizon <= 0 {
 		horizon = m.pageSize
 	}
-	accepted := m.acceptedSnapshot.messagesForUnread(m.humanDir)
-	projection, hasOlder := projectDirectMessages(m.humanAddr, m.directChat.target, accepted, horizon)
+	projection, hasOlder := m.projectPublishedDirectMessages(m.directChat.target, horizon)
 	pageChanged := !reflect.DeepEqual(projection, m.directChat.projection)
 	widthChanged := m.directChat.renderWidth != m.width
 	m.directChat.projection = projection
@@ -195,6 +193,8 @@ func (m MailModel) reconcileAcceptedDirectSelection() MailModel {
 		}
 	}
 	m.agentSelector.selectedThreadKey = ""
+	m.showEditorWarn = false
+	m.editorWarnText = ""
 	m = m.restoreMainCompose()
 	m.directChat = clearedDirectChat(m.directChat)
 	m.lastInputLines = -1
@@ -202,11 +202,10 @@ func (m MailModel) reconcileAcceptedDirectSelection() MailModel {
 	return m
 }
 
-// syncAcceptedDirectUnread opens or synchronizes the one Mail-owned durable
-// direct unread store from the accepted publication path only. It hands the
-// store the FULL accepted snapshot so newly discovered targets baseline at the
-// accepted boundary; it never counts for display, renders, or marks seen. The
-// canonical selector rows remain the only target discovery.
+// syncAcceptedDirectUnread is the explicitly confined compatibility path for
+// unprepared/internal mailRefreshMsg values. Real refresh commands use the
+// serialized async publication methods below and never perform durable I/O in
+// Update.
 func (m MailModel) syncAcceptedDirectUnread() MailModel {
 	if strings.TrimSpace(m.baseDir) == "" {
 		return m
@@ -215,12 +214,7 @@ func (m MailModel) syncAcceptedDirectUnread() MailModel {
 	if projectRoot == "." {
 		return m
 	}
-	targets := make([]fs.DirectTarget, 0, len(m.agentSelector.rows))
-	for _, row := range m.agentSelector.rows {
-		if !row.Main {
-			targets = append(targets, row.Target)
-		}
-	}
+	targets := directTargetsForRows(m.agentSelector.rows)
 	accepted := m.acceptedSnapshot.messagesForUnread(m.humanDir)
 	store := m.directUnread
 	var err error
@@ -230,8 +224,7 @@ func (m MailModel) syncAcceptedDirectUnread() MailModel {
 		err = store.SyncTargets(targets, accepted)
 	}
 	if err != nil {
-		m.statusFlash = i18n.T("agent_selector.unread_failed")
-		m.statusExpiry = time.Now().Add(5 * time.Second)
+		m.flashDirectUnreadFailure()
 		return m
 	}
 	m.directUnread = store
@@ -239,12 +232,88 @@ func (m MailModel) syncAcceptedDirectUnread() MailModel {
 	return m
 }
 
+type directUnreadOperation uint8
+
+const (
+	directUnreadSyncOperation directUnreadOperation = iota + 1
+	directUnreadMarkSeenOperation
+)
+
+// directUnreadResultMsg closes one operation of the single serialized durable
+// direct-unread lane. Every result carries the exact mail generation, accepted
+// snapshot serial, and (for MarkSeen) target coordinates captured at launch,
+// so a stale completion is rejected before it can install or flash anything.
+type directUnreadResultMsg struct {
+	operation              directUnreadOperation
+	opSerial               uint64
+	mailGeneration         uint64
+	acceptedSnapshotSerial uint64
+	projectRoot            string
+	threadKey              string
+	directGeneration       uint64
+	store                  *fs.DirectUnreadStore
+	err                    error
+}
+
+// maybeStartDirectUnreadSync coalesces accepted refreshes behind the one
+// durable-operation lane. The command receives only immutable accepted inputs
+// and a detached store clone; its result must pass the current serial gate.
+func (m MailModel) maybeStartDirectUnreadSync() (MailModel, tea.Cmd) {
+	return m.startDirectUnreadSync(nil)
+}
+
+func (m MailModel) startDirectUnreadSync(continuation *fs.DirectUnreadStore) (MailModel, tea.Cmd) {
+	if !m.directUnreadSyncPending || m.directUnreadOpInFlight || m.directPublication == nil ||
+		strings.TrimSpace(m.baseDir) == "" {
+		return m, nil
+	}
+	projectRoot := filepath.Dir(filepath.Clean(m.baseDir))
+	if projectRoot == "." {
+		m.directUnreadSyncPending = false
+		return m, nil
+	}
+	targets := directTargetsForRows(m.agentSelector.rows)
+	publication := m.directPublication
+	store := continuation
+	if store != nil {
+		store = store.Clone()
+	} else if m.directUnread != nil && m.directUnreadProjectRoot == projectRoot {
+		store = m.directUnread.Clone()
+	}
+	m.directUnreadSyncPending = false
+	m.directUnreadOpInFlight = true
+	m.directUnreadOpSerial = nextAcceptedSnapshotSerial(m.directUnreadOpSerial)
+	operationSerial := m.directUnreadOpSerial
+	mailGeneration := m.generation
+	acceptedSerial := m.acceptedSnapshotSerial
+	humanAddress := m.humanAddr
+	return m, func() tea.Msg {
+		var err error
+		if store == nil {
+			store, err = fs.OpenDirectUnreadStorePublication(projectRoot, humanAddress, targets, publication)
+		} else {
+			err = store.SyncTargetsPublication(targets, publication)
+		}
+		return directUnreadResultMsg{
+			operation:              directUnreadSyncOperation,
+			opSerial:               operationSerial,
+			mailGeneration:         mailGeneration,
+			acceptedSnapshotSerial: acceptedSerial,
+			projectRoot:            projectRoot,
+			store:                  store,
+			err:                    err,
+		}
+	}
+}
+
 // handleDirectVisibility accepts only an exact current coordinate — project
 // root, strict thread key, direct generation, and accepted snapshot serial all
 // matching the current selection — while Mail is ready and the direct
-// transcript is unobscured. Only then may the durable store MarkSeen, from the
-// FULL accepted snapshot. Everything else fails closed without durable changes.
-func (m MailModel) handleDirectVisibility(msg directVisibilityMsg) MailModel {
+// transcript is unobscured. Production launches MarkSeen off-loop through the
+// same serialized durable lane; the unprepared compatibility branch preserves
+// existing fabricated-message tests. Everything else fails closed without
+// durable changes.
+func (m MailModel) handleDirectVisibility(msg directVisibilityMsg) (MailModel, tea.Cmd) {
 	projectRoot, threadKey, ok := m.directTargetCoordinates(m.directChat.target)
 	if !m.ready || m.directVisibilityObscured() || !ok ||
 		msg.projectRoot == "" || msg.threadKey == "" || msg.directGeneration == 0 ||
@@ -254,14 +323,106 @@ func (m MailModel) handleDirectVisibility(msg directVisibilityMsg) MailModel {
 		m.directChat.threadKey != threadKey ||
 		m.directChat.acceptedSnapshotSerial != m.acceptedSnapshotSerial ||
 		m.agentSelector.selectedThreadKey != threadKey || m.directUnread == nil {
-		return m
+		return m, nil
 	}
-	accepted := m.acceptedSnapshot.messagesForUnread(m.humanDir)
-	if err := m.directUnread.MarkSeen(m.directChat.target, accepted); err != nil {
-		m.statusFlash = i18n.T("agent_selector.unread_failed")
-		m.statusExpiry = time.Now().Add(5 * time.Second)
+	if !m.directPrepared {
+		accepted := m.acceptedSnapshot.messagesForUnread(m.humanDir)
+		if err := m.directUnread.MarkSeen(m.directChat.target, accepted); err != nil {
+			m.flashDirectUnreadFailure()
+		}
+		return m, nil
 	}
-	return m
+	if m.directUnreadOpInFlight || m.directPublication == nil {
+		// Sync completion re-emits current visibility. A MarkSeen operation
+		// already represents this exact or a newer accepted coordinate.
+		return m, nil
+	}
+	store := m.directUnread.Clone()
+	publication := m.directPublication
+	target := m.directChat.target
+	m.directUnreadOpInFlight = true
+	m.directUnreadOpSerial = nextAcceptedSnapshotSerial(m.directUnreadOpSerial)
+	operationSerial := m.directUnreadOpSerial
+	mailGeneration := m.generation
+	return m, func() tea.Msg {
+		err := store.MarkSeenPublication(target, publication)
+		return directUnreadResultMsg{
+			operation:              directUnreadMarkSeenOperation,
+			opSerial:               operationSerial,
+			mailGeneration:         mailGeneration,
+			acceptedSnapshotSerial: msg.acceptedSnapshotSerial,
+			projectRoot:            msg.projectRoot,
+			threadKey:              msg.threadKey,
+			directGeneration:       msg.directGeneration,
+			store:                  store,
+			err:                    err,
+		}
+	}
+}
+
+// handleDirectUnreadResult installs only a still-current detached result, then
+// starts the newest coalesced sync (if any). Sync completion re-emits
+// visibility because activation may have become visible while the durable open
+// was in flight.
+func (m MailModel) handleDirectUnreadResult(msg directUnreadResultMsg) (MailModel, tea.Cmd) {
+	if !m.directUnreadOpInFlight || msg.opSerial == 0 || msg.opSerial != m.directUnreadOpSerial {
+		return m, nil
+	}
+	m.directUnreadOpInFlight = false
+
+	projectRoot := filepath.Dir(filepath.Clean(m.baseDir))
+	baseMatches := msg.mailGeneration == m.generation &&
+		msg.acceptedSnapshotSerial == m.acceptedSnapshotSerial &&
+		msg.projectRoot != "" && msg.projectRoot == projectRoot
+	installed := false
+	switch msg.operation {
+	case directUnreadSyncOperation:
+		if baseMatches {
+			if msg.err != nil {
+				m.flashDirectUnreadFailure()
+			} else if msg.store != nil {
+				m.directUnread = msg.store
+				m.directUnreadProjectRoot = msg.projectRoot
+				installed = true
+			}
+		}
+	case directUnreadMarkSeenOperation:
+		_, currentThread, currentOK := m.directTargetCoordinates(m.directChat.target)
+		exact := baseMatches && currentOK && msg.threadKey == currentThread &&
+			msg.directGeneration == m.directChat.generation &&
+			m.directChat.threadKey == currentThread &&
+			m.directChat.acceptedSnapshotSerial == m.acceptedSnapshotSerial &&
+			m.agentSelector.selectedThreadKey == currentThread
+		if exact {
+			if msg.err != nil {
+				m.flashDirectUnreadFailure()
+			} else if msg.store != nil {
+				m.directUnread = msg.store
+				m.directUnreadProjectRoot = msg.projectRoot
+			}
+		}
+	}
+
+	if m.directUnreadSyncPending {
+		// Chain the successful command-local store even when this result became
+		// stale for installation. This keeps the serialized durable lane
+		// monotonic: a follow-up target-baseline save cannot overwrite a cursor
+		// just advanced by the immediately preceding MarkSeen command.
+		var continuation *fs.DirectUnreadStore
+		if msg.err == nil && msg.store != nil && msg.projectRoot == projectRoot {
+			continuation = msg.store
+		}
+		return m.startDirectUnreadSync(continuation)
+	}
+	if msg.operation == directUnreadSyncOperation && installed {
+		return m, m.currentDirectVisibilityCmd()
+	}
+	return m, nil
+}
+
+func (m *MailModel) flashDirectUnreadFailure() {
+	m.statusFlash = i18n.T("agent_selector.unread_failed")
+	m.statusExpiry = time.Now().Add(5 * time.Second)
 }
 
 // directVisibilityObscured names the Mail-owned surfaces that cover the direct
@@ -369,8 +530,7 @@ func (m MailModel) revealOlderDirectPage(target fs.DirectTarget) (MailModel, boo
 	if nextHorizon <= horizon {
 		return m, false
 	}
-	accepted := m.acceptedSnapshot.messagesForUnread(m.humanDir)
-	projection, hasOlder := projectDirectMessages(m.humanAddr, target, accepted, nextHorizon)
+	projection, hasOlder := m.projectPublishedDirectMessages(target, nextHorizon)
 	m.directChat.projection = projection
 	m.directChat.revealHorizon = nextHorizon
 	m.directChat.hasOlder = hasOlder
@@ -433,11 +593,26 @@ func nextAcceptedSnapshotSerial(current uint64) uint64 {
 	return next
 }
 
-// projectDirectMessages is the owner-neutral bounded direct-mail projection
-// seam. It walks the accepted chronological snapshot newest-first, examines at
-// most horizon+1 strict matches to derive hasOlder, converts only the retained
-// horizon, then restores chronological order. It owns no I/O behavior and never
-// truncates the accepted snapshot used by selector/unread/MarkSeen.
+// projectPublishedDirectMessages converts only one page exposed by the
+// installed fs-owned publication. The nil fallback exists solely for narrow
+// internal test seams that predate accepted refresh messages; production
+// always installs a publication before direct activation can become current.
+func (m MailModel) projectPublishedDirectMessages(target fs.DirectTarget, horizon int) ([]ChatMessage, bool) {
+	if m.directPublication != nil {
+		messages, hasOlder := m.directPublication.DirectPage(target, horizon)
+		projected := make([]ChatMessage, len(messages))
+		for index, message := range messages {
+			projected[index] = mailMessageToChatMessage(message, m.humanAddr, target.Address)
+		}
+		return projected, hasOlder
+	}
+	accepted := m.acceptedSnapshot.messagesForUnread(m.humanDir)
+	return projectDirectMessages(m.humanAddr, target, accepted, horizon)
+}
+
+// projectDirectMessages is the legacy owner-neutral bounded projection seam.
+// Accepted production uses DirectMailPublication; this implementation remains
+// source-compatible for focused helpers and fabricated pre-publication state.
 func projectDirectMessages(humanAddr string, target fs.DirectTarget, accepted []fs.MailMessage, horizon int) ([]ChatMessage, bool) {
 	if horizon < 1 {
 		return nil, false
