@@ -16,6 +16,7 @@ related_files:
   - tui/internal/fs/heartbeat.go
   - tui/internal/fs/heartbeat_test.go
   - tui/internal/fs/atomic_write.go
+  - tui/internal/fs/atomic_write_permissions_unix_test.go
   - tui/internal/fs/file_ops_unix.go
   - tui/internal/fs/file_ops_windows.go
   - tui/internal/fs/mail.go
@@ -96,7 +97,7 @@ The TUI's filesystem window into an agent working directory (`<project>/.lingtai
 | `IsAlive(dir, thresholdSec)` | `tui/internal/fs/heartbeat.go:11` | reads `.agent.heartbeat` unix timestamp, returns `age < threshold` |
 | `IsAliveHuman()` | `tui/internal/fs/heartbeat.go:24` | always `true` |
 | **atomic_write.go / file_ops_*.go** | | |
-| `writeAtomicReplacement` / `writeAtomicBytes` | `tui/internal/fs/atomic_write.go:12-67` | writes through a unique same-directory temp, applies the requested mode, flushes and closes it, atomically replaces the destination, cleans every unpublished temp, and best-effort flushes the parent directory |
+| `writeAtomicReplacement` / `createAtomicReplacementTemp` / `writeAtomicBytes` | `tui/internal/fs/atomic_write.go:15-106` | writes through a random exclusive same-directory temp, preserves an existing target's permission bits or applies the caller fallback through the process umask for a new target, flushes and closes before atomic replacement, cleans every unpublished temp, and best-effort flushes the parent directory |
 | `replaceFile` / `lockFileExclusive` / `unlockFile` | `tui/internal/fs/file_ops_unix.go:10-20`, `tui/internal/fs/file_ops_windows.go:11-31` | supplies platform replacement and advisory-lock operations: rename/flock on non-Windows and `MoveFileEx` with replacement/write-through plus `LockFileEx`/`UnlockFileEx` on Windows |
 | **mail.go** | | |
 | `newMailboxID()` | `tui/internal/fs/mail.go:33` | builds `YYYYMMDDTHHMMSS-xxxx` short id matching the kernel's `_new_mailbox_id` |
