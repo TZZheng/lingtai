@@ -998,6 +998,13 @@ func (a App) handlePaletteCommand(command, args string) (tea.Model, tea.Cmd) {
 		// in init.json (manifest.capabilities.skills.paths).
 		a.library = NewLibraryModel(a.projectDir, a.orchDir, a.tuiConfig.Language)
 		return a, tea.Batch(a.library.Init(), a.sendSize())
+	case "agents":
+		// The /agents selector is a Mail-owned overlay over the canonical
+		// conversation rows; it works at every terminal width.
+		if a.currentView == appViewMail {
+			a.mail = a.mail.openAgentSelector()
+		}
+		return a, nil
 	case "projects":
 		return a.openProjectsView()
 	case "knowledge", "library", "codex":

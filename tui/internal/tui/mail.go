@@ -222,6 +222,13 @@ type MailModel struct {
 	generation           uint64                 // activation token; stale async messages are ignored without rescheduling
 	beforeRebuild        func()                 // optional deterministic test hook before deferred rebuild I/O
 
+	// The /agents direct-conversation core: one accepted publication serial,
+	// the Mail-owned canonical conversation catalog/selection, and the one
+	// current-only direct state projected from the accepted snapshot.
+	acceptedSnapshotSerial uint64
+	directChat             directChatState
+	agentSelector          agentSelectorState
+
 	// Home telemetry is resolved asynchronously off the render/input path (its
 	// I/O reaches sqlite + the token ledger + .status.json, which can stall on a
 	// locked/slow sidecar). View()/hasHomeTelemetry()/syncViewportHeight() read
@@ -403,8 +410,15 @@ func (m *MailModel) syncViewportHeight() bool {
 	if m.input.IsPaletteActive() {
 		paletteLines = m.palette.LineCount()
 	}
-	bannerLines := m.bannerLineCount()
-	telemetryRow := m.hasHomeTelemetry()
+	// Direct View suppresses Main's history banners and home telemetry, so its
+	// viewport must reclaim exactly those rows while leaving Main state intact.
+	_, direct := m.currentDirectTarget()
+	bannerLines := 0
+	telemetryRow := false
+	if !direct {
+		bannerLines = m.bannerLineCount()
+		telemetryRow = m.hasHomeTelemetry()
+	}
 	if inputLines == m.lastInputLines && paletteLines == m.lastPaletteLines && bannerLines == m.lastBannerLines && telemetryRow == m.lastTelemetryRow {
 		return false
 	}
@@ -435,12 +449,14 @@ func (m *MailModel) inputRegionBounds() (start, end int) {
 		paletteLines = m.palette.LineCount()
 	}
 	topBannerLines := 0
-	if m.hasMoreOlder() {
-		topBannerLines = 1
-	}
 	bottomBannerLines := 0
-	if m.loadedExtra > 0 {
-		bottomBannerLines = 1
+	if _, direct := m.currentDirectTarget(); !direct {
+		if m.hasMoreOlder() {
+			topBannerLines = 1
+		}
+		if m.loadedExtra > 0 {
+			bottomBannerLines = 1
+		}
 	}
 	start = 2 + topBannerLines + m.viewport.Height() + bottomBannerLines + 1 + paletteLines
 	end = start + m.input.LineCount() + 1 // input rows plus border line
@@ -834,7 +850,10 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			m.syncViewportHeight()
 			return m, nil
 		}
-		// Forward scroll wheel events outside the input box to the chat viewport.
+		if _, direct := m.currentDirectTarget(); direct {
+			return m.updateDirectScroll(msg)
+		}
+		// Forward scroll wheel events outside the input box to Main's chat viewport.
 		if m.ready {
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
@@ -930,6 +949,9 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		}
 		m.cache = msg.cache
 		m.acceptedSnapshot = newAcceptedMailSnapshot(msg.cache)
+		m = m.publishAcceptedSelectorRows()
+		var directVisibilityCmd tea.Cmd
+		m, directVisibilityCmd = m.publishAcceptedDirectSnapshot()
 		m.orchAlive = msg.alive
 		m.orchState = msg.state
 		m.networkActivity = msg.activity
@@ -991,15 +1013,21 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		// The command itself performs no I/O; mailPersistMsg re-enters Update for a
 		// second generation/cache-identity gate and serialized persistence.
 		if persistCmd != nil || countCmd != nil {
+			if directVisibilityCmd != nil {
+				return m, tea.Batch(persistCmd, countCmd, directVisibilityCmd)
+			}
 			return m, tea.Batch(persistCmd, countCmd)
 		}
 		// Kick off the first background telemetry fetch as soon as a refresh has
 		// landed (including ordinary refreshes), so the row can appear without
 		// waiting a full poll tick. Initial rebuilds schedule it after persistence.
 		if cmd := m.maybeScheduleHomeTelemetry(time.Now()); cmd != nil {
+			if directVisibilityCmd != nil {
+				return m, tea.Batch(cmd, directVisibilityCmd)
+			}
 			return m, cmd
 		}
-		return m, nil
+		return m, directVisibilityCmd
 
 	case mailPersistMsg:
 		// Persist only the cache still installed for this activation. This runs on
@@ -1177,6 +1205,19 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 			m.syncViewportHeight()
 			return m, func() tea.Msg { return PaletteSelectMsg{Command: cmd, Args: args} }
 		}
+		if target, ok := m.currentDirectTarget(); ok {
+			if err := fs.WriteMail(target.Directory, m.humanDir, m.humanAddr, target.Address, "", text); err != nil {
+				if fromPending {
+					m.pendingMessage = text
+				}
+				m.input.SetValue(text)
+				m.AddSystemMessage(i18n.TF("mail.send_failed", err))
+				return m, nil
+			}
+			m.input.Reset()
+			m.syncViewportHeight()
+			return m, m.refreshMail
+		}
 		if m.orchestrator != "" {
 			if err := fs.WriteMail(m.orchestrator, m.humanDir, m.humanAddr, m.orchAddr, "", text); err != nil {
 				if fromPending {
@@ -1220,6 +1261,10 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		return m, func() tea.Msg { return PaletteSelectMsg{Command: msg.Command} }
 
 	case tea.KeyPressMsg:
+		// The /agents overlay owns keys while open, before any other surface.
+		if m.agentSelector.selectorOpen {
+			return m.updateAgentSelector(msg)
+		}
 		// Editor warning overlay — Enter proceeds, Esc cancels
 		if m.showEditorWarn {
 			switch msg.String() {
@@ -1291,6 +1336,15 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 					m.palette.SetFilter("")
 				}
 				return m, cmd
+			}
+		}
+
+		// A current direct conversation owns its own scroll surface; these keys
+		// navigate the direct viewport instead of Main history or the composer.
+		if _, direct := m.currentDirectTarget(); direct {
+			switch msg.String() {
+			case "pgup", "pgdown", "home", "end", "ctrl+u", "ctrl+d", "ctrl+end":
+				return m.updateDirectScroll(msg)
 			}
 		}
 
@@ -1991,6 +2045,7 @@ func (m MailModel) View() string {
 	if !m.ready {
 		return "\n  " + i18n.T("app.loading")
 	}
+	_, direct := m.currentDirectTarget()
 
 	// Build header: left = app title, center = thinking quote, right = agent [state]
 	brand := i18n.T("app.brand")
@@ -2007,7 +2062,7 @@ func (m MailModel) View() string {
 	stateLabel := i18n.T("state." + stateKey)
 	stateStyle := lipgloss.NewStyle().Foreground(StateColor(strings.ToUpper(stateKey)))
 	orchNameStyle := lipgloss.NewStyle().Foreground(ColorText).Bold(true)
-	titleRightBase := orchNameStyle.Render(m.orchDisplayName()) + " " + stateStyle.Render("◉ "+stateLabel)
+	titleRightBase := orchNameStyle.Render(m.activeRecipientLabel()) + " " + stateStyle.Render("◉ "+stateLabel)
 
 	// Thinking indicator: fixed quote per ACTIVE session, pulsing color + spinners
 	titleCenter := ""
@@ -2053,7 +2108,7 @@ func (m MailModel) View() string {
 	// where their attention already is. Reuses the header's stateStyle/stateLabel
 	// and is independent of the verbose level.
 	indicator := stateStyle.Render(m.stateGlyph() + " " + stateLabel + m.activeElapsed())
-	toLabel := StyleFaint.Render("Email To: ") + lipgloss.NewStyle().Foreground(ColorAgent).Render(m.orchDisplayName()) + "  " + indicator + " "
+	toLabel := StyleFaint.Render("Email To: ") + lipgloss.NewStyle().Foreground(ColorAgent).Render(m.activeRecipientLabel()) + "  " + indicator + " "
 	sepWidth := m.width - lipgloss.Width(toLabel)
 	if sepWidth < 0 {
 		sepWidth = 0
@@ -2078,7 +2133,7 @@ func (m MailModel) View() string {
 			badge = ansi.Truncate(badge, m.width-1, "…")
 		}
 		leftLabel = lipgloss.NewStyle().Foreground(ColorAccent).Render(badge)
-	} else if m.inquiryState == "sent" || m.inquiryState == "taken" {
+	} else if !direct && (m.inquiryState == "sent" || m.inquiryState == "taken") {
 		leftLabel = lipgloss.NewStyle().Foreground(ColorAccent).Render("  ◉ " + i18n.T("mail.btw_thinking"))
 	} else if m.statusFlash != "" && time.Now().Before(m.statusExpiry) {
 		leftLabel = lipgloss.NewStyle().Foreground(ColorAgent).Render("  ◉ " + m.statusFlash)
@@ -2121,31 +2176,38 @@ func (m MailModel) View() string {
 	// Gate on hasHomeTelemetry() (which carries the homeTelemetryLoaded guard) so
 	// View and syncViewportHeight share the exact same visibility predicate and can
 	// never disagree about whether the row occupies a line.
-	if m.hasHomeTelemetry() {
+	if !direct && m.hasHomeTelemetry() {
 		if telemetry := formatHomeTelemetry(m.homeTelemetry, m.width); telemetry != "" {
 			footer += telemetry + "\n"
 		}
 	}
 	footer += statusBar
 
+	// Main history banners never belong to the strict current direct projection.
 	// Top banner: a one-time "loading... / 加载中..." line while the deferred
 	// initial session rebuild is still pending, then "▲ N older — ctrl+u to load".
 	topBanner := ""
-	if m.initialLoading || m.historyCountLoading {
-		loadingText := i18n.T("mail.initial_loading")
-		topBanner = StyleFaint.Render(centerText(loadingText, m.width)) + "\n"
-	} else if m.hasMoreOlder() {
-		bannerText := i18n.TF("mail.load_more", m.olderCount())
-		topBanner = StyleFaint.Render(centerText(bannerText, m.width)) + "\n"
-	}
-
-	// Bottom banner: "▼ ctrl+d to collapse to recent"
 	bottomBanner := ""
-	if m.loadedExtra > 0 {
-		bannerText := i18n.T("mail.collapse")
-		bottomBanner = StyleFaint.Render(centerText(bannerText, m.width)) + "\n"
+	if !direct {
+		if m.initialLoading || m.historyCountLoading {
+			loadingText := i18n.T("mail.initial_loading")
+			topBanner = StyleFaint.Render(centerText(loadingText, m.width)) + "\n"
+		} else if m.hasMoreOlder() {
+			bannerText := i18n.TF("mail.load_more", m.olderCount())
+			topBanner = StyleFaint.Render(centerText(bannerText, m.width)) + "\n"
+		}
+		// Bottom banner: "▼ ctrl+d to collapse to recent"
+		if m.loadedExtra > 0 {
+			bannerText := i18n.T("mail.collapse")
+			bottomBanner = StyleFaint.Render(centerText(bannerText, m.width)) + "\n"
+		}
 	}
 
-	// Viewport fills the middle
-	return header + "\n" + topBanner + PaintViewportBG(m.viewportWithChatTailHint(), m.width) + "\n" + bottomBanner + footer
+	// The open /agents overlay replaces the frame; a validated direct selection
+	// composes only its accepted projection through a viewport value copy,
+	// preserving Main's rich viewport content and scroll for return to Main.
+	if m.agentSelector.selectorOpen {
+		return m.renderAgentSelector()
+	}
+	return header + "\n" + topBanner + PaintViewportBG(m.activeViewportView(), m.width) + "\n" + bottomBanner + footer
 }

@@ -55,6 +55,7 @@ Linux/Windows). Press `Ctrl+Y` again or `Esc` to exit.
 ### Network & sharing
 - `/mailbox` — browse all mailbox messages and attachments.
 - `/projects` — switch into another running admin agent's project/mail context.
+- `/agents` — choose Main or a same-project agent for direct mail.
 - `/export` — export a reusable recipe for sharing.
 - `/viz` — open the network visualization in the browser.
 
@@ -232,6 +233,13 @@ Browses every mailbox message — inbox, sent, and IMAP — with the full messag
 body and inline attachment rendering. Use it for the complete mail record for an
 agent, including external IMAP mail and attachments, rather than the live chat
 stream.
+
+### `/agents` — choose a mail conversation
+**Usage:** `/agents`
+
+Choose Main or a same-project agent for direct mail. Move with the arrow keys
+(or j/k) and Home/End, select with Enter or Space, and press Esc to cancel
+without changing the current conversation.
 
 ### `/projects` — switch to a running admin agent
 **Usage:** `/projects`
