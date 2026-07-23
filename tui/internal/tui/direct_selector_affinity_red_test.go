@@ -116,8 +116,10 @@ func directAffinityWriteManifest(t *testing.T, directory, agentID, nickname, add
 		t.Fatalf("create agent directory %q: %v", directory, err)
 	}
 	admin := "{}"
+	location := ""
 	if human {
 		admin = "null"
+		location = fmt.Sprintf(",\n\t\t\"location\":{\"resolved_at\":%q}", time.Now().UTC().Format(time.RFC3339))
 	}
 	body := fmt.Sprintf(`{
 		"agent_id":%q,
@@ -125,8 +127,8 @@ func directAffinityWriteManifest(t *testing.T, directory, agentID, nickname, add
 		"nickname":%q,
 		"address":%q,
 		"state":"STOPPED",
-		"admin":%s
-	}`, agentID, nickname, nickname, address, admin)
+		"admin":%s%s
+	}`, agentID, nickname, nickname, address, admin, location)
 	if err := os.WriteFile(filepath.Join(directory, ".agent.json"), []byte(body), 0o644); err != nil {
 		t.Fatalf("write agent manifest %q: %v", agentID, err)
 	}
