@@ -164,6 +164,34 @@ func directAffinityPublish(app App, accepted []fs.MailMessage) (App, tea.Cmd) {
 	})
 }
 
+// directAffinityRequirePreparedRefresh keeps the pre-Green RED compile-valid
+// while proving that the same ctrl+r command becomes the real detached prepared
+// producer at Green: one nonzero request serial, prepared=true, and one
+// immutable direct publication. Reflection is test-only because those fields
+// are intentionally introduced by the Green whose chronology this RED guards.
+func directAffinityRequirePreparedRefresh(t *testing.T, refresh mailRefreshMsg) {
+	t.Helper()
+	value := reflect.ValueOf(refresh)
+	serial := value.FieldByName("refreshRequestSerial")
+	if !serial.IsValid() {
+		t.Error("real ctrl+r refresh completion has no refreshRequestSerial field")
+	} else if serial.Kind() != reflect.Uint64 || serial.Uint() == 0 {
+		t.Errorf("real ctrl+r refresh serial = %v, want a nonzero uint64", serial)
+	}
+	prepared := value.FieldByName("prepared")
+	if !prepared.IsValid() {
+		t.Error("real ctrl+r refresh completion has no prepared field")
+	} else if prepared.Kind() != reflect.Bool || !prepared.Bool() {
+		t.Errorf("real ctrl+r refresh prepared = %v, want true", prepared)
+	}
+	publication := value.FieldByName("directPublication")
+	if !publication.IsValid() {
+		t.Error("real ctrl+r refresh completion has no directPublication field")
+	} else if publication.Kind() != reflect.Ptr || publication.IsNil() {
+		t.Errorf("real ctrl+r refresh publication = %v, want non-nil pointer", publication)
+	}
+}
+
 // directAffinityOpenAgents takes the real App /agents route. Tests with an
 // empty compose type through InputModel and the command palette; tests that
 // deliberately preserve a Main draft feed the same PaletteSelectMsg that the
@@ -520,6 +548,59 @@ func TestDirectV1AcceptedRefreshReconcilesCurrentTarget(t *testing.T) {
 	}
 	if got := len(directAffinityOutbox(t, fixture.humanDir)); got != beforeStaleSend {
 		t.Errorf("removed A stale compose created outbox work: before=%d after=%d", beforeStaleSend, got)
+	}
+}
+
+// TestDirectV1RouteRemovalClearsPendingEditorWarning requires accepted route
+// removal to discard a warning-owned direct draft before restoring Main. The
+// warning must not survive long enough to launch that draft under Main context.
+func TestDirectV1RouteRemovalClearsPendingEditorWarning(t *testing.T) {
+	fixture := newDirectAffinityFixture(t, false)
+	app := fixture.app
+
+	const mainCompose = "MAIN COMPOSE SURVIVES EDITOR WARNING ROUTE LOSS"
+	app.mail.input.SetValue(mainCompose)
+	app.mail.pendingMessage = ""
+	app, _ = directAffinityActivate(t, app, fixture.targetA.AgentID)
+	if _, ok := app.mail.currentDirectTarget(); !ok {
+		t.Fatal("precondition: direct A is not current")
+	}
+
+	// Issue the real serialized ctrl+r producer before the warning owns all key
+	// input. Execute it only after removing A so its detached discovery observes
+	// the route loss while the warning is still open.
+	var refreshCmd tea.Cmd
+	app.mail, refreshCmd = directOrderingIssueRefresh(t, app.mail)
+
+	const directWarningText = "DIRECT A WARNING DRAFT MUST NOT BECOME MAIN"
+	app, _ = directAffinityApply(app, OpenEditorMsg{Text: directWarningText})
+	if !app.mail.showEditorWarn || app.mail.editorWarnText != directWarningText {
+		t.Fatalf("precondition: editor warning = (%v, %q), want (true, %q)",
+			app.mail.showEditorWarn, app.mail.editorWarnText, directWarningText)
+	}
+
+	if err := os.RemoveAll(fixture.targetA.Directory); err != nil {
+		t.Fatalf("remove current A route: %v", err)
+	}
+	refreshRaw := directOrderingRunRefresh(t, refreshCmd, "route-removal request")
+	refresh, ok := refreshRaw.(mailRefreshMsg)
+	if !ok {
+		t.Fatalf("route-removal request produced %T, want mailRefreshMsg", refreshRaw)
+	}
+	directAffinityRequirePreparedRefresh(t, refresh)
+	app, _ = directAffinityApply(app, refresh)
+
+	if _, ok := app.mail.currentDirectTarget(); ok {
+		t.Fatal("removed A retained a current direct target")
+	}
+	if got := app.mail.input.Value(); got != mainCompose {
+		t.Fatalf("removed A restored Main compose %q, want %q", got, mainCompose)
+	}
+	if app.mail.showEditorWarn {
+		t.Error("removed A left the direct editor warning open in Main")
+	}
+	if got := app.mail.editorWarnText; got != "" {
+		t.Errorf("removed A retained warning-owned direct text in Main: %q", got)
 	}
 }
 

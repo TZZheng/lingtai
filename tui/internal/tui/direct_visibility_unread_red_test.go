@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -546,12 +547,23 @@ func TestDirectUnreadMarkSeenFailureFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// writeJSONAtomic uses statePath+".tmp"; a directory there deterministically
-	// makes persistence fail without changing the durable file.
-	if err := os.Mkdir(statePath+".tmp", 0o755); err != nil {
+	// The shared durability primitive publishes through unique sibling temps, so
+	// a fixed statePath+".tmp" entry can no longer force a failure. Removing
+	// write permission from the state directory deterministically fails the
+	// replacement-temp creation without changing the durable file; the mode is
+	// restored immediately after the guarded visibility delivery.
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission injection is not enforced on Windows")
+	}
+	stateDir := filepath.Dir(statePath)
+	if err := os.Chmod(stateDir, 0o555); err != nil {
 		t.Fatalf("create deterministic MarkSeen blocker: %v", err)
 	}
+	t.Cleanup(func() { _ = os.Chmod(stateDir, 0o755) })
 	mail, _ = mail.Update(visibility)
+	if err := os.Chmod(stateDir, 0o755); err != nil {
+		t.Fatalf("release deterministic MarkSeen blocker: %v", err)
+	}
 
 	if got := directUnreadRedCount(t, project, targets, project.targetA, accepted); got != 1 {
 		t.Errorf("failed visible MarkSeen unread = %d, want retained 1", got)
