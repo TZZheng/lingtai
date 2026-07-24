@@ -1394,7 +1394,10 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		return m, cmd
 
 	case OpenEditorMsg:
-		// Show editor intro page before launching
+		// Show editor intro page before launching. The command that emits this
+		// message is asynchronous, so an intervening Tab may have focused the
+		// conversation rail; the warning must take sole surface ownership.
+		m = m.blurAgentRail()
 		m.showEditorWarn = true
 		m.editorWarnText = msg.Text
 		return m, nil

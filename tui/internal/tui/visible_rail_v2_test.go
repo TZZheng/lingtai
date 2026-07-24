@@ -612,6 +612,29 @@ func TestVisibleRailV2KeyboardFocusAndActivation(t *testing.T) {
 				t.Error("Tab stole focus while the editor warning was open")
 			}
 		})
+		t.Run("delayed editor result takes focus from the rail", func(t *testing.T) {
+			fixture := newFixture(t)
+			app, openEditorCmd := visibleRailV2Apply(fixture.app, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+			if openEditorCmd == nil {
+				t.Fatal("real Ctrl+E produced no delayed OpenEditorMsg command")
+			}
+			app = visibleRailV2Focus(t, app)
+			openEditorResult := openEditorCmd()
+			openEditor, ok := openEditorResult.(OpenEditorMsg)
+			if !ok {
+				t.Fatalf("real Ctrl+E command returned %T, want OpenEditorMsg", openEditorResult)
+			}
+			app, _ = visibleRailV2Apply(app, openEditor)
+			if !app.mail.showEditorWarn || visibleRailV2ObserveRail(app.mail).focused || !app.mail.input.Focused() {
+				t.Errorf("delayed editor result left competing focus: warning=%v rail=%v input=%v",
+					app.mail.showEditorWarn, visibleRailV2ObserveRail(app.mail).focused, app.mail.input.Focused())
+			}
+			app, _ = visibleRailV2Apply(app, tea.KeyPressMsg{Code: tea.KeyEsc})
+			if app.mail.showEditorWarn || visibleRailV2ObserveRail(app.mail).focused || !app.mail.input.Focused() {
+				t.Errorf("one Esc after delayed editor result did not close only the warning and restore composer focus: warning=%v rail=%v input=%v",
+					app.mail.showEditorWarn, visibleRailV2ObserveRail(app.mail).focused, app.mail.input.Focused())
+			}
+		})
 		t.Run("palette prevents rail focus", func(t *testing.T) {
 			fixture := newFixture(t)
 			app := fixture.app
