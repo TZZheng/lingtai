@@ -60,12 +60,13 @@ type ViewChangeMsg struct {
 
 type pulseTickMsg struct {
 	generation uint64
+	pollEpoch  uint64
 	at         time.Time
 }
 
-func pulseTick(generation uint64) tea.Cmd {
+func pulseTick(generation, pollEpoch uint64) tea.Cmd {
 	return tea.Every(250*time.Millisecond, func(t time.Time) tea.Msg {
-		return pulseTickMsg{generation: generation, at: t}
+		return pulseTickMsg{generation: generation, pollEpoch: pollEpoch, at: t}
 	})
 }
 
@@ -120,6 +121,7 @@ type mailHistoryCountMsg struct {
 
 type tickMsg struct {
 	generation uint64
+	pollEpoch  uint64
 	at         time.Time
 }
 
@@ -134,9 +136,9 @@ type EditorDoneMsg struct {
 	DirectGeneration uint64
 }
 
-func tickEvery(d time.Duration, generation uint64) tea.Cmd {
+func tickEvery(d time.Duration, generation, pollEpoch uint64) tea.Cmd {
 	return tea.Every(d, func(t time.Time) tea.Msg {
-		return tickMsg{generation: generation, at: t}
+		return tickMsg{generation: generation, pollEpoch: pollEpoch, at: t}
 	})
 }
 
@@ -236,6 +238,7 @@ type MailModel struct {
 	historyStats         fs.SessionHistoryStats // accepted exact count, reused across every older-page rebuild
 	copyMode             bool                   // chat-only: disables mouse capture so the terminal can select/copy visible text
 	generation           uint64                 // activation token; stale async messages are ignored without rescheduling
+	pollEpoch            uint64                 // timer-chain token; one tick/pulse loop is current inside an activation
 	beforeRebuild        func()                 // optional deterministic test hook before deferred rebuild I/O
 
 	// The one monotonic refresh request serial with its newest-accepted
@@ -938,7 +941,24 @@ func mailMessageToChatMessage(msg fs.MailMessage, humanAddr, orchName string) Ch
 	}
 }
 
+func (m *MailModel) advancePollEpoch() {
+	m.pollEpoch++
+	if m.pollEpoch == 0 {
+		m.pollEpoch = 1
+	}
+}
+
+func (m MailModel) pollLoopCmds() (tea.Cmd, tea.Cmd) {
+	return tickEvery(m.pollRate, m.generation, m.pollEpoch), pulseTick(m.generation, m.pollEpoch)
+}
+
+func (m *MailModel) restartPollLoop() (tea.Cmd, tea.Cmd) {
+	m.advancePollEpoch()
+	return m.pollLoopCmds()
+}
+
 func (m MailModel) Init() tea.Cmd {
+	tickCmd, pulseCmd := m.pollLoopCmds()
 	return tea.Batch(
 		m.input.Init(),
 		// initialRebuild does the one-time authoritative session rebuild off the
@@ -947,8 +967,8 @@ func (m MailModel) Init() tea.Cmd {
 		// view once history is loaded. The periodic tick below then keeps it
 		// current via the incremental Refresh path.
 		m.initialRebuild,
-		tickEvery(m.pollRate, m.generation),
-		pulseTick(m.generation),
+		tickCmd,
+		pulseCmd,
 	)
 }
 
@@ -1316,16 +1336,16 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		return m, nil
 
 	case pulseTickMsg:
-		if msg.generation != m.generation {
+		if msg.generation != m.generation || msg.pollEpoch != m.pollEpoch {
 			return m, nil
 		}
 		if strings.EqualFold(m.orchState, "ACTIVE") || strings.EqualFold(m.activeRecipientLifecycle().state, "ACTIVE") {
 			m.pulseTick++
 		}
-		return m, pulseTick(m.generation)
+		return m, pulseTick(m.generation, msg.pollEpoch)
 
 	case tickMsg:
-		if msg.generation != m.generation {
+		if msg.generation != m.generation || msg.pollEpoch != m.pollEpoch {
 			return m, nil
 		}
 		// Steady-state driver: alongside the incremental mail refresh, schedule a
@@ -1333,7 +1353,7 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		// I/O funnels through maybeScheduleHomeTelemetry — the UI path never gathers.
 		var refreshCmd tea.Cmd
 		m, refreshCmd = m.issueRefreshRequest()
-		cmds = append(cmds, refreshCmd, tickEvery(m.pollRate, m.generation))
+		cmds = append(cmds, refreshCmd, tickEvery(m.pollRate, m.generation, msg.pollEpoch))
 		if cmd := m.maybeScheduleHomeTelemetry(time.Now()); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
