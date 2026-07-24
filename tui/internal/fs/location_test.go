@@ -311,3 +311,81 @@ func TestUpdateHumanLocationConcurrentCallersLeaveValidManifest(t *testing.T) {
 		t.Fatalf("generated temp residue remains: %v", generatedTemps)
 	}
 }
+
+func captureLocationPanic(fn func()) (panicValue interface{}) {
+	defer func() {
+		panicValue = recover()
+	}()
+	fn()
+	return nil
+}
+
+func TestHumanLocationUpdatesIgnoreMissingMalformedManifests(t *testing.T) {
+	cases := []struct {
+		name     string
+		contents *string
+	}{
+		{name: "missing"},
+		{name: "invalid JSON", contents: stringPointer("{")},
+		{name: "null JSON", contents: stringPointer("null")},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			humanDir := t.TempDir()
+			manifestPath := filepath.Join(humanDir, ".agent.json")
+			if tc.contents != nil {
+				if err := os.WriteFile(manifestPath, []byte(*tc.contents), 0o644); err != nil {
+					t.Fatalf("write malformed manifest: %v", err)
+				}
+			}
+
+			var requests atomic.Int32
+			installLocationTransport(t, func(_ *http.Request) (*http.Response, error) {
+				requests.Add(1)
+				return locationResponse(), nil
+			})
+
+			updatePanic := captureLocationPanic(func() {
+				UpdateHumanLocation(humanDir)
+			})
+			if updatePanic != nil {
+				t.Errorf("UpdateHumanLocation panicked: %v", updatePanic)
+			}
+			if got := requests.Load(); got != 0 {
+				t.Errorf("UpdateHumanLocation made %d resolver requests; want 0", got)
+			}
+
+			storePanic := captureLocationPanic(func() {
+				StoreResolvedHumanLocation(humanDir, Location{
+					City:       "Austin",
+					ResolvedAt: time.Now().Format(time.RFC3339),
+				})
+			})
+			if storePanic != nil {
+				t.Errorf("StoreResolvedHumanLocation panicked: %v", storePanic)
+			}
+			if got := requests.Load(); got != 0 {
+				t.Errorf("location entry points made %d resolver requests; want 0", got)
+			}
+
+			if tc.contents == nil {
+				if _, err := os.Stat(manifestPath); !os.IsNotExist(err) {
+					t.Errorf("missing manifest was created: err=%v", err)
+				}
+				return
+			}
+			got, err := os.ReadFile(manifestPath)
+			if err != nil {
+				t.Fatalf("read malformed manifest after no-op: %v", err)
+			}
+			if string(got) != *tc.contents {
+				t.Errorf("malformed manifest changed: got %q want %q", got, *tc.contents)
+			}
+		})
+	}
+}
+
+func stringPointer(value string) *string {
+	return &value
+}
