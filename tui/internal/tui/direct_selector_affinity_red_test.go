@@ -916,3 +916,43 @@ func TestDirectV1RecipientChromeUsesSelectedAgentLifecycle(t *testing.T) {
 		}
 	}
 }
+
+// TestDirectV1RecipientActiveSpinnerAdvancesWhenMainNotActive proves the
+// visible recipient owns animation as well as state: Main must not have to be
+// ACTIVE for a selected ACTIVE direct target's footer spinner to advance.
+func TestDirectV1RecipientActiveSpinnerAdvancesWhenMainNotActive(t *testing.T) {
+	fixture := newDirectAffinityFixture(t, true)
+	app := fixture.app
+	directAffinityWriteLiveState(t, fixture.targetA.Directory, "active")
+
+	var refreshCmd tea.Cmd
+	app.mail, refreshCmd = app.mail.issueRefreshRequest()
+	if refreshCmd == nil {
+		t.Fatal("selected-agent lifecycle refresh returned no command")
+	}
+	app, _ = directAffinityApply(app, refreshCmd())
+	if strings.EqualFold(app.mail.orchState, "active") {
+		t.Fatalf("precondition: Main state = %q, want non-ACTIVE", app.mail.orchState)
+	}
+	app, _ = directAffinityActivate(t, app, fixture.targetA.AgentID)
+	if lifecycle := app.mail.activeRecipientLifecycle(); !strings.EqualFold(lifecycle.state, "active") {
+		t.Fatalf("precondition: selected lifecycle = %#v, want ACTIVE", lifecycle)
+	}
+
+	startTick := app.mail.pulseTick
+	_, beforeEmail := directAffinityChromeLines(t, app.mail.View())
+	beforeFrame := spinnerFrames[startTick%len(spinnerFrames)]
+	if !strings.Contains(beforeEmail, beforeFrame) {
+		t.Fatalf("precondition: selected ACTIVE footer omitted frame %q: %q", beforeFrame, beforeEmail)
+	}
+
+	app, _ = directAffinityApply(app, pulseTickMsg{generation: app.mail.generation})
+	if got := app.mail.pulseTick; got != startTick+1 {
+		t.Fatalf("selected ACTIVE pulseTick = %d, want %d while Main is %q", got, startTick+1, app.mail.orchState)
+	}
+	_, afterEmail := directAffinityChromeLines(t, app.mail.View())
+	afterFrame := spinnerFrames[(startTick+1)%len(spinnerFrames)]
+	if !strings.Contains(afterEmail, afterFrame) {
+		t.Errorf("selected ACTIVE footer did not advance to frame %q: before=%q after=%q", afterFrame, beforeEmail, afterEmail)
+	}
+}

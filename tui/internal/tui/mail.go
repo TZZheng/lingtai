@@ -1321,7 +1321,7 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		if msg.generation != m.generation {
 			return m, nil
 		}
-		if strings.EqualFold(m.orchState, "ACTIVE") {
+		if strings.EqualFold(m.orchState, "ACTIVE") || strings.EqualFold(m.activeRecipientLifecycle().state, "ACTIVE") {
 			m.pulseTick++
 		}
 		return m, pulseTick(m.generation)
