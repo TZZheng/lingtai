@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -28,6 +29,23 @@ func humanLocationManifestMutex(path string) *sync.Mutex {
 	}
 	lock, _ := humanLocationManifestLocks.LoadOrStore(key, &sync.Mutex{})
 	return lock.(*sync.Mutex)
+}
+
+// RemoveHumanManifestForReset crosses the same canonical manifest mutex as
+// UpdateHumanLocation, then removes that writer's commit target. Call it at the
+// final reset boundary immediately before recursively deleting the project tree;
+// never hold this mutex across discovery, agent suspension, or RemoveAll.
+func RemoveHumanManifestForReset(humanDir string) error {
+	manifestPath := filepath.Join(humanDir, ".agent.json")
+	mutex := humanLocationManifestMutex(manifestPath)
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	err := os.Remove(manifestPath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 // ResolveLocation queries ipinfo.io and returns a populated Location.
