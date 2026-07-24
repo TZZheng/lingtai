@@ -1055,8 +1055,10 @@ func (a App) handlePaletteCommand(command, args string) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(a.library.Init(), a.sendSize())
 	case "agents":
 		// The /agents selector is a Mail-owned overlay over the canonical
-		// conversation rows; it works at every terminal width.
-		if a.currentView == appViewMail {
+		// conversation rows; it works at every terminal width. A delayed
+		// palette result cannot displace an editor warning that already owns
+		// the Mail surface.
+		if a.currentView == appViewMail && !a.mail.showEditorWarn {
 			a.mail = a.mail.openAgentSelector()
 		}
 		return a, nil
@@ -1497,7 +1499,7 @@ func (a App) updateMailMouseClick(msg tea.MouseClickMsg) (App, tea.Cmd) {
 		return a, nil
 	}
 	if budget.RailVisible && msg.X < budget.RailWidth {
-		if a.mail.copyMode || msg.Button != tea.MouseLeft {
+		if a.mail.copyMode || a.mail.directVisibilityObscured() || msg.Button != tea.MouseLeft {
 			return a, nil
 		}
 		row := a.mail.agentRailRowAt(childY)
@@ -1526,7 +1528,7 @@ func (a App) updateMailMouseWheel(msg tea.MouseWheelMsg) (App, tea.Cmd) {
 		return a, nil
 	}
 	if budget.RailVisible && msg.X < budget.RailWidth {
-		if a.mail.copyMode {
+		if a.mail.copyMode || a.mail.directVisibilityObscured() {
 			return a, nil
 		}
 		switch msg.Button {

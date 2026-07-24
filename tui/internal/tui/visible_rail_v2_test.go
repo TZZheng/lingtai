@@ -612,27 +612,43 @@ func TestVisibleRailV2KeyboardFocusAndActivation(t *testing.T) {
 				t.Error("Tab stole focus while the editor warning was open")
 			}
 		})
-		t.Run("delayed editor result takes focus from the rail", func(t *testing.T) {
+		t.Run("Ctrl+E opens the warning synchronously and delayed agents stays inert", func(t *testing.T) {
 			fixture := newFixture(t)
-			app, openEditorCmd := visibleRailV2Apply(fixture.app, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
-			if openEditorCmd == nil {
-				t.Fatal("real Ctrl+E produced no delayed OpenEditorMsg command")
+			app := fixture.app
+			app.mail.input.SetValue("route-affine draft")
+			app, openEditorCmd := visibleRailV2Apply(app, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+			if openEditorCmd != nil {
+				t.Error("real Ctrl+E left an asynchronous result that can outlive its Mail route")
+				// Keep exercising the old implementation after the authentic RED so the
+				// competing delayed-surface assertion remains independently observable.
+				app, _ = visibleRailV2Apply(app, openEditorCmd())
 			}
-			app = visibleRailV2Focus(t, app)
-			openEditorResult := openEditorCmd()
-			openEditor, ok := openEditorResult.(OpenEditorMsg)
-			if !ok {
-				t.Fatalf("real Ctrl+E command returned %T, want OpenEditorMsg", openEditorResult)
+			if !app.mail.showEditorWarn || app.mail.editorWarnText != "route-affine draft" ||
+				visibleRailV2ObserveRail(app.mail).focused || !app.mail.input.Focused() {
+				t.Errorf("Ctrl+E did not synchronously install the sole warning surface: warning=%v text=%q rail=%v input=%v",
+					app.mail.showEditorWarn, app.mail.editorWarnText,
+					visibleRailV2ObserveRail(app.mail).focused, app.mail.input.Focused())
 			}
-			app, _ = visibleRailV2Apply(app, openEditor)
-			if !app.mail.showEditorWarn || visibleRailV2ObserveRail(app.mail).focused || !app.mail.input.Focused() {
-				t.Errorf("delayed editor result left competing focus: warning=%v rail=%v input=%v",
-					app.mail.showEditorWarn, visibleRailV2ObserveRail(app.mail).focused, app.mail.input.Focused())
+
+			beforeKey := app.mail.agentSelector.selectedThreadKey
+			beforeCursor := app.mail.agentSelector.cursor
+			beforeInput := app.mail.input.Value()
+			app, _ = visibleRailV2Apply(app, PaletteSelectMsg{Command: "agents"})
+			if !app.mail.showEditorWarn || app.mail.agentSelector.selectorOpen {
+				t.Errorf("delayed /agents result competed with the already-visible editor warning: warning=%v selector=%v",
+					app.mail.showEditorWarn, app.mail.agentSelector.selectorOpen)
 			}
+			if app.mail.agentSelector.selectedThreadKey != beforeKey ||
+				app.mail.agentSelector.cursor != beforeCursor || app.mail.input.Value() != beforeInput {
+				t.Error("delayed /agents result changed current/cursor/composer behind the editor warning")
+			}
+
 			app, _ = visibleRailV2Apply(app, tea.KeyPressMsg{Code: tea.KeyEsc})
-			if app.mail.showEditorWarn || visibleRailV2ObserveRail(app.mail).focused || !app.mail.input.Focused() {
-				t.Errorf("one Esc after delayed editor result did not close only the warning and restore composer focus: warning=%v rail=%v input=%v",
-					app.mail.showEditorWarn, visibleRailV2ObserveRail(app.mail).focused, app.mail.input.Focused())
+			if app.mail.showEditorWarn || app.mail.agentSelector.selectorOpen ||
+				visibleRailV2ObserveRail(app.mail).focused || !app.mail.input.Focused() {
+				t.Errorf("one Esc did not close only the warning and restore composer routing: warning=%v selector=%v rail=%v input=%v",
+					app.mail.showEditorWarn, app.mail.agentSelector.selectorOpen,
+					visibleRailV2ObserveRail(app.mail).focused, app.mail.input.Focused())
 			}
 		})
 		t.Run("palette prevents rail focus", func(t *testing.T) {
@@ -688,6 +704,75 @@ func TestVisibleRailV2KeyboardFocusAndActivation(t *testing.T) {
 }
 
 func TestVisibleRailV2MouseWheelAndCoordinateRouting(t *testing.T) {
+	t.Run("modal surfaces keep rail click and wheel inert", func(t *testing.T) {
+		labels := []string{"Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel"}
+		for _, modal := range []struct {
+			name   string
+			open   func(MailModel) MailModel
+			isOpen func(MailModel) bool
+		}{
+			{
+				name: "editor warning",
+				open: func(m MailModel) MailModel {
+					m.showEditorWarn = true
+					m.editorWarnText = "modal draft"
+					return m
+				},
+				isOpen: func(m MailModel) bool { return m.showEditorWarn },
+			},
+			{
+				name:   "agents selector",
+				open:   func(m MailModel) MailModel { return m.openAgentSelector() },
+				isOpen: func(m MailModel) bool { return m.agentSelector.selectorOpen },
+			},
+			{
+				name: "palette",
+				open: func(m MailModel) MailModel {
+					m.input.SetValue("/")
+					return m
+				},
+				isOpen: func(m MailModel) bool { return m.input.IsPaletteActive() },
+			},
+		} {
+			t.Run(modal.name, func(t *testing.T) {
+				fixture := newVisibleRailV2Fixture(t, labels, make([]int, len(labels)), 85, 7, "ROOT")
+				app := fixture.app
+				app.mail = modal.open(app.mail)
+				if !app.mail.directVisibilityObscured() {
+					t.Fatal("test modal did not obscure the current Mail surface")
+				}
+				budget := app.layoutBudget()
+				row := visibleRailV2RowIndex(t, app.mail, fixture.targets[0].AgentID)
+				beforeKey := app.mail.agentSelector.selectedThreadKey
+				beforeCursor := app.mail.agentSelector.cursor
+				beforeInput := app.mail.input.Value()
+				beforeScroll := visibleRailV2ObserveRail(app.mail).scrollOffset
+
+				var cmd tea.Cmd
+				app, cmd = visibleRailV2Apply(app, tea.MouseWheelMsg{
+					X: 1, Y: budget.TopChromeRows + 3, Button: tea.MouseWheelDown,
+				})
+				if cmd != nil {
+					t.Error("modal rail wheel scheduled work")
+				}
+				app, cmd = visibleRailV2Apply(app, tea.MouseClickMsg(tea.Mouse{
+					X: 1, Y: budget.TopChromeRows + 2 + row, Button: tea.MouseLeft,
+				}))
+				if cmd != nil {
+					t.Error("modal rail click scheduled work")
+				}
+				if !modal.isOpen(app.mail) {
+					t.Errorf("rail mouse closed or displaced the owning %s surface", modal.name)
+				}
+				if app.mail.agentSelector.selectedThreadKey != beforeKey ||
+					app.mail.agentSelector.cursor != beforeCursor || app.mail.input.Value() != beforeInput ||
+					visibleRailV2ObserveRail(app.mail).scrollOffset != beforeScroll {
+					t.Errorf("%s allowed rail mouse to change current/cursor/composer/scroll behind the modal", modal.name)
+				}
+			})
+		}
+	})
+
 	t.Run("row click activates while title blank and right click are inert", func(t *testing.T) {
 		fixture := newVisibleRailV2Fixture(t, []string{"Alpha", "Bravo"}, []int{0, 0}, 85, 12, "ROOT")
 		app := fixture.app

@@ -1529,6 +1529,14 @@ func (m MailModel) Update(msg tea.Msg) (MailModel, tea.Cmd) {
 		}
 
 		switch msg.String() {
+		case "ctrl+e":
+			// Open the warning in this serialized Mail update. Returning a
+			// context-free command here would let the draft outlive a direct
+			// route or project change before the result comes back.
+			m = m.blurAgentRail()
+			m.showEditorWarn = true
+			m.editorWarnText = m.input.Value()
+			return m, nil
 		case "ctrl+v":
 			m.pasteClipboardImageFromSystem()
 			return m, nil
