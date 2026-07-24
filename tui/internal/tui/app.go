@@ -99,6 +99,9 @@ type App struct {
 	mailGeneration       uint64
 	projectsActivationID uint64
 
+	nirvanaCleanupPending bool
+	nirvanaCleanupStarted bool
+
 	visiting                bool
 	visitOriginalProjectDir string
 	visitOriginalOrchDir    string
@@ -129,6 +132,31 @@ func (a *App) installMailModel(m MailModel) {
 	m.directUnreadSyncPending = false
 	m.directUnreadOpSerial = nextAcceptedSnapshotSerial(m.directUnreadOpSerial)
 	a.mail = m
+}
+
+// beginNirvanaCleanup synchronously retires queued Mail work before any
+// destructive command can run. The one direct-unread durable operation already
+// in flight keeps its serial so its exact terminal result can clear the lane;
+// only its queued continuation is cancelled.
+func (a App) beginNirvanaCleanup() (App, tea.Cmd) {
+	if a.currentView != appViewNirvana || !a.nirvana.cleaning || a.nirvanaCleanupPending {
+		return a, nil
+	}
+
+	a.nirvanaCleanupPending = true
+	a.nirvanaCleanupStarted = false
+	a.mailGeneration++
+	a.mail.generation = a.mailGeneration
+	a.mail.directUnreadSyncPending = false
+	return a.maybeStartNirvanaCleanup()
+}
+
+func (a App) maybeStartNirvanaCleanup() (App, tea.Cmd) {
+	if !a.nirvanaCleanupPending || a.nirvanaCleanupStarted || a.mail.directUnreadOpInFlight {
+		return a, nil
+	}
+	a.nirvanaCleanupStarted = true
+	return a, a.nirvana.doClean()
 }
 
 // issueMailRefresh issues the one refresh request serial on the Update loop
@@ -349,7 +377,24 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// === Cross-view messages ===
 
-	case mailRefreshMsg, mailPersistMsg, mailHistoryCountMsg, mailOlderPageMsg, homeTelemetryMsg, directUnreadResultMsg:
+	case nirvanaCleanStartMsg:
+		return a.beginNirvanaCleanup()
+
+	case directUnreadResultMsg:
+		// The exact terminal result must always pass through Mail so it can clear
+		// the durable lane. During Nirvana retirement, discard every follow-up
+		// command and start cleanup only after that lane is observably idle.
+		var cmd tea.Cmd
+		a.mail, cmd = a.mail.Update(msg)
+		if a.nirvanaCleanupPending {
+			if a.mail.directUnreadOpInFlight {
+				return a, nil
+			}
+			return a.maybeStartNirvanaCleanup()
+		}
+		return a, cmd
+
+	case mailRefreshMsg, mailPersistMsg, mailHistoryCountMsg, mailOlderPageMsg, homeTelemetryMsg:
 		// Mail content/count rebuilds, older pages, post-frame persistence, and
 		// telemetry can outlive the view that launched them. Route all at the root so Projects/Help
 		// cannot drop Mail's state machine; MailModel owns generation acceptance.
@@ -576,6 +621,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RecipeFreshStartMsg:
 		a.pendingRecipe = msg.Recipe
 		a.pendingCustomDir = msg.CustomDir
+		a.nirvanaCleanupPending = false
+		a.nirvanaCleanupStarted = false
 		a.currentView = appViewNirvana
 		a.nirvana = NewNirvanaModel(a.projectDir)
 		return a, tea.Batch(a.nirvana.Init(), a.sendSize())
@@ -584,6 +631,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Nirvana complete: .lingtai/ wiped, go to first-run.
 		// Re-init project to recreate the human folder so agents can
 		// deliver mail once the new orchestrator starts.
+		a.nirvanaCleanupPending = false
+		a.nirvanaCleanupStarted = false
 		process.InitProject(a.projectDir)
 		a.orchDir = ""
 		a.orchName = ""
@@ -1021,6 +1070,8 @@ func (a App) handlePaletteCommand(command, args string) (tea.Model, tea.Cmd) {
 		a.settings = NewSettingsModel(a.globalDir, a.projectDir, targetDir, tuiCfg)
 		return a, tea.Batch(a.settings.Init(), a.sendSize())
 	case "nirvana":
+		a.nirvanaCleanupPending = false
+		a.nirvanaCleanupStarted = false
 		a.currentView = appViewNirvana
 		a.nirvana = NewNirvanaModel(a.projectDir)
 		return a, tea.Batch(a.nirvana.Init(), a.sendSize())
