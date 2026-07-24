@@ -946,7 +946,7 @@ func TestDirectV1RecipientActiveSpinnerAdvancesWhenMainNotActive(t *testing.T) {
 		t.Fatalf("precondition: selected ACTIVE footer omitted frame %q: %q", beforeFrame, beforeEmail)
 	}
 
-	app, _ = directAffinityApply(app, pulseTickMsg{generation: app.mail.generation})
+	app, _ = directAffinityApply(app, pulseTickMsg{generation: app.mail.generation, pollEpoch: app.mail.pollEpoch})
 	if got := app.mail.pulseTick; got != startTick+1 {
 		t.Fatalf("selected ACTIVE pulseTick = %d, want %d while Main is %q", got, startTick+1, app.mail.orchState)
 	}

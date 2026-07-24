@@ -120,6 +120,7 @@ func humanAddr(projectDir string) string {
 func (a *App) installMailModel(m MailModel) {
 	a.mailGeneration++
 	m.generation = a.mailGeneration
+	m.advancePollEpoch()
 	// Durable direct-unread operation results are activation-local. A preserved
 	// Mail model can return after prior lane results were routed through a
 	// visited context, so a new activation must not retain unfinishable
@@ -369,7 +370,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Likewise clear any global select mode left on by the view we came from
 		// (mail owns its own copyMode; the two must never both be active).
 		a.selectMode = false
-		return a, tea.Batch(a.issueMailRefresh(), tickEvery(a.mail.pollRate, a.mail.generation), pulseTick(a.mail.generation), a.sendSize())
+		tickCmd, pulseCmd := a.mail.restartPollLoop()
+		return a, tea.Batch(a.issueMailRefresh(), tickCmd, pulseCmd, a.sendSize())
 
 	case doctorResultMsg:
 		if a.currentView == appViewDoctor {
@@ -1762,7 +1764,8 @@ func (a *App) resumeMailModel(restored MailModel) tea.Cmd {
 	} else {
 		refreshCmd = a.issueMailRefresh()
 	}
-	return tea.Batch(refreshCmd, tickEvery(a.mail.pollRate, a.mail.generation), pulseTick(a.mail.generation), a.sendSize())
+	tickCmd, pulseCmd := a.mail.pollLoopCmds()
+	return tea.Batch(refreshCmd, tickCmd, pulseCmd, a.sendSize())
 }
 
 func (a App) maybeHandleVisitEsc(msg tea.KeyPressMsg) (App, tea.Cmd, bool) {
@@ -1839,6 +1842,7 @@ func (a App) switchToView(viewName string) (tea.Model, tea.Cmd) {
 		// Re-apply theme to textarea (settings may have changed it)
 		a.mail.input.ApplyTheme()
 		mailCmd := a.issueMailRefresh()
+		var tickCmd, pulseCmd tea.Cmd
 		if pageSizeChanged {
 			// The page size owns both visible batching and the bounded content
 			// snapshot. A preserved cache built with the previous setting cannot be
@@ -1847,13 +1851,17 @@ func (a App) switchToView(viewName string) (tea.Model, tea.Cmd) {
 			a.mail.initialLoading = true
 			a.installMailModel(a.mail)
 			mailCmd = a.mail.initialRebuild
+			tickCmd, pulseCmd = a.mail.pollLoopCmds()
+		} else {
+			tickCmd, pulseCmd = a.mail.restartPollLoop()
 		}
-		// Restart mail tick + refresh + pulse (ticks die when another view is active).
+		// Restart Mail refresh + tick/pulse. The new poll epoch invalidates any
+		// same-generation chain that was still pending outside Mail.
 		// Also (re)start the app-level auto-refresh ticker: this is the path
 		// taken when leaving /settings, where auto refresh may have just been
 		// toggled back on. startAutoRefresh is a no-op if it is already armed.
 		a, arCmd := a.startAutoRefresh()
-		return a, tea.Batch(mailCmd, tickEvery(a.mail.pollRate, a.mail.generation), pulseTick(a.mail.generation), a.sendSize(), arCmd)
+		return a, tea.Batch(mailCmd, tickCmd, pulseCmd, a.sendSize(), arCmd)
 	case "setup":
 		a.currentView = appViewFirstRun
 		a.firstRun = NewSetupModeModel(a.projectDir, a.globalDir, a.orchDir, a.orchName)
