@@ -813,7 +813,7 @@ func (a App) openSetupCredentials() (App, tea.Cmd) {
 }
 
 func (a App) handlePaletteCommand(command, args string) (tea.Model, tea.Cmd) {
-	if command != "agents" && a.currentView == appViewMail && a.mail.agentRail.focused {
+	if a.currentView == appViewMail && a.mail.agentRail.focused {
 		a.mail = a.mail.blurAgentRail()
 	}
 	addMsg := func(text string) {

@@ -614,6 +614,20 @@ func TestVisibleRailV2KeyboardFocusAndActivation(t *testing.T) {
 				t.Error("Tab escaped /agents into a second selector focus")
 			}
 		})
+		t.Run("delayed /agents result takes focus from the rail", func(t *testing.T) {
+			fixture := newFixture(t)
+			app := visibleRailV2Focus(t, fixture.app)
+			app, _ = visibleRailV2Apply(app, PaletteSelectMsg{Command: "agents"})
+			if !app.mail.agentSelector.selectorOpen || visibleRailV2ObserveRail(app.mail).focused || app.mail.input.Focused() {
+				t.Errorf("delayed /agents result left competing focus: selector=%v rail=%v input=%v",
+					app.mail.agentSelector.selectorOpen, visibleRailV2ObserveRail(app.mail).focused, app.mail.input.Focused())
+			}
+			app, _ = visibleRailV2Apply(app, tea.KeyPressMsg{Code: tea.KeyEsc})
+			if app.mail.agentSelector.selectorOpen || !app.mail.input.Focused() {
+				t.Errorf("one Esc after delayed /agents result did not close only the selector and restore composer focus: selector=%v input=%v",
+					app.mail.agentSelector.selectorOpen, app.mail.input.Focused())
+			}
+		})
 		t.Run("copy first Esc and global ctrl+c retain precedence", func(t *testing.T) {
 			fixture := newFixture(t)
 			app := visibleRailV2Focus(t, fixture.app)
