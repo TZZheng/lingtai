@@ -83,7 +83,7 @@ func UpdateHumanLocation(humanDir string) {
 	defer mutex.Unlock()
 
 	raw, err := ReadAgentRaw(humanDir)
-	if err != nil {
+	if err != nil || raw == nil {
 		return
 	}
 	if !LocationStale(locationFromManifest(raw), time.Hour) {
@@ -111,7 +111,7 @@ func StoreResolvedHumanLocation(humanDir string, resolved Location) {
 
 func storeResolvedHumanLocationLocked(humanDir, manifestPath string, resolved Location) {
 	latest, err := ReadAgentRaw(humanDir)
-	if err != nil {
+	if err != nil || latest == nil {
 		return
 	}
 	if !LocationStale(locationFromManifest(latest), time.Hour) {
