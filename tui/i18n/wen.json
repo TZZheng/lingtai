@@ -842,5 +842,12 @@
   "firstrun.preset_pick.draft_key_delete_blocked": "唯稿耳 —— 项未创竟，不得除共享 API 钥。已存之钥不改；请另入新钥，或竟或弃向导后于 /setup 理之。",
   "firstrun.preset_pick.draft_key_override_cleared": "本稿所改 API 钥已清；凡共享既存之钥，皆未更易。",
   "firstrun.preset_key.draft_editor_blocked": "唯稿耳 —— 项未创竟，外部编辑器不可用。请径粘钥于输入框。",
-  "firstrun.preset_pick.draft_codex_logout_blocked": "唯稿耳 —— 此 Codex 凭据先于此项之创而存，不得于此除之，盘中之物未曾稍改。请弃或竟其向导，而后于 /setup 登出。"
+  "firstrun.preset_pick.draft_codex_logout_blocked": "唯稿耳 —— 此 Codex 凭据先于此项之创而存，不得于此除之，盘中之物未曾稍改。请弃或竟其向导，而后于 /setup 登出。",
+  "palette.agents": "擇主會或靈使",
+  "cmd.agents": "擇主會或本案靈使，以通專函。",
+  "agent_selector.main": "主會",
+  "agent_selector.omitted": "已略 %d 不安靈使列",
+  "agent_selector.unread_failed": "靈使未讀之狀未能更新",
+  "agent_selector.title": "擇靈使",
+  "agent_selector.hint": "↑↓ 移 · enter 擇 · esc 罷"
 }

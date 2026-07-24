@@ -842,5 +842,12 @@
   "firstrun.preset_pick.draft_key_delete_blocked": "Draft only — removing a shared API key is disabled while creating a project. The saved key is unchanged; enter a replacement, or finish or cancel the wizard and manage it from /setup.",
   "firstrun.preset_pick.draft_key_override_cleared": "Draft API key edit cleared. Any shared saved key is unchanged.",
   "firstrun.preset_key.draft_editor_blocked": "Draft only — the external editor is disabled until you finish creating this project. Paste the key directly into the field instead.",
-  "firstrun.preset_pick.draft_codex_logout_blocked": "Draft only — this Codex credential already existed before this project draft, so it can't be removed here. Nothing on disk has changed. Cancel or finish the wizard, then log out from /setup instead."
+  "firstrun.preset_pick.draft_codex_logout_blocked": "Draft only — this Codex credential already existed before this project draft, so it can't be removed here. Nothing on disk has changed. Cancel or finish the wizard, then log out from /setup instead.",
+  "palette.agents": "Choose Main or an agent",
+  "cmd.agents": "Choose Main or a same-project agent for direct mail.",
+  "agent_selector.main": "Main",
+  "agent_selector.omitted": "%d unsafe agent row(s) omitted",
+  "agent_selector.unread_failed": "Agent unread status could not be updated",
+  "agent_selector.title": "Choose an agent",
+  "agent_selector.hint": "↑↓ move · enter select · esc cancel"
 }

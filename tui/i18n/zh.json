@@ -842,5 +842,12 @@
   "firstrun.preset_pick.draft_key_delete_blocked": "仅为草稿 —— 创建项目期间无法移除共享 API 密钥。已保存的密钥不会改变；请输入替代密钥，或完成或取消向导后在 /setup 中管理。",
   "firstrun.preset_pick.draft_key_override_cleared": "已清除本次草稿中的 API 密钥编辑。任何已保存的共享密钥均未更改。",
   "firstrun.preset_key.draft_editor_blocked": "仅为草稿 —— 在完成创建此项目之前，外部编辑器不可用。请直接将密钥粘贴到输入框中。",
-  "firstrun.preset_pick.draft_codex_logout_blocked": "仅为草稿 —— 此 Codex 凭据在创建本项目草稿之前就已存在，无法在此处移除，磁盘上的内容未发生任何变化。请取消或完成向导后，再到 /setup 中登出。"
+  "firstrun.preset_pick.draft_codex_logout_blocked": "仅为草稿 —— 此 Codex 凭据在创建本项目草稿之前就已存在，无法在此处移除，磁盘上的内容未发生任何变化。请取消或完成向导后，再到 /setup 中登出。",
+  "palette.agents": "选择主会话或智能体",
+  "cmd.agents": "选择主会话或当前项目中的智能体进行直接邮件。",
+  "agent_selector.main": "主会话",
+  "agent_selector.omitted": "已省略 %d 个不安全的智能体条目",
+  "agent_selector.unread_failed": "无法更新智能体未读状态",
+  "agent_selector.title": "选择智能体",
+  "agent_selector.hint": "↑↓ 移动 · enter 选择 · esc 取消"
 }

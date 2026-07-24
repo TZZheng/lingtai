@@ -100,11 +100,25 @@ func refreshedDirectUnreadState(path string, memory directUnreadState) (directUn
 
 // OpenDirectUnreadStore opens version-1 state and baselines any missing,
 // corrupt, unsupported, or target-invalid cursor from accepted direct mail.
+// It remains the source-compatible accepted-slice entry point; all routing and
+// boundary resolution is delegated to the same immutable publication used by
+// production direct projection.
 func OpenDirectUnreadStore(projectDirectory, humanAddress string, targets []DirectTarget, accepted []MailMessage) (*DirectUnreadStore, error) {
+	return OpenDirectUnreadStorePublication(projectDirectory, humanAddress, targets, NewDirectMailPublication(humanAddress, targets, accepted))
+}
+
+// OpenDirectUnreadStorePublication performs only durable cursor open/baseline
+// work over an already-built accepted publication; it never rescans accepted
+// mailbox history. Durable semantics remain exactly the established
+// path-locked transaction.
+func OpenDirectUnreadStorePublication(projectDirectory, humanAddress string, targets []DirectTarget, publication *DirectMailPublication) (*DirectUnreadStore, error) {
 	if strings.TrimSpace(projectDirectory) == "" || strings.TrimSpace(humanAddress) == "" {
 		return nil, fmt.Errorf("direct unread project directory or human address is empty")
 	}
 	if err := validateDirectUnreadTargets(projectDirectory, targets); err != nil {
+		return nil, err
+	}
+	if err := publication.validates(humanAddress, targets); err != nil {
 		return nil, err
 	}
 
@@ -130,7 +144,7 @@ func OpenDirectUnreadStore(projectDirectory, humanAddress string, targets []Dire
 			}
 		}
 		if len(needsBaseline) != 0 {
-			baselines, err := directUnreadBaselines(needsBaseline, accepted, humanAddress)
+			baselines, err := directUnreadPublicationBaselines(needsBaseline, publication)
 			if err != nil {
 				return err
 			}
@@ -157,7 +171,19 @@ func (s *DirectUnreadStore) SyncTargets(targets []DirectTarget, accepted []MailM
 	if s == nil {
 		return fmt.Errorf("sync direct unread targets: nil store")
 	}
+	return s.SyncTargetsPublication(targets, NewDirectMailPublication(s.humanAddress, targets, accepted))
+}
+
+// SyncTargetsPublication synchronizes durable cursors from one accepted direct
+// publication without rescanning accepted mailbox history.
+func (s *DirectUnreadStore) SyncTargetsPublication(targets []DirectTarget, publication *DirectMailPublication) error {
+	if s == nil {
+		return fmt.Errorf("sync direct unread targets: nil store")
+	}
 	if err := validateDirectUnreadTargets(s.projectDirectory, targets); err != nil {
+		return err
+	}
+	if err := publication.validates(s.humanAddress, targets); err != nil {
 		return err
 	}
 	return withDirectUnreadTransaction(s.statePath, func() error {
@@ -185,7 +211,7 @@ func (s *DirectUnreadStore) SyncTargets(targets []DirectTarget, accepted []MailM
 		}
 		next := cloneDirectUnreadState(base)
 		if len(newTargets) != 0 {
-			baselines, err := directUnreadBaselines(newTargets, accepted, s.humanAddress)
+			baselines, err := directUnreadPublicationBaselines(newTargets, publication)
 			if err != nil {
 				return err
 			}
@@ -208,7 +234,19 @@ func (s *DirectUnreadStore) UnreadCount(target DirectTarget, accepted []MailMess
 	if s == nil {
 		return 0, fmt.Errorf("count direct unread: nil store")
 	}
+	return s.UnreadCountPublication(target, NewDirectMailPublication(s.humanAddress, []DirectTarget{target}, accepted))
+}
+
+// UnreadCountPublication counts only the selected thread's pre-resolved
+// incoming summaries; unrelated accepted history is never revisited.
+func (s *DirectUnreadStore) UnreadCountPublication(target DirectTarget, publication *DirectMailPublication) (int, error) {
+	if s == nil {
+		return 0, fmt.Errorf("count direct unread: nil store")
+	}
 	if err := validateDirectUnreadTarget(s.projectDirectory, target); err != nil {
+		return 0, err
+	}
+	if err := publication.validates(s.humanAddress, []DirectTarget{target}); err != nil {
 		return 0, err
 	}
 	s.mu.RLock()
@@ -222,7 +260,7 @@ func (s *DirectUnreadStore) UnreadCount(target DirectTarget, accepted []MailMess
 	if !valid {
 		return 0, fmt.Errorf("count direct unread target %q: invalid stored boundary", DirectThreadKey(target))
 	}
-	messages, err := resolveDirectUnreadMessages(accepted, s.humanAddress, target)
+	messages, err := publication.unreadMessages(target)
 	if err != nil {
 		return 0, err
 	}
@@ -244,14 +282,25 @@ func (s *DirectUnreadStore) MarkSeen(target DirectTarget, accepted []MailMessage
 	if s == nil {
 		return fmt.Errorf("mark direct unread seen: nil store")
 	}
+	return s.MarkSeenPublication(target, NewDirectMailPublication(s.humanAddress, []DirectTarget{target}, accepted))
+}
+
+// MarkSeenPublication advances from the publication's precomputed latest
+// incoming boundary and therefore performs no accepted-history scan.
+func (s *DirectUnreadStore) MarkSeenPublication(target DirectTarget, publication *DirectMailPublication) error {
+	if s == nil {
+		return fmt.Errorf("mark direct unread seen: nil store")
+	}
 	if err := validateDirectUnreadTarget(s.projectDirectory, target); err != nil {
 		return err
 	}
-	messages, err := resolveDirectUnreadMessages(accepted, s.humanAddress, target)
+	if err := publication.validates(s.humanAddress, []DirectTarget{target}); err != nil {
+		return err
+	}
+	candidate, err := publication.unreadBoundary(target)
 	if err != nil {
 		return err
 	}
-	candidate := directUnreadCursorForMessages(messages)
 
 	return withDirectUnreadTransaction(s.statePath, func() error {
 		s.mu.Lock()
@@ -286,6 +335,24 @@ func (s *DirectUnreadStore) MarkSeen(target DirectTarget, accepted []MailMessage
 		s.state = cloneDirectUnreadState(next)
 		return nil
 	})
+}
+
+// Clone returns a detached in-memory cursor store that retains the same durable
+// path. Async callers mutate and persist the clone through the shared
+// path-locked transaction, then install it only after their exact acceptance
+// coordinates still match.
+func (s *DirectUnreadStore) Clone() *DirectUnreadStore {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return &DirectUnreadStore{
+		projectDirectory: s.projectDirectory,
+		humanAddress:     s.humanAddress,
+		statePath:        s.statePath,
+		state:            cloneDirectUnreadState(s.state),
+	}
 }
 
 func validateDirectUnreadTargets(projectDirectory string, targets []DirectTarget) error {
@@ -386,63 +453,19 @@ func directUnreadThreadForCursor(agentID string, cursor directUnreadCursor) dire
 	return directUnreadThread{AgentID: agentID, ReceivedAt: cursor.receivedAt.UTC().Format(time.RFC3339Nano), IDsAtReceivedAt: cloneDirectUnreadIDs(cursor.ids)}
 }
 
-func directUnreadBaselines(targets []DirectTarget, accepted []MailMessage, humanAddress string) (map[string]directUnreadCursor, error) {
+// directUnreadPublicationBaselines derives each target's baseline cursor from
+// the publication's precomputed latest incoming boundary, preserving the exact
+// accepted-slice resolution semantics without another history scan.
+func directUnreadPublicationBaselines(targets []DirectTarget, publication *DirectMailPublication) (map[string]directUnreadCursor, error) {
 	baselines := make(map[string]directUnreadCursor, len(targets))
 	for _, target := range targets {
-		messages, err := resolveDirectUnreadMessages(accepted, humanAddress, target)
+		boundary, err := publication.unreadBoundary(target)
 		if err != nil {
 			return nil, err
 		}
-		baselines[DirectThreadKey(target)] = directUnreadCursorForMessages(messages)
+		baselines[DirectThreadKey(target)] = boundary
 	}
 	return baselines, nil
-}
-
-func resolveDirectUnreadMessages(accepted []MailMessage, humanAddress string, target DirectTarget) ([]directUnreadMessage, error) {
-	byID := make(map[string]time.Time)
-	messages := make([]directUnreadMessage, 0, len(accepted))
-	for _, msg := range accepted {
-		if !IsDirectMail(msg, humanAddress, target) || strings.TrimSpace(msg.From) != strings.TrimSpace(target.Address) {
-			continue
-		}
-		receivedAt, err := time.Parse(time.RFC3339Nano, msg.ReceivedAt)
-		if err != nil {
-			return nil, fmt.Errorf("resolve direct unread message: invalid received_at %q: %w", msg.ReceivedAt, err)
-		}
-		id := msg.MailboxID
-		if strings.TrimSpace(id) == "" {
-			id = msg.ID
-		}
-		if strings.TrimSpace(id) == "" {
-			return nil, fmt.Errorf("resolve direct unread message: missing stable message ID")
-		}
-		if prior, exists := byID[id]; exists {
-			if !prior.Equal(receivedAt) {
-				return nil, fmt.Errorf("resolve direct unread message: stable message ID %q has conflicting received_at", id)
-			}
-			continue
-		}
-		byID[id] = receivedAt
-		messages = append(messages, directUnreadMessage{id: id, at: receivedAt})
-	}
-	return messages, nil
-}
-
-func directUnreadCursorForMessages(messages []directUnreadMessage) directUnreadCursor {
-	max, ids := time.Time{}, make(map[string]struct{})
-	for _, message := range messages {
-		if message.at.After(max) {
-			max, ids = message.at, map[string]struct{}{message.id: {}}
-		} else if message.at.Equal(max) {
-			ids[message.id] = struct{}{}
-		}
-	}
-	atMax := make([]string, 0, len(ids))
-	for id := range ids {
-		atMax = append(atMax, id)
-	}
-	sort.Strings(atMax)
-	return directUnreadCursor{receivedAt: max, ids: atMax}
 }
 
 func advanceDirectUnreadCursor(current, candidate directUnreadCursor) (directUnreadCursor, bool) {
