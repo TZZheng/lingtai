@@ -142,7 +142,8 @@ func TestUpdateHumanLocationCoalescesSamePath(t *testing.T) {
 
 	secondDone := make(chan struct{})
 	go func() {
-		UpdateHumanLocation(humanDir)
+		alias := humanDir + string(os.PathSeparator) + "."
+		UpdateHumanLocation(alias)
 		close(secondDone)
 	}()
 
@@ -212,11 +213,22 @@ func TestUpdateHumanLocationUsesUniqueSiblingTemp(t *testing.T) {
 	if err := os.Mkdir(fixedTemp, 0o755); err != nil {
 		t.Fatalf("obstruct fixed temp path: %v", err)
 	}
+	started := make(chan struct{})
+	release := make(chan struct{})
 	installLocationTransport(t, func(_ *http.Request) (*http.Response, error) {
+		close(started)
+		<-release
 		return locationResponse(), nil
 	})
 
-	UpdateHumanLocation(humanDir)
+	done := make(chan struct{})
+	go func() {
+		UpdateHumanLocation(humanDir)
+		close(done)
+	}()
+	waitLocationSignal(t, started, "fixed-temp resolver request")
+	close(release)
+	waitLocationUpdates(t, done)
 
 	got := readLocationManifest(t, humanDir)
 	if _, ok := got["location"]; !ok {
@@ -235,6 +247,61 @@ func TestUpdateHumanLocationUsesUniqueSiblingTemp(t *testing.T) {
 	}
 	if len(fixedMatches) != 1 || fixedMatches[0] != fixedTemp {
 		t.Fatalf("unexpected fixed temp paths: %v", fixedMatches)
+	}
+	generatedTemps, err := filepath.Glob(filepath.Join(humanDir, "..agent.json.tmp-*"))
+	if err != nil {
+		t.Fatalf("list generated temp residue: %v", err)
+	}
+	if len(generatedTemps) != 0 {
+		t.Fatalf("generated temp residue remains: %v", generatedTemps)
+	}
+}
+
+func TestUpdateHumanLocationConcurrentCallersLeaveValidManifest(t *testing.T) {
+	humanDir := t.TempDir()
+	writeLocationManifest(t, humanDir, map[string]interface{}{
+		"agent_name": "human",
+		"address":    "human",
+		"admin":      nil,
+	})
+
+	var requests atomic.Int32
+	installLocationTransport(t, func(_ *http.Request) (*http.Response, error) {
+		requests.Add(1)
+		return locationResponse(), nil
+	})
+
+	start := make(chan struct{})
+	ready := make(chan struct{}, 2)
+	firstDone := make(chan struct{})
+	secondDone := make(chan struct{})
+	go func() {
+		ready <- struct{}{}
+		<-start
+		UpdateHumanLocation(humanDir)
+		close(firstDone)
+	}()
+	go func() {
+		ready <- struct{}{}
+		<-start
+		alias := humanDir + string(os.PathSeparator) + "."
+		UpdateHumanLocation(alias)
+		close(secondDone)
+	}()
+	<-ready
+	<-ready
+	close(start)
+	waitLocationUpdates(t, firstDone, secondDone)
+
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("concurrent same-manifest updates made %d resolver requests; want 1", got)
+	}
+	node, err := ReadAgent(humanDir)
+	if err != nil {
+		t.Fatalf("read final manifest: %v", err)
+	}
+	if node.Location == nil || node.Location.City != "Austin" || node.Location.ResolvedAt == "" {
+		t.Fatalf("final location = %#v; want one valid resolved value", node.Location)
 	}
 	generatedTemps, err := filepath.Glob(filepath.Join(humanDir, "..agent.json.tmp-*"))
 	if err != nil {

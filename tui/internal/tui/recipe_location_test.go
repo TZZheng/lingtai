@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/anthropics/lingtai-tui/internal/fs"
 )
@@ -49,12 +48,9 @@ func TestSubstituteGreetPlaceholdersLocationReusesResolvedLocation(t *testing.T)
 	}
 
 	var requests atomic.Int32
-	secondRequest := make(chan struct{})
 	previousTransport := http.DefaultTransport
 	http.DefaultTransport = recipeLocationRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
-		if requests.Add(1) == 2 {
-			close(secondRequest)
-		}
+		requests.Add(1)
 		return recipeLocationResponse(), nil
 	})
 	t.Cleanup(func() {
@@ -65,29 +61,17 @@ func TestSubstituteGreetPlaceholdersLocationReusesResolvedLocation(t *testing.T)
 	if got != "location=Austin, Texas, US" {
 		t.Fatalf("substituted greet = %q; want resolved location", got)
 	}
-
-	// Current main starts an untracked UpdateHumanLocation after the synchronous
-	// lookup, producing a second request. The fixed path stores the Location it
-	// already has before returning, so no observation sleep is needed for GREEN;
-	// this bounded wait only makes the pre-fix second request deterministic.
-	select {
-	case <-secondRequest:
-	case <-time.After(500 * time.Millisecond):
-	}
-
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		node, readErr := fs.ReadAgent(humanDir)
-		if readErr == nil && node.Location != nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("resolved location was not persisted: %v", readErr)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("recipe location fallback made %d resolver requests; want exactly 1", got)
+	}
+
+	// Persistence is part of the synchronous recipe fallback contract. A return
+	// from substitution is therefore sufficient evidence; no polling or sleep.
+	node, err := fs.ReadAgent(humanDir)
+	if err != nil {
+		t.Fatalf("read persisted human manifest: %v", err)
+	}
+	if node.Location == nil || node.Location.City != "Austin" || node.Location.ResolvedAt == "" {
+		t.Fatalf("persisted location = %#v; want the resolved Austin value", node.Location)
 	}
 }
