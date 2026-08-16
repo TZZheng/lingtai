@@ -136,7 +136,7 @@ This folder is the self-contained Go module for the `lingtai-tui` terminal UI bi
   - `tui/internal/process/` — subprocess launcher
   - `tui/internal/processscan/` — shared ps-based `lingtai run <agentDir>` process detection used by launch
   - `tui/internal/inventory/` — typed running-agent inventory built from processscan rows plus `.agent.json`/heartbeat/status enrichment (`tui/internal/inventory/ANATOMY.md`)
-  - `tui/internal/headless/` — shared JSON-emitting non-interactive helpers used by `bootstrap`, `presets`, `spawn`, and selected-Agent `control … <sleep|suspend>` subcommands
+  - `tui/internal/headless/` — shared JSON-emitting non-interactive helpers used by `bootstrap`, `presets`, `spawn`, and selected-Agent `control` (sleep/suspend implemented; cpr/clear/refresh recognized, not yet owned) subcommands
   - `tui/i18n/` — en/zh/wen locale tables
   - `tui/scripts/` — build helpers
 - **Build output:** `tui/bin/lingtai-tui` (single binary)

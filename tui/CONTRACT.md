@@ -8,6 +8,7 @@ related_files:
   - tui/internal/tui/firstrun.go
   - tui/internal/tui/app.go
   - tui/internal/tui/control.go
+  - tui/internal/tui/control_dispatch.go
   - tui/internal/tui/layout.go
   - tui/internal/tui/props.go
   - tui/internal/tui/setup.go
@@ -31,7 +32,8 @@ maintenance: |
   and the doctor checks that validate against it together. Bump
   contract_version for a breaking change to the requirement classes. Keep
   the selected-Agent headless control boundary reciprocal with
-  tui/internal/tui/control.go and tui/control_headless_test.go.
+  tui/internal/tui/control.go, tui/internal/tui/control_dispatch.go, and
+  tui/control_headless_test.go.
 ---
 # TUI Runtime Contract
 
@@ -114,16 +116,22 @@ appears as the degraded state below.
 
 ## Selected-Agent headless control boundary
 
-The only public headless control shape is
-`control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend>`.
+The public headless control shape is
+`control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend|cpr|clear|refresh> [arg]`.
 The project must resolve to an existing absolute `.lingtai` directory, and the
 agent key must name a real Agent directory directly contained within it;
 traversal, symlink escapes, non-Agents, and `human` are rejected. Each action
 uses the same owner as its interactive command and idempotently writes an empty
-`.sleep` or `.suspend` signal. Success emits JSON
+`.sleep` or `.suspend` signal. Only `refresh` may carry the one optional arg (a
+preset name); `sleep`, `suspend`, `cpr`, and `clear` reject any argument with an
+`invalid_args` error. Success emits JSON
 `{command,agent,status:"signaled"}` without private agent identity. Invalid
-arguments fail without side effects. This boundary explicitly excludes `all`,
-`cpr`, `clear`, `refresh`, and `launch`.
+arguments fail without side effects. The parser and envelope are shared:
+`tui/main.go` parses the invocation into a `ControlRequest` and
+`tui/internal/tui/control_dispatch.go` dispatches it through a registry of
+owners that currently implements only `sleep` and `suspend`; `cpr`, `clear`,
+and `refresh` are recognized but fail with a `not_implemented` error and
+produce no side effects. This boundary explicitly excludes `all` and `launch`.
 
 ## Model list curation
 

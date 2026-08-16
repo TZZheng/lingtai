@@ -657,7 +657,7 @@ func printHelp() {
 	fmt.Println("       lingtai-tui bootstrap")
 	fmt.Println("       lingtai-tui presets [--saved-only] [--templates-only]")
 	fmt.Println("       lingtai-tui spawn <dir> --preset <name> [--agent-name <name>] [--language <code>]")
-	fmt.Println("       lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend>")
+	fmt.Println("       lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend|cpr|clear|refresh> [arg]")
 	fmt.Println("       lingtai-tui self-update")
 	fmt.Println("       lingtai-tui doctor")
 	fmt.Println()
@@ -673,7 +673,7 @@ func printHelp() {
 	fmt.Println("  bootstrap       Re-extract embedded skills to ~/.lingtai-tui/utilities/")
 	fmt.Println("  presets      List available presets as JSON (for agent consumption)")
 	fmt.Println("  spawn        Create a new project and launch an agent headlessly (JSON output)")
-	fmt.Println("  control      Send selected-Agent sleep/suspend headlessly (JSON output)")
+	fmt.Println("  control      Send selected-Agent lifecycle signals headlessly (JSON output)")
 	fmt.Println("  self-update  Run the TUI binary updater for the detected install method")
 	fmt.Println("  doctor       Force-check + update TUI/kernel/venv. Use when the TUI cannot start.")
 	fmt.Println()
@@ -1118,7 +1118,7 @@ func presetsMain() {
 }
 
 func controlMain() {
-	var projectDir, agentKey, command string
+	var projectDir, agentKey, command, arg string
 	args := os.Args[2:]
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -1135,22 +1135,31 @@ func controlMain() {
 			i++
 			agentKey = args[i]
 		default:
-			if strings.HasPrefix(args[i], "-") || command != "" {
-				headless.ExitError("usage: lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend>", "invalid_args")
+			if strings.HasPrefix(args[i], "-") {
+				headless.ExitError("usage: lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend|cpr|clear|refresh> [arg]", "invalid_args")
 			}
-			command = args[i]
+			switch {
+			case command == "":
+				command = args[i]
+			case arg == "":
+				if command != "refresh" {
+					headless.ExitError("usage: lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend|cpr|clear|refresh> [arg]", "invalid_args")
+				}
+				arg = args[i]
+			default:
+				headless.ExitError("usage: lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend|cpr|clear|refresh> [arg]", "invalid_args")
+			}
 		}
 	}
-	if projectDir == "" || agentKey == "" || (command != "sleep" && command != "suspend") {
-		headless.ExitError("usage: lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend>", "invalid_args")
+	if projectDir == "" || agentKey == "" || command == "" {
+		headless.ExitError("usage: lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend|cpr|clear|refresh> [arg]", "invalid_args")
 	}
-	var err error
-	switch command {
-	case "sleep":
-		err = tui.ControlAgentSleep(projectDir, agentKey)
-	case "suspend":
-		err = tui.ControlAgentSuspend(projectDir, agentKey)
-	}
+	envelope, err := tui.DispatchControl(tui.ControlRequest{
+		Project: projectDir,
+		Agent:   agentKey,
+		Command: command,
+		Arg:     arg,
+	})
 	if err != nil {
 		code := "control_failed"
 		switch {
@@ -1158,14 +1167,16 @@ func controlMain() {
 			code = "invalid_project"
 		case errors.Is(err, tui.ErrInvalidControlAgent):
 			code = "invalid_agent"
+		case errors.Is(err, tui.ErrInvalidControlCommand):
+			code = "invalid_command"
+		case errors.Is(err, tui.ErrInvalidControlArgs):
+			code = "invalid_args"
+		case errors.Is(err, tui.ErrControlNotImplemented):
+			code = "not_implemented"
 		}
 		headless.ExitError(err.Error(), code)
 	}
-	if err := headless.WriteJSON(os.Stdout, map[string]string{
-		"command": command,
-		"agent":   agentKey,
-		"status":  "signaled",
-	}); err != nil {
+	if err := headless.WriteJSON(os.Stdout, envelope); err != nil {
 		headless.ExitError("write control result: "+err.Error(), "output_failed")
 	}
 }
