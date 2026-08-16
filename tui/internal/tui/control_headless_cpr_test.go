@@ -96,8 +96,13 @@ func writeHeadlessCPRTestAgent(t *testing.T, agentKey string) (projectDir, agent
 	if err := os.MkdirAll(agentDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(agentDir, ".agent.json"), []byte("{\"molt_count\":1}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(agentDir, ".agent.json"), []byte("{\"admin\":{},\"molt_count\":1}\n"), 0o644); err != nil {
 		t.Fatal(err)
+	}
+	if resolvedAgentDir, err := filepath.EvalSymlinks(agentDir); err != nil {
+		t.Fatal(err)
+	} else {
+		agentDir = resolvedAgentDir
 	}
 	return projectDir, agentDir
 }
