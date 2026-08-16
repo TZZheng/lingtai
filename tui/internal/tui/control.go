@@ -19,15 +19,31 @@ var (
 	ErrInvalidControlAgent = errors.New("invalid control agent")
 )
 
-// sleepAgent is the selected-Agent /sleep owner shared by the interactive
-// palette and the narrow headless facade.
+// sleepAgent is the selected-Agent /sleep signal owner shared by the
+// interactive palette and the narrow headless facade.
 func sleepAgent(agentDir string) error {
 	return fs.TouchSignal(agentDir, fs.SignalSleep)
+}
+
+// suspendAgent is the selected-Agent /suspend signal owner shared by the
+// interactive palette and the narrow headless facade.
+func suspendAgent(agentDir string) error {
+	return fs.TouchSignal(agentDir, fs.SignalSuspend)
 }
 
 // ControlAgentSleep validates an explicit selected Agent beneath projectDir
 // and performs the same empty .sleep signal write as interactive /sleep.
 func ControlAgentSleep(projectDir, agentKey string) error {
+	return controlAgentSignal(projectDir, agentKey, "sleep", sleepAgent)
+}
+
+// ControlAgentSuspend validates an explicit selected Agent beneath projectDir
+// and performs the same empty .suspend signal write as interactive /suspend.
+func ControlAgentSuspend(projectDir, agentKey string) error {
+	return controlAgentSignal(projectDir, agentKey, "suspend", suspendAgent)
+}
+
+func controlAgentSignal(projectDir, agentKey, signalName string, signal func(string) error) error {
 	resolvedProject, err := resolveControlProject(projectDir)
 	if err != nil {
 		return err
@@ -61,8 +77,8 @@ func ControlAgentSleep(projectDir, agentKey string) error {
 		return fmt.Errorf("%w: agent %q is not a real Agent", ErrInvalidControlAgent, agentKey)
 	}
 
-	if err := sleepAgent(resolvedAgent); err != nil {
-		return fmt.Errorf("write sleep signal for agent %q: %w", agentKey, err)
+	if err := signal(resolvedAgent); err != nil {
+		return fmt.Errorf("write %s signal for agent %q: %w", signalName, agentKey, err)
 	}
 	return nil
 }

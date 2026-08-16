@@ -657,7 +657,7 @@ func printHelp() {
 	fmt.Println("       lingtai-tui bootstrap")
 	fmt.Println("       lingtai-tui presets [--saved-only] [--templates-only]")
 	fmt.Println("       lingtai-tui spawn <dir> --preset <name> [--agent-name <name>] [--language <code>]")
-	fmt.Println("       lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> sleep")
+	fmt.Println("       lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend>")
 	fmt.Println("       lingtai-tui self-update")
 	fmt.Println("       lingtai-tui doctor")
 	fmt.Println()
@@ -673,7 +673,7 @@ func printHelp() {
 	fmt.Println("  bootstrap       Re-extract embedded skills to ~/.lingtai-tui/utilities/")
 	fmt.Println("  presets      List available presets as JSON (for agent consumption)")
 	fmt.Println("  spawn        Create a new project and launch an agent headlessly (JSON output)")
-	fmt.Println("  control      Send selected-Agent sleep headlessly (JSON output)")
+	fmt.Println("  control      Send selected-Agent sleep/suspend headlessly (JSON output)")
 	fmt.Println("  self-update  Run the TUI binary updater for the detected install method")
 	fmt.Println("  doctor       Force-check + update TUI/kernel/venv. Use when the TUI cannot start.")
 	fmt.Println()
@@ -1136,15 +1136,22 @@ func controlMain() {
 			agentKey = args[i]
 		default:
 			if strings.HasPrefix(args[i], "-") || command != "" {
-				headless.ExitError("usage: lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> sleep", "invalid_args")
+				headless.ExitError("usage: lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend>", "invalid_args")
 			}
 			command = args[i]
 		}
 	}
-	if projectDir == "" || agentKey == "" || command != "sleep" {
-		headless.ExitError("usage: lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> sleep", "invalid_args")
+	if projectDir == "" || agentKey == "" || (command != "sleep" && command != "suspend") {
+		headless.ExitError("usage: lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend>", "invalid_args")
 	}
-	if err := tui.ControlAgentSleep(projectDir, agentKey); err != nil {
+	var err error
+	switch command {
+	case "sleep":
+		err = tui.ControlAgentSleep(projectDir, agentKey)
+	case "suspend":
+		err = tui.ControlAgentSuspend(projectDir, agentKey)
+	}
+	if err != nil {
 		code := "control_failed"
 		switch {
 		case errors.Is(err, tui.ErrInvalidControlProject):

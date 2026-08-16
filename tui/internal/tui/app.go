@@ -912,7 +912,7 @@ func (a App) handlePaletteCommand(command, args string) (tea.Model, tea.Cmd) {
 			}
 			addMsg(i18n.TF("mail.suspended_all", count))
 		} else if targetDir != "" {
-			os.WriteFile(filepath.Join(targetDir, ".suspend"), []byte(""), 0o644)
+			_ = suspendAgent(targetDir)
 			addMsg(i18n.TF("mail.suspended", targetName))
 		}
 		return a, nil

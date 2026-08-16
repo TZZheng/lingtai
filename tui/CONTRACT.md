@@ -7,6 +7,7 @@ related_files:
   - tui/internal/config/global.go
   - tui/internal/tui/firstrun.go
   - tui/internal/tui/app.go
+  - tui/internal/tui/control.go
   - tui/internal/tui/layout.go
   - tui/internal/tui/props.go
   - tui/internal/tui/setup.go
@@ -15,6 +16,7 @@ related_files:
   - tui/internal/tui/SKILL.md
   - tui/internal/preset/preset.go
   - tui/main.go
+  - tui/control_headless_test.go
   - tui/internal/config/global_test.go
   - docs/tui-agent-alignment.md
 maintenance: |
@@ -27,7 +29,9 @@ maintenance: |
   resolution code (ResolveKeys / ReadEnvKeys / HasAPIKeys). When a
   requirement class or a concrete additive item changes, update this contract
   and the doctor checks that validate against it together. Bump
-  contract_version for a breaking change to the requirement classes.
+  contract_version for a breaking change to the requirement classes. Keep
+  the selected-Agent headless control boundary reciprocal with
+  tui/internal/tui/control.go and tui/control_headless_test.go.
 ---
 # TUI Runtime Contract
 
@@ -107,6 +111,19 @@ appears as the degraded state below.
    (fable F8, D1-D5 below): check agents present (R1), `config.json`
    presence (R3.1), `.env` API keys (R2), `.secrets` for declared addons
    (R1), runtime/version (R1).
+
+## Selected-Agent headless control boundary
+
+The only public headless control shape is
+`control --project <absolute-.lingtai-dir> --agent <agent-key> <sleep|suspend>`.
+The project must resolve to an existing absolute `.lingtai` directory, and the
+agent key must name a real Agent directory directly contained within it;
+traversal, symlink escapes, non-Agents, and `human` are rejected. Each action
+uses the same owner as its interactive command and idempotently writes an empty
+`.sleep` or `.suspend` signal. Success emits JSON
+`{command,agent,status:"signaled"}` without private agent identity. Invalid
+arguments fail without side effects. This boundary explicitly excludes `all`,
+`cpr`, `clear`, `refresh`, and `launch`.
 
 ## Model list curation
 
