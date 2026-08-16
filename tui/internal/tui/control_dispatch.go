@@ -3,6 +3,8 @@ package tui
 import (
 	"errors"
 	"fmt"
+
+	"github.com/anthropics/lingtai-tui/internal/config"
 )
 
 // ControlRequest is one parsed selected-Agent headless control invocation,
@@ -22,22 +24,46 @@ type ControlEnvelope struct {
 	Status  string `json:"status"`
 }
 
-// controlOwner performs one selected-Agent lifecycle signal on a contained,
-// real Agent directory. sleepAgent and suspendAgent are the existing shared
-// owners in control.go; future cpr/clear/refresh owners register here when
-// implemented.
-type controlOwner func(agentDir string) error
+// controlOwner performs one selected-Agent lifecycle operation on a contained,
+// real Agent directory. It is request-aware so owners can route through the
+// shared containment gate in control.go and resolve the canonical read-only
+// runtime only after containment accepts the target. sleepAgent and suspendAgent
+// are the existing shared owners in control.go.
+type controlOwner func(req ControlRequest) error
 
-// controlOwners is the command registry. A registered command with a nil owner
-// is recognized by the parser and dispatch layer but not yet implemented. Only
-// `refresh` carries the one optional preset arg; every other registered command
-// rejects any argument.
+// controlOwners is the command registry. Only `refresh` carries the one optional
+// preset arg; every other registered command rejects any argument.
 var controlOwners = map[string]controlOwner{
-	"sleep":   sleepAgent,
-	"suspend": suspendAgent,
-	"cpr":     nil,
-	"clear":   nil,
-	"refresh": nil,
+	"sleep": func(req ControlRequest) error {
+		return controlAgentSignal(req.Project, req.Agent, "sleep", sleepAgent)
+	},
+	"suspend": func(req ControlRequest) error {
+		return controlAgentSignal(req.Project, req.Agent, "suspend", suspendAgent)
+	},
+	"cpr": func(req ControlRequest) error {
+		return requestCPRHeadlessWithDeps(req.Project, req.Agent, defaultClearContextDeps)
+	},
+	"clear": func(req ControlRequest) error {
+		return controlAgentSignal(req.Project, req.Agent, "clear", func(agentDir string) error {
+			globalDir, err := config.GlobalDirPath()
+			if err != nil {
+				return fmt.Errorf("resolve global TUI dir for clear: %w", err)
+			}
+			lingtaiCmd := config.LingtaiCmd(globalDir)
+			_, err = requestClearContextHeadlessWithDeps(lingtaiCmd, agentDir, defaultClearWaitConfig, defaultClearContextDeps)
+			return err
+		})
+	},
+	"refresh": func(req ControlRequest) error {
+		return controlAgentSignal(req.Project, req.Agent, "refresh", func(agentDir string) error {
+			globalDir, err := config.GlobalDirPath()
+			if err != nil {
+				return fmt.Errorf("resolve global TUI dir for refresh: %w", err)
+			}
+			lingtaiCmd := config.LingtaiCmd(globalDir)
+			return hardRefreshDirWithArgs(lingtaiCmd, agentDir, req.Arg)
+		})
+	},
 }
 
 var (
@@ -53,11 +79,11 @@ var (
 	ErrControlNotImplemented = errors.New("control command not implemented")
 )
 
-// DispatchControl routes a parsed request through the command registry.
-// Implemented owners (sleep/suspend) delegate to the shared containment-
-// validated signal facade in control.go; recognized-but-unimplemented commands
-// fail with ErrControlNotImplemented and produce no side effects. Only refresh
-// may carry the one optional arg; any other registered command rejects it.
+// DispatchControl routes a parsed request through the command registry. Every
+// owner reaches the shared containment-validation gate in control.go before any
+// runtime resolution or lifecycle mutation, rejecting the reserved human target
+// with ErrInvalidControlAgent. Only refresh may carry the one optional arg; any
+// other registered command rejects it.
 func DispatchControl(req ControlRequest) (ControlEnvelope, error) {
 	owner, ok := controlOwners[req.Command]
 	if !ok {
@@ -69,7 +95,7 @@ func DispatchControl(req ControlRequest) (ControlEnvelope, error) {
 	if owner == nil {
 		return ControlEnvelope{}, fmt.Errorf("%w: %q", ErrControlNotImplemented, req.Command)
 	}
-	if err := controlAgentSignal(req.Project, req.Agent, req.Command, owner); err != nil {
+	if err := owner(req); err != nil {
 		return ControlEnvelope{}, err
 	}
 	return ControlEnvelope{Command: req.Command, Agent: req.Agent, Status: "signaled"}, nil

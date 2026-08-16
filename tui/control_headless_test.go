@@ -178,10 +178,6 @@ func TestHeadlessControlRegistry(t *testing.T) {
 		code string
 	}{
 		{name: "unknown command", args: []string{"bogus"}, code: "invalid_command"},
-		{name: "cpr recognized but unimplemented", args: []string{"cpr"}, code: "not_implemented"},
-		{name: "clear recognized but unimplemented", args: []string{"clear"}, code: "not_implemented"},
-		{name: "refresh recognized but unimplemented", args: []string{"refresh"}, code: "not_implemented"},
-		{name: "refresh with one preset arg recognized but unimplemented", args: []string{"refresh", "mimo"}, code: "not_implemented"},
 		{name: "sleep with unexpected argument", args: []string{"sleep", "now"}, code: "invalid_args"},
 		{name: "suspend with unexpected argument", args: []string{"suspend", "now"}, code: "invalid_args"},
 		{name: "cpr with unexpected argument", args: []string{"cpr", "all"}, code: "invalid_args"},
