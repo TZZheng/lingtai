@@ -893,7 +893,7 @@ func (a App) handlePaletteCommand(command, args string) (tea.Model, tea.Cmd) {
 			}
 			addMsg(i18n.TF("mail.sleep_all", count))
 		} else if targetDir != "" {
-			os.WriteFile(filepath.Join(targetDir, ".sleep"), []byte(""), 0o644)
+			_ = sleepAgent(targetDir)
 			addMsg(i18n.T("mail.sleep_sent"))
 		}
 		return a, nil

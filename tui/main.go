@@ -96,6 +96,10 @@ func main() {
 			spawnMain()
 			return
 		}
+		if arg == "control" {
+			controlMain()
+			return
+		}
 		if arg == "self-update" {
 			dispatchSelfUpdate(os.Args[2:], printSubcommandHelp, selfUpdateMain)
 			return
@@ -653,6 +657,7 @@ func printHelp() {
 	fmt.Println("       lingtai-tui bootstrap")
 	fmt.Println("       lingtai-tui presets [--saved-only] [--templates-only]")
 	fmt.Println("       lingtai-tui spawn <dir> --preset <name> [--agent-name <name>] [--language <code>]")
+	fmt.Println("       lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> sleep")
 	fmt.Println("       lingtai-tui self-update")
 	fmt.Println("       lingtai-tui doctor")
 	fmt.Println()
@@ -668,6 +673,7 @@ func printHelp() {
 	fmt.Println("  bootstrap       Re-extract embedded skills to ~/.lingtai-tui/utilities/")
 	fmt.Println("  presets      List available presets as JSON (for agent consumption)")
 	fmt.Println("  spawn        Create a new project and launch an agent headlessly (JSON output)")
+	fmt.Println("  control      Send selected-Agent sleep headlessly (JSON output)")
 	fmt.Println("  self-update  Run the TUI binary updater for the detected install method")
 	fmt.Println("  doctor       Force-check + update TUI/kernel/venv. Use when the TUI cannot start.")
 	fmt.Println()
@@ -1111,6 +1117,52 @@ func presetsMain() {
 	headless.RunPresets(os.Stdout, os.Stderr, savedOnly, templatesOnly)
 }
 
+func controlMain() {
+	var projectDir, agentKey, command string
+	args := os.Args[2:]
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--project":
+			if projectDir != "" || i+1 >= len(args) {
+				headless.ExitError("--project requires exactly one value", "invalid_args")
+			}
+			i++
+			projectDir = args[i]
+		case "--agent":
+			if agentKey != "" || i+1 >= len(args) {
+				headless.ExitError("--agent requires exactly one value", "invalid_args")
+			}
+			i++
+			agentKey = args[i]
+		default:
+			if strings.HasPrefix(args[i], "-") || command != "" {
+				headless.ExitError("usage: lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> sleep", "invalid_args")
+			}
+			command = args[i]
+		}
+	}
+	if projectDir == "" || agentKey == "" || command != "sleep" {
+		headless.ExitError("usage: lingtai-tui control --project <absolute-.lingtai-dir> --agent <agent-key> sleep", "invalid_args")
+	}
+	if err := tui.ControlAgentSleep(projectDir, agentKey); err != nil {
+		code := "control_failed"
+		switch {
+		case errors.Is(err, tui.ErrInvalidControlProject):
+			code = "invalid_project"
+		case errors.Is(err, tui.ErrInvalidControlAgent):
+			code = "invalid_agent"
+		}
+		headless.ExitError(err.Error(), code)
+	}
+	if err := headless.WriteJSON(os.Stdout, map[string]string{
+		"command": command,
+		"agent":   agentKey,
+		"status":  "signaled",
+	}); err != nil {
+		headless.ExitError("write control result: "+err.Error(), "output_failed")
+	}
+}
+
 func spawnMain() {
 	if len(os.Args) < 3 {
 		headless.ExitError(
@@ -1458,15 +1510,16 @@ func runVersionPreflightWithOptions(opts preflightOptions) bool {
 // startupDecision computes the launch mode from the R1/R2/R3 requirement
 // state (tui/CONTRACT.md).
 //   - R1  orchestrators present (zero agents → real first-run setup; also
-//        catches the `lingtai-tui clean` recreated-empty-.lingtai case)
+//     catches the `lingtai-tui clean` recreated-empty-.lingtai case)
 //   - R2  API keys resolvable (resolvedKeys = .env authoritative + config.json
-//        mirror fills gaps)
+//     mirror fills gaps)
 //   - R3.1  the config.json keys mirror is present (configOK) and non-empty
 //
 // Returns:
-//   firstRun — no agents (or rehydration, applied by the caller)
-//   recovery — R2 fail: no API key anywhere → real setup wizard
-//   degraded — R3.1 loss while R2 ok → launch with banner, keys from .env
+//
+//	firstRun — no agents (or rehydration, applied by the caller)
+//	recovery — R2 fail: no API key anywhere → real setup wizard
+//	degraded — R3.1 loss while R2 ok → launch with banner, keys from .env
 //
 // Content-based (fable F7): a present-but-keyless config.json degrades exactly
 // like an absent one, so the original config-wipe incident cannot silently

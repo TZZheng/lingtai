@@ -80,7 +80,7 @@ maintenance: |
 
 > **Maintenance:** see `lingtai-tui-anatomy` (at `tui/internal/preset/skills/lingtai-tui-anatomy/SKILL.md`).
 
-This folder is the self-contained Go module for the `lingtai-tui` terminal UI binary. It ships as a single executable built from `main.go` with platform-specific companions, embedding the i18n tables. All substantive logic lives under `internal/`. The binary has two faces: a subcommand surface (`purge`, `list`, `clean`, `suspend`, `bootstrap`, `presets`, `spawn`, `self-update`, `doctor`) and an interactive Bubble Tea v2 UI that launches Python agents as subprocesses and observes them via the filesystem.
+This folder is the self-contained Go module for the `lingtai-tui` terminal UI binary. It ships as a single executable built from `main.go` with platform-specific companions, embedding the i18n tables. All substantive logic lives under `internal/`. The binary has two faces: a subcommand surface (`purge`, `list`, `clean`, `suspend`, `bootstrap`, `presets`, `spawn`, `control`, `self-update`, `doctor`) and an interactive Bubble Tea v2 UI that launches Python agents as subprocesses and observes them via the filesystem.
 
 ## Components
 
@@ -136,7 +136,7 @@ This folder is the self-contained Go module for the `lingtai-tui` terminal UI bi
   - `tui/internal/process/` — subprocess launcher
   - `tui/internal/processscan/` — shared ps-based `lingtai run <agentDir>` process detection used by launch
   - `tui/internal/inventory/` — typed running-agent inventory built from processscan rows plus `.agent.json`/heartbeat/status enrichment (`tui/internal/inventory/ANATOMY.md`)
-  - `tui/internal/headless/` — JSON-emitting non-interactive CLI surface (`bootstrap`, `presets`, `spawn` subcommands)
+  - `tui/internal/headless/` — shared JSON-emitting non-interactive helpers used by `bootstrap`, `presets`, `spawn`, and selected-Agent `control … sleep` subcommands
   - `tui/i18n/` — en/zh/wen locale tables
   - `tui/scripts/` — build helpers
 - **Build output:** `tui/bin/lingtai-tui` (single binary)
